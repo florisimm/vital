@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import { Plus, ChevronRight, Trash2, X, Search, Camera, Utensils, Mic } from 'lucide-react'
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
@@ -143,9 +143,9 @@ export function FoodClient() {
   const [preselectedMeal, setPreselectedMeal] = useState('ontbijt')
 
   // Lock body scroll when sheet is open
-  useMemo(() => {
-    if (typeof document === 'undefined') return
+  useEffect(() => {
     document.body.style.overflow = showAddSheet ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
   }, [showAddSheet])
 
   const log = data?.foodLog ?? []
