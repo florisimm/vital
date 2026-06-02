@@ -6,17 +6,40 @@
   box-sizing: border-box;
 }
 
-html, body {
+html {
   height: 100%;
+  overflow: hidden;                    /* No horizontal scroll on html */
 }
 
 body {
+  height: 100%;
   background: rgb(5, 6, 8);
   color: white;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;                  /* No horizontal scroll */
+  overscroll-behavior: none;           /* No pull-to-refresh / bounce */
+  -webkit-overflow-scrolling: touch;   /* Smooth native scroll on iOS */
+  -webkit-tap-highlight-color: transparent; /* No blue flash on tap */
+  -webkit-text-size-adjust: 100%;      /* No iOS auto text resize */
+  text-size-adjust: 100%;
+  touch-action: pan-y;                 /* Only vertical swipe, block horizontal */
+  user-select: none;                   /* No accidental text selection */
+  -webkit-user-select: none;
+}
+
+/* Allow text selection in inputs */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Hide all scrollbars */
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Prevent horizontal overflow from any child */
+#__next, .relative {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
