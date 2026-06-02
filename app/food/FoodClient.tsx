@@ -217,7 +217,7 @@ export function FoodClient() {
 
       <div className="flex flex-col gap-3.5">
         <SectionHeader title="Today's Meals" />
-        {MEAL_ORDER.map(meal => (
+        {MEAL_ORDER.filter(meal => (mealMap[meal] ?? []).length > 0).map(meal => (
           <MealSection
             key={meal}
             meal={meal}
