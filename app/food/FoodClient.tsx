@@ -2,9 +2,10 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
-import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils } from 'lucide-react'
+import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils, ScanLine } from 'lucide-react'
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
+import { BarcodeScanner } from '@/components/BarcodeScanner'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -381,8 +382,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [grams, setGrams] = useState('100')
   const [meal, setMeal] = useState(preselectedMeal)
   const [saving, setSaving] = useState(false)
-  const [scanning, setScanning] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+  const [barcodeLoading, setBarcodeLoading] = useState(false)
 
   // Meals state
   const { data: templates = [], mutate: mutateTemplates } = useSWR('meal-templates', fetchMealTemplates, { revalidateOnFocus: false })
@@ -411,32 +412,53 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     else onClose()
   }
 
-  // ── Scan ──
-  async function handleScanFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setScanning(true)
+  // ── Barcode scan ──
+  async function handleBarcodeDetected(barcode: string) {
+    setShowBarcodeScanner(false)
+    setBarcodeLoading(true)
     setView('scan')
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const base64 = (reader.result as string).split(',')[1]
-      try {
-        const res = await fetch('/api/scan-food', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 }),
-        })
-        const data = await res.json()
-        if (data.name) {
-          setSelected({ id: 'scan', name: data.name, brand: 'Scanned', kcal: data.kcal, protein: data.protein, carbs: data.carbs, fat: data.fat })
-          setGrams('100')
-          setView('detail')
-        }
-      } finally {
-        setScanning(false)
-        if (fileRef.current) fileRef.current.value = ''
+
+    try {
+      // 1. Look up in local products table first
+      const supabase = createClient()
+      const { data: localProduct } = await supabase
+        .from('products')
+        .select('id,name,brand,kcal,protein,carbs,fat')
+        .eq('barcode', barcode)
+        .maybeSingle()
+
+      if (localProduct) {
+        setSelected(localProduct as Product)
+        setGrams('100')
+        setView('detail')
+        return
       }
+
+      // 2. Fall back to Open Food Facts
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
+      const json = await res.json()
+
+      if (json.status === 1 && json.product) {
+        const p = json.product
+        const n = p.nutriments ?? {}
+        setSelected({
+          id: 'barcode-' + barcode,
+          name: p.product_name || p.product_name_nl || 'Onbekend product',
+          brand: p.brands ?? null,
+          kcal: Math.round(n['energy-kcal_100g'] ?? n['energy-kcal'] ?? 0),
+          protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
+          carbs: Math.round((n.carbohydrates_100g ?? 0) * 10) / 10,
+          fat: Math.round((n.fat_100g ?? 0) * 10) / 10,
+        })
+        setGrams('100')
+        setView('detail')
+      } else {
+        // Not found
+        setView('search')
+      }
+    } finally {
+      setBarcodeLoading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   // ── Meal templates ──
@@ -518,11 +540,10 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   }, [templateSearch, products])
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50 flex flex-col">
       <div
-        className="relative flex flex-col max-h-[92vh]"
-        style={{ background: 'rgb(10, 12, 14)', borderRadius: '20px 20px 0 0', overscrollBehavior: 'contain' }}
+        className="relative flex flex-col flex-1 overflow-hidden"
+        style={{ background: 'rgb(10, 12, 14)', overscrollBehavior: 'contain' }}
         onClick={e => e.stopPropagation()}
         onTouchMove={e => e.stopPropagation()}
       >
@@ -541,19 +562,23 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           </button>
         </div>
 
-        {/* Hidden camera input */}
-        <input ref={fileRef} type="file" accept="image/*" capture="environment"
-          className="hidden" onChange={handleScanFile} />
+        {/* Barcode scanner overlay */}
+        {showBarcodeScanner && (
+          <BarcodeScanner
+            onDetected={handleBarcodeDetected}
+            onClose={() => setShowBarcodeScanner(false)}
+          />
+        )}
 
         {/* ── Options view ── */}
         {view === 'options' && (
           <div className="px-5 pb-10 flex flex-col gap-2">
             <div className="rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
               {[
-                { Icon: Camera,  iconBg: '#fb923c', label: 'Scan Meal',   sub: 'Use camera to identify food',    action: () => fileRef.current?.click() },
-                { Icon: Search,  iconBg: '#22d3ee', label: 'Search Food', sub: 'Find in nutrition database',     action: () => setView('search') },
-                { Icon: Utensils,iconBg: '#4ade80', label: 'Meals',       sub: 'Log a saved meal template',      action: () => setView('meals') },
-                { Icon: Plus,    iconBg: '#a78bfa', label: 'Custom Food', sub: 'Enter nutrition details manually',action: () => {} },
+                { Icon: Search,  iconBg: '#22d3ee', label: 'Search Food', sub: 'Find in nutrition database',       action: () => setView('search') },
+                { Icon: Utensils,iconBg: '#4ade80', label: 'Meals',       sub: 'Log a saved meal template',        action: () => setView('meals') },
+                { Icon: ScanLine,iconBg: '#fb923c', label: 'Scan Barcode',sub: 'Scan product barcode',             action: () => setShowBarcodeScanner(true) },
+                { Icon: Plus,    iconBg: '#a78bfa', label: 'Custom Food', sub: 'Enter nutrition details manually', action: () => {} },
               ].map(({ Icon, iconBg, label, sub, action }, i) => (
                 <button key={label} onClick={action}
                   className="w-full flex items-center gap-4 px-4 py-4 text-left"
@@ -573,18 +598,18 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           </div>
         )}
 
-        {/* ── Scan view ── */}
+        {/* ── Scan view (loading state) ── */}
         {view === 'scan' && (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 pb-10 px-5">
-            {scanning ? (
+            {barcodeLoading ? (
               <>
                 <div className="w-16 h-16 rounded-full border-4 border-orange-400 border-t-transparent animate-spin" />
-                <p className="text-white/60 text-[16px]">Analyzing image…</p>
+                <p className="text-white/60 text-[16px]">Product opzoeken…</p>
               </>
             ) : (
               <>
-                <p className="text-white/40 text-[15px] text-center">Something went wrong. Try again.</p>
-                <button onClick={() => setView('options')} className="text-teal-400 font-semibold text-[15px]">Go back</button>
+                <p className="text-white/40 text-[15px] text-center">Product niet gevonden. Probeer handmatig te zoeken.</p>
+                <button onClick={() => setView('search')} className="text-teal-400 font-semibold text-[15px]">Zoeken</button>
               </>
             )}
           </div>
@@ -625,18 +650,6 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
               </div>
             )}
 
-            {/* Meal picker for logging */}
-            <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {MEAL_ORDER.map((m, i) => (
-                <button key={m} onClick={() => setMeal(m)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left"
-                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                  <span className="text-[16px]">{MEAL_ICONS[m]}</span>
-                  <span className="flex-1 text-[14px] text-white">{MEAL_LABELS[m] ?? m}</span>
-                  {meal === m && <span className="text-teal-400 text-[13px]">✓</span>}
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
