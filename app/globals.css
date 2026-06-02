@@ -8,7 +8,6 @@
 
 html {
   height: 100%;
-  overflow: hidden;                    /* No horizontal scroll on html */
 }
 
 body {
@@ -17,14 +16,13 @@ body {
   color: white;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;                  /* No horizontal scroll */
+  overflow-x: hidden;
   overscroll-behavior: none;           /* No pull-to-refresh / bounce */
-  -webkit-overflow-scrolling: touch;   /* Smooth native scroll on iOS */
-  -webkit-tap-highlight-color: transparent; /* No blue flash on tap */
-  -webkit-text-size-adjust: 100%;      /* No iOS auto text resize */
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  touch-action: pan-y;                 /* Only vertical swipe, block horizontal */
-  user-select: none;                   /* No accidental text selection */
+  user-select: none;
   -webkit-user-select: none;
 }
 
