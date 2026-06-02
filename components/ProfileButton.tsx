@@ -1,19 +1,57 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, X } from 'lucide-react'
+import { User } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+
+type Services = { strava: boolean; hevy: boolean; google: boolean }
+type Units = 'metric' | 'imperial'
+type NotifStatus = 'default' | 'granted' | 'denied' | 'unsupported'
 
 export function ProfileButton() {
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
+  const [services, setServices] = useState<Services | null>(null)
+  const [units, setUnits] = useState<Units>('metric')
+  const [notifStatus, setNotifStatus] = useState<NotifStatus>('default')
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
-    if (open && !email) {
-      createClient().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
+    if (!open) return
+    const supabase = createClient()
+
+    // Notification permission status
+    if ('Notification' in window) {
+      setNotifStatus(Notification.permission as NotifStatus)
+    } else {
+      setNotifStatus('unsupported')
     }
+
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id ?? null
+      setEmail(data.user?.email ?? null)
+      setUserId(uid)
+      if (!uid) return
+
+      // Connected services
+      Promise.all([
+        supabase.from('strava_tokens').select('id').eq('user_id', uid).limit(1),
+        supabase.from('hevy_workouts').select('id').eq('user_id', uid).limit(1),
+        supabase.from('google_calendar_tokens').select('user_id').eq('user_id', uid).limit(1),
+      ]).then(([strava, hevy, google]) => {
+        setServices({
+          strava: (strava.data?.length ?? 0) > 0,
+          hevy:   (hevy.data?.length   ?? 0) > 0,
+          google: (google.data?.length ?? 0) > 0,
+        })
+      })
+
+      // Units preference
+      supabase.from('user_settings').select('units').eq('user_id', uid).single()
+        .then(({ data }) => { if (data?.units) setUnits(data.units as Units) })
+    })
   }, [open])
 
   async function handleSignOut() {
@@ -21,6 +59,28 @@ export function ProfileButton() {
     router.push('/login')
     router.refresh()
   }
+
+  async function toggleUnits() {
+    if (!userId) return
+    const next: Units = units === 'metric' ? 'imperial' : 'metric'
+    setUnits(next)
+    await createClient()
+      .from('user_settings')
+      .update({ units: next })
+      .eq('user_id', userId)
+  }
+
+  async function requestNotifications() {
+    if (!('Notification' in window)) return
+    if (Notification.permission === 'denied') return
+    const result = await Notification.requestPermission()
+    setNotifStatus(result as NotifStatus)
+  }
+
+  const notifLabel = notifStatus === 'granted' ? 'Enabled'
+    : notifStatus === 'denied' ? 'Blocked'
+    : notifStatus === 'unsupported' ? 'N/A'
+    : 'Ask'
 
   return (
     <>
@@ -34,12 +94,12 @@ export function ProfileButton() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgb(5, 6, 8)' }}>
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
           {/* Nav bar */}
-          <div
-            className="flex items-center justify-between px-5 pt-4 pb-3 shrink-0"
-            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
-          >
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
             <div className="w-16" />
             <span className="text-[17px] font-semibold text-white">Profile</span>
             <button
@@ -50,12 +110,12 @@ export function ProfileButton() {
             </button>
           </div>
 
-          {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-5 pt-3 pb-10 flex flex-col gap-6">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6">
 
-            {/* Profile section */}
-            <Section title="Profile">
-              <Row>
+            {/* Profile */}
+            <ProfileSection>
+              <ProfileRow>
                 <div className="flex items-center gap-4 py-1">
                   <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center shrink-0"
                     style={{ background: 'rgba(255,255,255,0.12)' }}>
@@ -63,71 +123,71 @@ export function ProfileButton() {
                   </div>
                   <div>
                     <p className="text-[17px] font-semibold text-white">
-                      {email?.split('@')[0] ?? 'Alex Rivera'}
+                      {email?.split('@')[0] ?? '—'}
                     </p>
-                    <p className="text-[14px] text-white/40">{email ?? 'alex@vital.app'}</p>
+                    <p className="text-[14px] text-white/40">{email ?? '—'}</p>
                   </div>
                 </div>
-              </Row>
-            </Section>
+              </ProfileRow>
+            </ProfileSection>
 
             {/* Connected Services */}
-            <Section title="Connected Services">
-              <Row separator>
-                <ServiceRow
-                  icon="❤️"
-                  label="Apple Health"
-                  status="Connected"
-                  statusColor="text-green-400"
-                />
-              </Row>
-              <Row separator>
-                <ServiceRow
-                  icon="⌚"
-                  label="Apple Watch"
-                  status="Connected"
-                  statusColor="text-green-400"
-                />
-              </Row>
-              <Row>
-                <ServiceRow
-                  icon="🏃"
-                  label="Strava"
-                  status="Not connected"
-                  statusColor="text-white/30"
-                />
-              </Row>
-            </Section>
+            <ProfileSection title="Connected Services">
+              <ProfileRow separator>
+                <ServiceRow icon="🏋️" label="Hevy"
+                  connected={services?.hevy} />
+              </ProfileRow>
+              <ProfileRow separator>
+                <ServiceRow icon="🏃" label="Strava"
+                  connected={services?.strava} />
+              </ProfileRow>
+              <ProfileRow>
+                <ServiceRow icon="📅" label="Google Calendar"
+                  connected={services?.google} />
+              </ProfileRow>
+            </ProfileSection>
 
             {/* Preferences */}
-            <Section title="Preferences">
-              <Row separator>
-                <PrefRow label="Units" value="Metric" />
-              </Row>
-              <Row separator>
-                <PrefRow label="Notifications" value="All" />
-              </Row>
-              <Row>
-                <PrefRow label="Appearance" value="Dark" />
-              </Row>
-            </Section>
+            <ProfileSection title="Preferences">
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full" onClick={toggleUnits}>
+                  <span className="text-[17px] text-white">Units</span>
+                  <span className="text-[15px] text-white/40 capitalize">{units}</span>
+                </button>
+              </ProfileRow>
+              <ProfileRow separator>
+                <button
+                  className="flex items-center justify-between w-full"
+                  onClick={requestNotifications}
+                  disabled={notifStatus === 'denied' || notifStatus === 'unsupported'}
+                >
+                  <span className="text-[17px] text-white">Notifications</span>
+                  <span className={`text-[15px] ${notifStatus === 'granted' ? 'text-green-400' : notifStatus === 'denied' ? 'text-red-400' : 'text-white/40'}`}>
+                    {notifLabel}
+                  </span>
+                </button>
+              </ProfileRow>
+              <ProfileRow>
+                <div className="flex items-center justify-between">
+                  <span className="text-[17px] text-white">Appearance</span>
+                  <span className="text-[15px] text-white/40">Dark</span>
+                </div>
+              </ProfileRow>
+            </ProfileSection>
 
             {/* Account */}
-            <Section title="Account">
-              <Row separator>
-                <button
-                  onClick={handleSignOut}
-                  className="w-full text-left py-1 text-[17px] font-medium text-red-400"
-                >
+            <ProfileSection title="Account">
+              <ProfileRow separator>
+                <button onClick={handleSignOut} className="w-full text-left py-0.5 text-[17px] font-medium text-red-400">
                   Sign Out
                 </button>
-              </Row>
-              <Row>
-                <button className="w-full text-left py-1 text-[17px] font-medium text-red-400/50">
+              </ProfileRow>
+              <ProfileRow>
+                <button className="w-full text-left py-0.5 text-[17px] font-medium text-red-400/50">
                   Delete Account
                 </button>
-              </Row>
-            </Section>
+              </ProfileRow>
+            </ProfileSection>
 
           </div>
         </div>
@@ -136,12 +196,14 @@ export function ProfileButton() {
   )
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function ProfileSection({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-[13px] font-medium text-white/40 px-1">{title}</span>
+    <div className="flex flex-col gap-1.5">
+      {title && (
+        <span className="text-[13px] font-medium text-white/40 px-1">{title}</span>
+      )}
       <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
         {children}
       </div>
@@ -149,31 +211,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Row({ children, separator }: { children: React.ReactNode; separator?: boolean }) {
+function ProfileRow({ children, separator }: { children: React.ReactNode; separator?: boolean }) {
   return (
-    <div className="px-4 py-3" style={{ borderBottom: separator ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+    <div className="px-4 py-3.5" style={{ borderBottom: separator ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
       {children}
     </div>
   )
 }
 
-function ServiceRow({ icon, label, status, statusColor }: {
-  icon: string; label: string; status: string; statusColor: string
-}) {
+function ServiceRow({ icon, label, connected }: { icon: string; label: string; connected: boolean | undefined }) {
   return (
     <div className="flex items-center gap-3">
       <span className="text-[18px] w-6 text-center">{icon}</span>
       <span className="flex-1 text-[17px] text-white">{label}</span>
-      <span className={`text-[15px] ${statusColor}`}>{status}</span>
-    </div>
-  )
-}
-
-function PrefRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[17px] text-white">{label}</span>
-      <span className="text-[15px] text-white/40">{value}</span>
+      <span className={`text-[15px] ${connected ? 'text-green-400' : 'text-white/30'}`}>
+        {connected === undefined ? '…' : connected ? 'Connected' : 'Not connected'}
+      </span>
     </div>
   )
 }
