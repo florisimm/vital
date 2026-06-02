@@ -1,9 +1,9 @@
 'use client'
 
 import useSWR from 'swr'
-import { Sparkles, Heart, Moon, CloudSun, Droplets, PersonStanding, BedDouble } from 'lucide-react'
+import { Sparkles, CloudSun } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
-import { Card, SectionHeader, MetricTile, MetricRow } from '@/components/ui'
+import { Card, SectionHeader, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
@@ -74,11 +74,10 @@ function HeroActionCard({ upcoming, kcalLeft, proteinLeft }: {
 // ─── Weather card ─────────────────────────────────────────────────────────────
 
 function WeatherImpactCard({ weather }: { weather: any }) {
-  const temp = weather ? Math.round(Number(weather.temp)) : null
-  const wind = weather ? Math.round(Number(weather.windspeed)) : null
-  const desc = temp !== null
-    ? `Het is ${temp}°C met wind van ${wind} km/u. ${temp < 20 && (wind ?? 0) < 20 ? 'Goed trainingsmoment vandaag.' : 'Houd rekening met het weer bij je training.'}`
-    : 'Best training window is 14:45–16:30. Cooler air and lower wind improve expected pace stability.'
+  if (!weather) return null
+  const temp = Math.round(Number(weather.temp))
+  const wind = Math.round(Number(weather.windspeed))
+  const desc = `Het is ${temp}°C met wind van ${wind} km/u. ${temp < 20 && wind < 20 ? 'Goed trainingsmoment vandaag.' : 'Houd rekening met het weer bij je training.'}`
 
   return (
     <Card>
@@ -96,49 +95,16 @@ function WeatherImpactCard({ weather }: { weather: any }) {
 // ─── Upcoming workout card ────────────────────────────────────────────────────
 
 function UpcomingWorkoutCard({ upcoming }: { upcoming: { name: string; start_date: string; distance: number | null } | null }) {
-  const time = upcoming
-    ? new Date(upcoming.start_date).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
-    : '15:00'
-  const name = upcoming
-    ? upcoming.name
-    : '10 km aerobic run'
-  const dist = upcoming?.distance ? `${(upcoming.distance / 1000).toFixed(1)} km · ` : ''
+  if (!upcoming) return null
+  const time = new Date(upcoming.start_date).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+  const dist = upcoming.distance ? `${(upcoming.distance / 1000).toFixed(1)} km · ` : ''
 
   return (
     <Card>
       <div className="flex flex-col gap-3">
         <SectionHeader title="Upcoming workout" detail={time} />
-        <span className="text-[22px] font-bold text-white">{name}</span>
-        <p className="text-white/50 leading-relaxed text-[17px]">
-          {dist}Keep effort controlled. Target Zone 2 for 45 minutes, finish with 4 relaxed strides only if HR remains stable.
-        </p>
-      </div>
-    </Card>
-  )
-}
-
-// ─── Daily priorities card ────────────────────────────────────────────────────
-
-function DailyPrioritiesCard({ steps, weight }: { steps: number | null; weight: number | null }) {
-  return (
-    <Card>
-      <div className="flex flex-col gap-3">
-        <SectionHeader title="Daily priorities" detail="3" />
-        <MetricRow
-          title="Hydration"
-          value="2.6 L"
-          detail="Increase before afternoon run"
-        />
-        <MetricRow
-          title="Mobility"
-          value="8 min"
-          detail="Hips and calves"
-        />
-        <MetricRow
-          title="Sleep window"
-          value="22:15"
-          detail="Highest impact action"
-        />
+        <span className="text-[22px] font-bold text-white">{upcoming.name}</span>
+        {dist ? <p className="text-white/50 leading-relaxed text-[17px]">{dist}</p> : null}
       </div>
     </Card>
   )
@@ -159,8 +125,6 @@ export default function TodayPage() {
   const kcalLeft = Math.max(0, targetKcal - totalKcal)
   const proteinLeft = Math.max(0, targetProtein - totalProtein)
   const upcomingName = data?.upcoming?.name ?? null
-  const steps = data?.gezondheid?.stappen ?? null
-  const weight = data?.gezondheid?.gewicht ? Number(data.gezondheid.gewicht) : null
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
@@ -168,35 +132,11 @@ export default function TodayPage() {
       {/* Hero */}
       <HeroActionCard upcoming={upcomingName} kcalLeft={kcalLeft} proteinLeft={proteinLeft} />
 
-      {/* Current state */}
-      <SectionHeader title="Current state" detail="AI summary" />
-      <div className="grid grid-cols-2 gap-3">
-        <MetricTile
-          title="Recovery"
-          value="82"
-          unit="%"
-          note="High readiness"
-          Icon={Heart}
-          tint="text-teal-400"
-        />
-        <MetricTile
-          title="Sleep"
-          value="7h 48"
-          unit=""
-          note="+36 min deep"
-          Icon={Moon}
-          tint="text-indigo-400"
-        />
-      </div>
-
       {/* Weather */}
       <WeatherImpactCard weather={data?.weather} />
 
       {/* Upcoming workout */}
       <UpcomingWorkoutCard upcoming={data?.upcoming ?? null} />
-
-      {/* Daily priorities */}
-      <DailyPrioritiesCard steps={steps} weight={weight} />
 
     </PremiumScreen>
   )

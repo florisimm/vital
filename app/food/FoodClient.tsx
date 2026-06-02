@@ -703,7 +703,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
         {/* ── Detail view ── */}
         {view === 'detail' && selected && (
-          <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
             {/* Amount stepper */}
             <div className="flex items-center justify-between py-4 rounded-[16px] px-4"
               style={{ background: 'rgba(255,255,255,0.06)' }}>
