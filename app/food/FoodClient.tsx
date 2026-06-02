@@ -130,7 +130,7 @@ async function fetchProducts() {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function FoodClient() {
-  const { data, mutate } = useSWR('food-log', fetchFoodData, {
+  const { data, mutate, error, isLoading } = useSWR('food-log', fetchFoodData, {
     revalidateOnFocus: false,
     dedupingInterval: 10_000,
   })
@@ -189,11 +189,21 @@ export function FoodClient() {
     return map
   }, [log])
 
-  if (!data) {
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-10">
+        <p className="text-white/40 text-[15px] text-center">Kon data niet laden</p>
+        <p className="text-white/20 text-[12px] text-center">{String(error)}</p>
+        <button onClick={() => mutate()} className="text-teal-400 text-[15px] font-medium">Opnieuw proberen</button>
+      </div>
+    )
+  }
+
+  if (isLoading || !data) {
     return (
       <div className="flex flex-col gap-4">
-        {[200, 100, 60, 60, 60, 60].map((h, i) => (
-          <div key={i} className="animate-pulse rounded-3xl" style={{ height: h, background: 'rgba(255,255,255,0.07)' }} />
+        {[180, 90, 56, 56, 56].map((h, i) => (
+          <div key={i} className="animate-pulse rounded-3xl" style={{ height: h, background: 'rgba(255,255,255,0.10)' }} />
         ))}
       </div>
     )
