@@ -44,11 +44,26 @@ type MealTemplate = {
 
 // ─── Meal config ──────────────────────────────────────────────────────────────
 
-const MEAL_ORDER = ['Breakfast', 'Snacks After Breakfast', 'Lunch', 'Snacks After Lunch', 'Dinner', 'Snacks After Dinner']
+const MEAL_ORDER = ['ontbijt', 'snack_ochtend', 'lunch', 'snack_middag', 'avondeten', 'snack_avond', 'supps']
+
+const MEAL_LABELS: Record<string, string> = {
+  ontbijt:       'Breakfast',
+  snack_ochtend: 'Snacks After Breakfast',
+  lunch:         'Lunch',
+  snack_middag:  'Snacks After Lunch',
+  avondeten:     'Dinner',
+  snack_avond:   'Snacks After Dinner',
+  supps:         'Supplements',
+}
+
 const MEAL_ICONS: Record<string, string> = {
-  'Breakfast': '🌅', 'Snacks After Breakfast': '🍎',
-  'Lunch': '☀️', 'Snacks After Lunch': '🥗',
-  'Dinner': '🌙', 'Snacks After Dinner': '🍿',
+  ontbijt:       '🌅',
+  snack_ochtend: '🍎',
+  lunch:         '☀️',
+  snack_middag:  '🥗',
+  avondeten:     '🌙',
+  snack_avond:   '🍿',
+  supps:         '💊',
 }
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
@@ -124,7 +139,6 @@ export function FoodClient() {
     dedupingInterval: 60_000,
   })
 
-  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set(MEAL_ORDER))
   const [showAddSheet, setShowAddSheet] = useState(false)
   const [preselectedMeal, setPreselectedMeal] = useState('Breakfast')
 
@@ -202,19 +216,14 @@ export function FoodClient() {
       </Card>
 
       <div className="flex flex-col gap-3.5">
-        <SectionHeader title="Maaltijden van vandaag" />
+        <SectionHeader title="Today's Meals" />
         {MEAL_ORDER.map(meal => (
-          <MealAccordion
+          <MealSection
             key={meal}
             meal={meal}
             icon={MEAL_ICONS[meal] ?? '🍽️'}
+            label={MEAL_LABELS[meal] ?? meal}
             entries={mealMap[meal] ?? []}
-            isExpanded={expandedMeals.has(meal)}
-            onToggle={() => setExpandedMeals(prev => {
-              const next = new Set(prev)
-              next.has(meal) ? next.delete(meal) : next.add(meal)
-              return next
-            })}
             onDelete={deleteEntry}
             onAdd={() => { setPreselectedMeal(meal); setShowAddSheet(true) }}
           />
@@ -222,7 +231,7 @@ export function FoodClient() {
       </div>
 
       <button
-        onClick={() => { setPreselectedMeal('Breakfast'); setShowAddSheet(true) }}
+        onClick={() => { setPreselectedMeal('ontbijt'); setShowAddSheet(true) }}
         className="fixed bottom-[88px] right-5 z-40 w-[56px] h-[56px] rounded-full flex items-center justify-center border border-white/20 shadow-xl"
         style={{ background: 'rgba(255,255,255,0.12)' }}
         aria-label="Voeding toevoegen"
@@ -244,60 +253,52 @@ export function FoodClient() {
   )
 }
 
-// ─── Meal accordion ───────────────────────────────────────────────────────────
+// ─── Meal section (always expanded) ──────────────────────────────────────────
 
-function MealAccordion({ meal, icon, entries, isExpanded, onToggle, onDelete, onAdd }: {
-  meal: string; icon: string; entries: FoodLogEntry[]
-  isExpanded: boolean; onToggle: () => void
+function MealSection({ meal, icon, label, entries, onDelete, onAdd }: {
+  meal: string; icon: string; label: string; entries: FoodLogEntry[]
   onDelete: (id: string) => void; onAdd: () => void
 }) {
   const mealKcal = entries.reduce((s, f) => s + Number(f.kcal ?? 0), 0)
-  const mealProtein = entries.reduce((s, f) => s + Number(f.protein ?? 0), 0)
 
   return (
-    <div className="p-3.5 rounded-[18px] border border-white/[0.055]" style={{ background: 'rgba(255,255,255,0.055)' }}>
-      <button className="flex items-center w-full gap-3.5" onClick={onToggle}>
-        <span className="text-[20px] w-8 text-center">{icon}</span>
-        <div className="flex-1 text-left">
-          <p className="text-[17px] font-semibold text-white">{meal}</p>
-          <p className="text-[13px] text-white/50">
-            {entries.length} item{entries.length !== 1 ? 's' : ''} · {Math.round(mealProtein)}g eiwit
-          </p>
-        </div>
-        <span className="text-[15px] font-semibold text-white/70">{Math.round(mealKcal)} kcal</span>
-        <ChevronRight size={14} strokeWidth={2.5}
-          className={`text-white/30 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
-      </button>
+    <div className="rounded-[18px] border border-white/[0.055] overflow-hidden"
+      style={{ background: 'rgba(255,255,255,0.055)' }}>
 
-      {isExpanded && (
-        <div className="mt-3 flex flex-col">
-          {entries.length === 0 ? (
-            <p className="text-[15px] text-white/30 pl-11 py-2">Nog niets gelogd</p>
-          ) : entries.map(entry => (
-            <div key={entry.id} className="flex items-center justify-between pl-11 py-2 border-t border-white/[0.05]">
-              <div>
-                <p className="text-[15px] font-medium text-white">{entry.food_name}</p>
-                <p className="text-[12px] text-white/40">
-                  {entry.amount_g ? `${Math.round(Number(entry.amount_g))}g · ` : ''}{Math.round(Number(entry.kcal ?? 0))} kcal
-                </p>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-[11px] text-white/40">
-                  P:{Math.round(Number(entry.protein ?? 0))} K:{Math.round(Number(entry.carbs ?? 0))} V:{Math.round(Number(entry.fat ?? 0))}
-                </span>
-                <button onClick={() => onDelete(entry.id)}>
-                  <Trash2 size={14} className="text-white/25 hover:text-red-400 transition-colors" />
-                </button>
-              </div>
-            </div>
-          ))}
-          <button onClick={onAdd}
-            className="flex items-center gap-2 pl-11 pt-3 pb-1 text-[15px] font-medium"
-            style={{ color: 'rgb(45, 212, 191)' }}>
-            <Plus size={14} strokeWidth={2.5} /> Toevoegen
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <span className="text-[18px] w-7 text-center">{icon}</span>
+        <span className="flex-1 text-[16px] font-semibold text-white">{label}</span>
+        {mealKcal > 0 && (
+          <span className="text-[13px] font-medium text-white/40">{Math.round(mealKcal)} kcal</span>
+        )}
+      </div>
+
+      {/* Food entries */}
+      {entries.map((entry, i) => (
+        <div key={entry.id}
+          className="flex items-center justify-between px-4 py-3 border-t border-white/[0.05]">
+          <div>
+            <p className="text-[15px] font-medium text-white">{entry.food_name}</p>
+            <p className="text-[12px] text-white/40">
+              {entry.amount_g ? `${Math.round(Number(entry.amount_g))}g · ` : ''}
+              {Math.round(Number(entry.kcal ?? 0))} kcal
+              {Number(entry.protein) > 0 ? ` · P: ${Math.round(Number(entry.protein))}g` : ''}
+            </p>
+          </div>
+          <button onClick={() => onDelete(entry.id)} className="ml-3 shrink-0">
+            <Trash2 size={14} className="text-white/20 hover:text-red-400 transition-colors" />
           </button>
         </div>
-      )}
+      ))}
+
+      {/* Add button */}
+      <button onClick={onAdd}
+        className="flex items-center gap-2 px-4 py-3 w-full border-t border-white/[0.05] text-[14px] font-medium"
+        style={{ color: 'rgb(45,212,191)' }}>
+        <Plus size={13} strokeWidth={2.5} />
+        Add food
+      </button>
     </div>
   )
 }
@@ -566,7 +567,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   className="w-full flex items-center gap-3 px-4 py-3 text-left"
                   style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                   <span className="text-[16px]">{MEAL_ICONS[m]}</span>
-                  <span className="flex-1 text-[14px] text-white">{m}</span>
+                  <span className="flex-1 text-[14px] text-white">{MEAL_LABELS[m] ?? m}</span>
                   {meal === m && <span className="text-teal-400 text-[13px]">✓</span>}
                 </button>
               ))}
@@ -727,7 +728,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   className="w-full flex items-center gap-3 px-4 py-3.5"
                   style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                   <span className="text-[18px] w-7 text-center">{MEAL_ICONS[m]}</span>
-                  <span className="flex-1 text-[15px] font-medium text-white text-left">{m}</span>
+                  <span className="flex-1 text-[15px] font-medium text-white text-left">{MEAL_LABELS[m] ?? m}</span>
                   {meal === m && <span className="text-teal-400 text-[15px]">✓</span>}
                 </button>
               ))}
@@ -736,7 +737,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             {/* Save */}
             <button onClick={handleSave} disabled={saving || !preview}
               className="h-[54px] rounded-[18px] bg-white text-black font-semibold text-[17px] disabled:opacity-40">
-              {saving ? 'Saving…' : `Add to ${meal}`}
+              {saving ? 'Saving…' : `Add to ${MEAL_LABELS[meal] ?? meal}`}
             </button>
           </div>
         )}
