@@ -167,8 +167,8 @@ export function MinimalWorkoutList({
     <Card>
       <div className="flex flex-col gap-3.5">
         <SectionHeader title={title} />
-        {workouts.map((w) => (
-          <span key={w} className="font-semibold text-white text-[17px] py-1">
+        {workouts.map((w, i) => (
+          <span key={i} className="font-semibold text-white text-[17px] py-1">
             {w}
           </span>
         ))}

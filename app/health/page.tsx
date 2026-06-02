@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import useSWR from 'swr'
+import { BedDouble, Activity, Heart, Scale, Footprints } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
-import { MetricRow } from '@/components/ui'
+import { Card, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import type { GezondheidsRow } from './sections'
 
@@ -34,6 +35,22 @@ export default function HealthPage() {
   const steps = latest?.stappen ?? null
   const weight = latest?.gewicht ? Number(latest.gewicht).toFixed(1) : null
 
+  // Weight trend: compare latest vs 7 days ago
+  const weightRows = rows.filter(r => r.gewicht != null)
+  const latestWeight = weightRows[0] ? Number(weightRows[0].gewicht) : null
+  const oldWeight = weightRows[6] ? Number(weightRows[6].gewicht) : null
+  const weightChange = latestWeight && oldWeight ? latestWeight - oldWeight : null
+  const weightDetail = weightChange !== null
+    ? `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg vs 7 dagen`
+    : '–'
+
+  // Steps: 7-day average
+  const stepRows = rows.filter(r => r.stappen != null).slice(0, 7)
+  const avgSteps = stepRows.length
+    ? Math.round(stepRows.reduce((s, r) => s + Number(r.stappen), 0) / stepRows.length)
+    : null
+  const stepsDetail = avgSteps ? `gem. ${avgSteps.toLocaleString('nl-NL')} / dag` : '–'
+
   return (
     <PremiumScreen title="Health" subtitle="Recovery foundation" contentGap={18}>
 
@@ -48,21 +65,38 @@ export default function HealthPage() {
         ))}
       </div>
 
-      {/* Metric rows — real data only */}
-      {weight && (
-        <MetricRow
-          title="Weight"
-          value={`${weight} kg`}
-          detail="Latest measurement"
-        />
-      )}
-      {steps && (
-        <MetricRow
-          title="Daily activity"
-          value={`${Number(steps).toLocaleString('nl-NL')} stappen`}
-          detail="Vandaag"
-        />
-      )}
+      {/* Overview tiles — always visible on main Health page */}
+      <div className="grid grid-cols-2 gap-3">
+        <MetricTile title="Sleep score" value="–" unit="" note="–"
+          Icon={BedDouble} tint="text-blue-400" />
+        <MetricTile title="HRV" value="–" unit="" note="–"
+          Icon={Activity} tint="text-green-400" />
+      </div>
+
+      {/* Metric rows */}
+      <MetricRow title="Resting heart rate" value="–" detail="–" />
+      <MetricRow
+        title="Weight trend"
+        value={weight ? `${weight} kg` : '–'}
+        detail={weightDetail}
+      />
+      <MetricRow
+        title="Daily activity"
+        value={steps ? `${Number(steps).toLocaleString('nl-NL')} steps` : '–'}
+        detail={stepsDetail}
+      />
+
+      {/* Recommendation card */}
+      <Card>
+        <div className="flex flex-col gap-2.5">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">
+            Recommendation
+          </span>
+          <p className="text-[22px] font-bold text-white leading-snug">
+            Recovery supports aerobic training today. Do not add intensity.
+          </p>
+        </div>
+      </Card>
 
     </PremiumScreen>
   )

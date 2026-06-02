@@ -38,7 +38,7 @@ export default function TrainingPage() {
         )}
       </div>
 
-      <OverviewSection activities={data?.activities ?? []} hevy={data?.hevy ?? []} />
+      <OverviewSection activities={data?.activities ?? []} hevy={data?.hevy ?? []} calendarEvents={data?.calendarEvents ?? []} />
     </PremiumScreen>
   )
 }

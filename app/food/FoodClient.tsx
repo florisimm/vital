@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
-import { Plus, ChevronRight, Trash2, X, Search, Camera, Utensils, Mic } from 'lucide-react'
+import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils } from 'lucide-react'
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 
@@ -68,19 +68,17 @@ const MEAL_ICONS: Record<string, string> = {
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
 
-async function fetchFoodData() {
+async function fetchFoodData(date: string) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
-
-  const today = new Date().toISOString().split('T')[0]
 
   const [{ data: foodLog }, { data: settings }] = await Promise.all([
     supabase
       .from('food_log')
       .select('id, meal_category, food_name, amount_g, kcal, protein, carbs, fat, logged_at')
       .eq('user_id', user.id)
-      .eq('date', today)
+      .eq('date', date)
       .order('logged_at', { ascending: true }),
     supabase
       .from('user_settings')
@@ -98,8 +96,16 @@ async function fetchFoodData() {
       fat: Number(settings?.macro_fat ?? 80),
     } as Targets,
     userId: user.id,
-    today,
+    today: date,
   }
+}
+
+function formatDayLabel(dateStr: string) {
+  const today = new Date().toISOString().split('T')[0]
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+  if (dateStr === today) return 'Vandaag'
+  if (dateStr === yesterday) return 'Gisteren'
+  return new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
 }
 
 async function fetchMealTemplates(): Promise<MealTemplate[]> {
@@ -130,10 +136,15 @@ async function fetchProducts() {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function FoodClient() {
-  const { data, mutate, error, isLoading } = useSWR('food-log', fetchFoodData, {
-    revalidateOnFocus: false,
-    dedupingInterval: 10_000,
-  })
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [selectedDate, setSelectedDate] = useState(todayStr)
+  const touchStartX = useRef<number | null>(null)
+
+  const { data, mutate, error, isLoading } = useSWR(
+    `food-log-${selectedDate}`,
+    () => fetchFoodData(selectedDate),
+    { revalidateOnFocus: false, dedupingInterval: 10_000 }
+  )
   const { data: products = [] } = useSWR('products', fetchProducts, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
@@ -142,16 +153,44 @@ export function FoodClient() {
   const [showAddSheet, setShowAddSheet] = useState(false)
   const [preselectedMeal, setPreselectedMeal] = useState('ontbijt')
 
-  // Lock body scroll when sheet is open
   useEffect(() => {
     document.body.style.overflow = showAddSheet ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [showAddSheet])
 
+  function goToPrevDay() {
+    setSelectedDate(d => {
+      const prev = new Date(d)
+      prev.setDate(prev.getDate() - 1)
+      return prev.toISOString().split('T')[0]
+    })
+  }
+
+  function goToNextDay() {
+    setSelectedDate(d => {
+      const next = new Date(d)
+      next.setDate(next.getDate() + 1)
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+      if (next.toISOString().split('T')[0] > tomorrow) return d
+      return next.toISOString().split('T')[0]
+    })
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const diff = touchStartX.current - e.changedTouches[0].clientX
+    if (Math.abs(diff) > 50) diff > 0 ? goToNextDay() : goToPrevDay()
+    touchStartX.current = null
+  }
+
   const log = data?.foodLog ?? []
   const targets = data?.targets ?? { kcal: 2500, protein: 180, carbs: 250, fat: 80 }
   const userId = data?.userId ?? ''
-  const today = data?.today ?? new Date().toISOString().split('T')[0]
+  const isToday = selectedDate === todayStr
 
   const totals = useMemo(() => ({
     kcal: log.reduce((s, f) => s + Number(f.kcal ?? 0), 0),
@@ -166,14 +205,12 @@ export function FoodClient() {
     : 'Alle macro-doelen lopen goed. Blijf consistent met de maaltijdtiming.'
 
   async function deleteEntry(id: string) {
-    // Optimistic update
     mutate(prev => prev ? { ...prev, foodLog: prev.foodLog.filter(f => f.id !== id) } : prev, false)
     const supabase = createClient()
     await supabase.from('food_log').delete().eq('id', id)
   }
 
   function onAdded(entry: FoodLogEntry) {
-    // Optimistic update
     mutate(prev => prev ? { ...prev, foodLog: [...prev.foodLog, entry] } : prev, false)
     setShowAddSheet(false)
   }
@@ -210,10 +247,21 @@ export function FoodClient() {
   }
 
   return (
-    <>
+    <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      {/* Day navigation */}
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={goToPrevDay} className="w-9 h-9 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <ChevronLeft size={18} className="text-white/70" />
+        </button>
+        <span className="text-[17px] font-semibold text-white">{formatDayLabel(selectedDate)}</span>
+        <button onClick={goToNextDay} disabled={isToday} className="w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-30" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <ChevronRight size={18} className="text-white/70" />
+        </button>
+      </div>
+
       <Card>
         <div className="flex flex-col gap-[18px]">
-          <SectionHeader title="Vandaag" />
+          <SectionHeader title="Macros" />
           <NutritionProgressBar label="Calorieën"    current={totals.kcal}    target={targets.kcal}    unit="kcal" tint="bg-orange-400" />
           <NutritionProgressBar label="Eiwit"        current={totals.protein} target={targets.protein} unit="g"    tint="bg-teal-400"   />
           <NutritionProgressBar label="Koolhydraten" current={totals.carbs}   target={targets.carbs}   unit="g"    tint="bg-yellow-400" />
@@ -260,12 +308,12 @@ export function FoodClient() {
           products={products}
           preselectedMeal={preselectedMeal}
           userId={userId}
-          today={today}
+          today={selectedDate}
           onAdded={onAdded}
           onClose={() => setShowAddSheet(false)}
         />
       )}
-    </>
+    </div>
   )
 }
 
@@ -703,7 +751,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
         {/* ── Detail view ── */}
         {view === 'detail' && selected && (
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
+          <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
             {/* Amount stepper */}
             <div className="flex items-center justify-between py-4 rounded-[16px] px-4"
               style={{ background: 'rgba(255,255,255,0.06)' }}>
