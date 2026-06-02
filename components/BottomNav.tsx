@@ -23,11 +23,12 @@ export function BottomNav() {
       <nav
         className="flex items-center p-1 gap-0.5"
         style={{
-          background: 'rgba(22, 22, 24, 0.97)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
+          background: 'rgba(18, 18, 20, 0.72)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
           borderRadius: '999px',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+          border: '1px solid rgba(255,255,255,0.06)',
         }}
       >
         {tabs.map(({ href, label, Icon }) => {
