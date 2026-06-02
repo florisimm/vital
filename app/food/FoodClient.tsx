@@ -140,7 +140,13 @@ export function FoodClient() {
   })
 
   const [showAddSheet, setShowAddSheet] = useState(false)
-  const [preselectedMeal, setPreselectedMeal] = useState('Breakfast')
+  const [preselectedMeal, setPreselectedMeal] = useState('ontbijt')
+
+  // Lock body scroll when sheet is open
+  useMemo(() => {
+    if (typeof document === 'undefined') return
+    document.body.style.overflow = showAddSheet ? 'hidden' : ''
+  }, [showAddSheet])
 
   const log = data?.foodLog ?? []
   const targets = data?.targets ?? { kcal: 2500, protein: 180, carbs: 250, fat: 80 }
@@ -458,8 +464,9 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative flex flex-col max-h-[92vh]"
-        style={{ background: 'rgb(10, 12, 14)', borderRadius: '20px 20px 0 0' }}
+        style={{ background: 'rgb(10, 12, 14)', borderRadius: '20px 20px 0 0', overscrollBehavior: 'contain' }}
         onClick={e => e.stopPropagation()}
+        onTouchMove={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
@@ -686,7 +693,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
         {/* ── Detail view ── */}
         {view === 'detail' && selected && (
-          <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5">
+          <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
             {/* Amount stepper */}
             <div className="flex items-center justify-between py-4 rounded-[16px] px-4"
               style={{ background: 'rgba(255,255,255,0.06)' }}>
