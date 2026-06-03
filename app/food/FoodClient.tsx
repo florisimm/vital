@@ -46,6 +46,16 @@ type MealTemplate = {
 
 // ─── Meal config ──────────────────────────────────────────────────────────────
 
+function getMealForHour(): string {
+  const h = new Date().getHours()
+  if (h >= 6  && h < 11) return 'ontbijt'
+  if (h >= 11 && h < 12) return 'snack_ochtend'
+  if (h >= 12 && h < 14) return 'lunch'
+  if (h >= 14 && h < 17) return 'snack_middag'
+  if (h >= 17 && h < 19) return 'avondeten'
+  return 'snack_avond'
+}
+
 const MEAL_ORDER = ['ontbijt', 'snack_ochtend', 'lunch', 'snack_middag', 'avondeten', 'snack_avond', 'supps']
 
 const MEAL_LABELS: Record<string, string> = {
@@ -156,7 +166,8 @@ export function FoodClient() {
   })
 
   const [showAddSheet, setShowAddSheet] = useState(false)
-  const [preselectedMeal, setPreselectedMeal] = useState('ontbijt')
+  const [preselectedMeal, setPreselectedMeal] = useState(getMealForHour)
+  const [macroDrill, setMacroDrill] = useState<'kcal' | 'protein' | 'carbs' | 'fat' | null>(null)
 
   useEffect(() => {
     document.body.style.overflow = showAddSheet ? 'hidden' : ''
@@ -273,10 +284,16 @@ export function FoodClient() {
       <Card>
         <div className="flex flex-col gap-[18px]">
           <SectionHeader title="Macros" />
-          <NutritionProgressBar label="Calorieën"    current={totals.kcal}    target={targets.kcal}    unit="kcal" tint="bg-orange-400" />
-          <NutritionProgressBar label="Eiwit"        current={totals.protein} target={targets.protein} unit="g"    tint="bg-teal-400"   />
-          <NutritionProgressBar label="Koolhydraten" current={totals.carbs}   target={targets.carbs}   unit="g"    tint="bg-yellow-400" />
-          <NutritionProgressBar label="Vet"          current={totals.fat}     target={targets.fat}     unit="g"    tint="bg-indigo-400" />
+          {([
+            { key: 'kcal',    label: 'Calorieën',    unit: 'kcal', tint: 'bg-orange-400' },
+            { key: 'protein', label: 'Eiwit',        unit: 'g',    tint: 'bg-teal-400'   },
+            { key: 'carbs',   label: 'Koolhydraten', unit: 'g',    tint: 'bg-yellow-400' },
+            { key: 'fat',     label: 'Vet',          unit: 'g',    tint: 'bg-indigo-400' },
+          ] as const).map(({ key, label, unit, tint }) => (
+            <button key={key} className="w-full text-left active:opacity-60 transition-opacity" onClick={() => setMacroDrill(key)}>
+              <NutritionProgressBar label={label} current={totals[key]} target={targets[key]} unit={unit} tint={tint} />
+            </button>
+          ))}
         </div>
       </Card>
 
@@ -312,7 +329,7 @@ export function FoodClient() {
       `}</style>
 
       <button
-        onClick={() => { setPreselectedMeal('ontbijt'); setShowAddSheet(true) }}
+        onClick={() => { setPreselectedMeal(getMealForHour()); setShowAddSheet(true) }}
         className="fixed bottom-[88px] right-5 z-40 w-[56px] h-[56px] rounded-full flex items-center justify-center border border-white/20 shadow-xl"
         style={{ background: 'rgba(255,255,255,0.12)' }}
         aria-label="Voeding toevoegen"
@@ -330,6 +347,44 @@ export function FoodClient() {
           onClose={() => setShowAddSheet(false)}
         />
       )}
+
+      {macroDrill && (
+        <MacroDrillSheet macro={macroDrill} log={log} onClose={() => setMacroDrill(null)} />
+      )}
+    </div>
+  )
+}
+
+// ─── Macro drill-down sheet ───────────────────────────────────────────────────
+
+type MacroKey = 'kcal' | 'protein' | 'carbs' | 'fat'
+const MACRO_LABEL: Record<MacroKey, string> = { kcal: 'Calorieën', protein: 'Eiwit', carbs: 'Koolhydraten', fat: 'Vet' }
+const MACRO_UNIT: Record<MacroKey, string>  = { kcal: 'kcal', protein: 'g', carbs: 'g', fat: 'g' }
+
+function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log: FoodLogEntry[]; onClose: () => void }) {
+  const sorted = [...log].sort((a, b) => Number(b[macro] ?? 0) - Number(a[macro] ?? 0))
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      <div className="flex items-center justify-between px-5 py-4 shrink-0">
+        <div className="w-16" />
+        <span className="text-[17px] font-semibold text-white">{MACRO_LABEL[macro]}</span>
+        <button onClick={onClose} className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold">Klaar</button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-2">
+        {sorted.length === 0 ? (
+          <p className="text-white/40 text-[15px] text-center mt-10">Nog niets gelogd vandaag</p>
+        ) : sorted.map((item, i) => (
+          <div key={item.id ?? i} className="flex items-center justify-between px-4 py-3.5 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.07)' }}>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[16px] font-semibold text-white">{item.food_name}</span>
+              <span className="text-[13px] text-white/40">{MEAL_LABELS[item.meal_category] ?? item.meal_category} · {item.amount_g}g</span>
+            </div>
+            <span className="text-[17px] font-bold text-white shrink-0 ml-3">
+              {Math.round(Number(item[macro] ?? 0))}<span className="text-[13px] text-white/50 font-medium ml-0.5">{MACRO_UNIT[macro]}</span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
