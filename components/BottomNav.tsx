@@ -15,6 +15,8 @@ const tabs = [
 export function BottomNav() {
   const pathname = usePathname()
 
+  if (pathname === '/training/session' || pathname === '/login') return null
+
   return (
     <div
       data-bottom-nav

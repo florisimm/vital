@@ -234,24 +234,22 @@ async function orsRoundTrip(
 ): Promise<{ coords: [number, number][]; actualKm: number }> {
   const profile = orsProfile(sport, mainRoad, mtb)
   const avoidFeatures = avoidHills ? ['hills'] : []
-  const res = await fetch(
-    `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': process.env.NEXT_PUBLIC_ORS_API_KEY ?? '',
-      },
-      body: JSON.stringify({
+  const res = await fetch('/api/route-plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profile,
+      body: {
         coordinates: [[lon, lat]],
         options: {
           ...(avoidFeatures.length ? { avoid_features: avoidFeatures } : {}),
           round_trip: { length: Math.round(targetKm * 1000), points: 5, seed },
         },
-      }),
-    }
-  )
+      },
+    }),
+  })
   const json = await res.json()
+  if (!res.ok) throw new Error(json.error ?? `ORS ${res.status}`)
   const feature = json.features?.[0]
   if (!feature) throw new Error('No route')
   return {
@@ -271,18 +269,19 @@ async function orsDirectRoute(
 ): Promise<{ coords: [number, number][]; actualKm: number }> {
   const profile = orsProfile(sport, mainRoad, mtb)
   const avoidFeatures = avoidHills ? ['hills'] : []
-  const res = await fetch(
-    `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': process.env.NEXT_PUBLIC_ORS_API_KEY ?? '' },
-      body: JSON.stringify({
+  const res = await fetch('/api/route-plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profile,
+      body: {
         coordinates: [[startLon, startLat], [endLon, endLat]],
         ...(avoidFeatures.length ? { options: { avoid_features: avoidFeatures } } : {}),
-      }),
-    }
-  )
+      },
+    }),
+  })
   const json = await res.json()
+  if (!res.ok) throw new Error(json.error ?? `ORS ${res.status}`)
   const feature = json.features?.[0]
   if (!feature) throw new Error('No route')
   return {
@@ -336,7 +335,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     try {
       const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
       setRouteCoords(result.coords); setActualKm(result.actualKm)
-    } catch { setError('Kon geen route laden') }
+    } catch (e: any) { setError(e?.message ? `Route fout: ${e.message}` : 'Kon geen route laden') }
     finally { setLoading(false) }
   }
 

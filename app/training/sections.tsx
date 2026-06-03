@@ -369,27 +369,74 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
 
 // ─── Strength ─────────────────────────────────────────────────────────────────
 
+const MUSCLE_MAP = [
+  { label: 'Legs',      keywords: ['squat','leg press','leg curl','leg extension','lunge','hamstring','quad','calf','glute','hip thrust','rdl','romanian','hack','step-up','split squat'], target: 12, color: '#2dd4bf' },
+  { label: 'Chest',     keywords: ['bench','chest','fly','push-up','pushup','pec','cable cross'], target: 12, color: '#60a5fa' },
+  { label: 'Back',      keywords: ['row','pull-up','pullup','lat pulldown','deadlift','back','chin-up','chinup','hyperextension','t-bar'], target: 12, color: '#22d3ee' },
+  { label: 'Shoulders', keywords: ['shoulder','delt','lateral raise','front raise','face pull','overhead press','ohp','arnold','upright row'], target: 6, color: '#facc15' },
+  { label: 'Arms',      keywords: ['curl','tricep','bicep','skull','hammer curl','preacher','tricep extension','pushdown'], target: 6, color: '#fb923c' },
+]
+
+const LIFT_COLORS = ['text-teal-400','text-blue-400','text-cyan-400','text-yellow-400','text-orange-400']
+
+function matchMuscle(name: string): string | null {
+  const lower = name.toLowerCase()
+  for (const g of MUSCLE_MAP) {
+    if (g.keywords.some(kw => lower.includes(kw))) return g.label
+  }
+  return null
+}
+
 export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString()
   const weekHevy = hevy.filter(h => h.start_time >= sevenDaysAgo)
   const totalSets = weekHevy.reduce((s, h) => s + (h.sets ?? 0), 0)
   const totalVolume = weekHevy.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
 
-  const muscleGroups = [
-    { label: 'Legs', sets: 15, target: 12, color: '#2dd4bf' },
-    { label: 'Chest', sets: 8, target: 12, color: '#60a5fa' },
-    { label: 'Back', sets: 10, target: 12, color: '#22d3ee' },
-    { label: 'Shoulders', sets: 5, target: 6, color: '#facc15' },
-    { label: 'Arms', sets: 4, target: 6, color: '#fb923c' },
-  ]
+  // Muscle group set counts from this week
+  const setCounts: Record<string, number> = { Legs: 0, Chest: 0, Back: 0, Shoulders: 0, Arms: 0 }
+  for (const workout of weekHevy) {
+    for (const ex of workout.exercises ?? []) {
+      const muscle = matchMuscle(ex.title)
+      if (muscle) setCounts[muscle] = (setCounts[muscle] ?? 0) + (ex.sets?.length ?? 0)
+    }
+  }
+  const muscleGroups = MUSCLE_MAP.map(g => ({ ...g, sets: setCounts[g.label] ?? 0 }))
 
-  const keyLifts = [
-    { name: 'Back Squat', weight: '120 kg', reps: '5×5', trend: '↑ 5 kg', color: 'text-teal-400' },
-    { name: 'Bench Press', weight: '85 kg', reps: '4×6', trend: 'Stable', color: 'text-blue-400' },
-    { name: 'Deadlift', weight: '155 kg', reps: '3×5', trend: '↑ 10 kg', color: 'text-cyan-400' },
-    { name: 'Overhead Press', weight: '55 kg', reps: '3×8', trend: 'Stable', color: 'text-yellow-400' },
-    { name: 'Pull-Up', weight: 'BW +15 kg', reps: '3×6', trend: '↑ 2.5 kg', color: 'text-orange-400' },
-  ]
+  // Key lifts: top 5 most-trained exercises with real weights
+  type Session = { date: string; maxWeight: number; reps: number; sets: number }
+  const exMap = new Map<string, Session[]>()
+  for (const workout of hevy) {
+    for (const ex of workout.exercises ?? []) {
+      if (!ex.sets?.length) continue
+      const weighted = ex.sets.filter((s: any) => (s.weight_kg ?? 0) > 0)
+      const maxWeight = weighted.length ? Math.max(...weighted.map((s: any) => s.weight_kg)) : 0
+      const bestSet = weighted.length ? weighted.reduce((b: any, s: any) => s.weight_kg > b.weight_kg ? s : b) : ex.sets[0]
+      if (!exMap.has(ex.title)) exMap.set(ex.title, [])
+      exMap.get(ex.title)!.push({ date: workout.start_time, maxWeight, reps: bestSet?.reps ?? 0, sets: ex.sets.length })
+    }
+  }
+  const keyLifts = [...exMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 5)
+    .map(([name, sessions], i) => {
+      const latest = sessions[0]
+      const recent = sessions.filter(s => s.date >= twoWeeksAgo)
+      const older  = sessions.filter(s => s.date < twoWeeksAgo)
+      const recentMax = recent.length ? Math.max(...recent.map(s => s.maxWeight)) : null
+      const olderMax  = older.length  ? Math.max(...older.map(s => s.maxWeight))  : null
+      let trend = 'Stable'
+      if (recentMax !== null && olderMax !== null) {
+        const diff = recentMax - olderMax
+        if (diff > 0) trend = `↑ ${diff} kg`
+        else if (diff < 0) trend = `↓ ${Math.abs(diff)} kg`
+      } else if (recentMax !== null && olderMax === null) {
+        trend = 'New'
+      }
+      const weightLabel = latest.maxWeight > 0 ? `${latest.maxWeight} kg` : 'BW'
+      return { name, weight: weightLabel, reps: `${latest.sets}×${latest.reps}`, trend, color: LIFT_COLORS[i] }
+    })
 
   return (
     <div className="flex flex-col gap-6">

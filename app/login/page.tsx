@@ -11,6 +11,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resetSent, setResetSent] = useState(false)
+
+  async function handleForgotPassword() {
+    if (!email) { setError('Vul eerst je e-mailadres in'); return }
+    setLoading(true); setError(null)
+    await createClient().auth.resetPasswordForEmail(email)
+    setLoading(false)
+    setResetSent(true)
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -104,6 +113,9 @@ export default function LoginPage() {
         {error && (
           <p className="text-red-400 text-[14px] text-center px-2">{error}</p>
         )}
+        {resetSent && (
+          <p className="text-teal-400 text-[14px] text-center px-2">Reset link verstuurd — check je e-mail</p>
+        )}
 
         <button
           onClick={handleLogin}
@@ -111,6 +123,15 @@ export default function LoginPage() {
           className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 disabled:opacity-50 active:scale-[0.98] transition-transform"
         >
           {loading ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleForgotPassword}
+          disabled={loading}
+          className="text-[14px] text-white/35 text-center disabled:opacity-50"
+        >
+          Wachtwoord vergeten?
         </button>
 
         <p className="text-[13px] text-white/25 text-center mt-1">

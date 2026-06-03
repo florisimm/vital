@@ -19,6 +19,7 @@ async function fetchHealth() {
 }
 
 const CATEGORIES = [
+  { label: 'Overview', href: null               },
   { label: 'Sleep',    href: '/health/sleep'    },
   { label: 'Recovery', href: '/health/recovery' },
   { label: 'Heart',    href: '/health/heart'    },
@@ -54,15 +55,23 @@ export default function HealthPage() {
   return (
     <PremiumScreen title="Health" subtitle="Recovery foundation" contentGap={18}>
 
-      {/* Category strip — all pills navigate to detail pages */}
+      {/* Category strip */}
       <div className="flex gap-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
-        {CATEGORIES.map(({ label, href }) => (
-          <Link key={label} href={href} prefetch={true}
-            className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0 transition-all"
-            style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}>
-            {label}
-          </Link>
-        ))}
+        {CATEGORIES.map(({ label, href }) =>
+          href ? (
+            <Link key={label} href={href} prefetch={true}
+              className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}>
+              {label}
+            </Link>
+          ) : (
+            <span key={label}
+              className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
+              style={{ background: 'white', color: 'black' }}>
+              {label}
+            </span>
+          )
+        )}
       </div>
 
       {/* Overview tiles — always visible on main Health page */}
