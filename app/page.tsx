@@ -71,7 +71,7 @@ function HeroActionCard({ nextWorkout, showTrainingLink, proteinLeft }: {
             </div>
             {i === 0 && showTrainingLink && (
               <a
-                href={`/training/session?title=${encodeURIComponent(nextWorkout.title)}&time=${encodeURIComponent(nextWorkout.start_datetime ?? '')}`}
+                href={`/training/session?title=${encodeURIComponent(nextWorkout!.title)}&time=${encodeURIComponent(nextWorkout!.start_datetime ?? '')}`}
                 className="ml-[23px] text-[14px] font-semibold text-teal-400"
               >
                 View training →
