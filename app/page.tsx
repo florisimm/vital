@@ -41,6 +41,8 @@ function formatSubtitle() {
 
 // ─── Hero action card ─────────────────────────────────────────────────────────
 
+const ENDURANCE_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
+
 function HeroActionCard({ nextWorkout, proteinLeft }: {
   nextWorkout: { title: string; start_datetime: string | null } | null
   proteinLeft: number
@@ -52,6 +54,9 @@ function HeroActionCard({ nextWorkout, proteinLeft }: {
         return time ? `${nextWorkout.title} at ${time}` : nextWorkout.title
       })()
     : 'No workout planned today'
+
+  const showTrainingLink = nextWorkout !== null &&
+    ENDURANCE_KEYWORDS.some(k => nextWorkout.title.toLowerCase().includes(k))
 
   const actions = [
     workoutLabel,
@@ -76,7 +81,7 @@ function HeroActionCard({ nextWorkout, proteinLeft }: {
               <div className="w-[7px] h-[7px] rounded-full bg-white shrink-0" />
               <span className="text-[20px] font-semibold text-white">{a}</span>
             </div>
-            {i === 0 && nextWorkout && (
+            {i === 0 && showTrainingLink && (
               <a
                 href={`/training/session?title=${encodeURIComponent(nextWorkout.title)}&time=${encodeURIComponent(nextWorkout.start_datetime ?? '')}`}
                 className="ml-[23px] text-[14px] font-semibold text-teal-400"
