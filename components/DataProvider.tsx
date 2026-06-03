@@ -49,6 +49,13 @@ export function DataProvider() {
 
       mutate('products', products ?? [], false)
 
+      // Filter out events that have already started, same as trainingFetcher does
+      const now = new Date()
+      const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
+        const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+        return t >= now
+      })
+
       mutate('today', {
         weather, upcomingActivity: upcoming,
         latestGezondheid: gezondheid?.[0] ?? null,
@@ -58,13 +65,6 @@ export function DataProvider() {
       }, false)
 
       mutate('health-gezondheid', gezondheid ?? [], false)
-
-      // Filter out events that have already started, same as trainingFetcher does
-      const now = new Date()
-      const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
-        const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
-        return t >= now
-      })
 
       mutate('training', { activities: activities ?? [], hevy: hevy ?? [], calendarEvents: upcomingCalendar }, false)
 
