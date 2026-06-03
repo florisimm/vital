@@ -328,7 +328,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   function parsedKm() { return kmRef.current }
 
   // Ref to latest generateLoop so GPS callbacks never use a stale version
-  const generateLoopRef = useRef<(lat: number, lon: number) => void>()
+  const generateLoopRef = useRef<((lat: number, lon: number) => void) | null>(null)
   generateLoopRef.current = async (lat: number, lon: number) => {
     startCoordRef.current = [lat, lon]
     setStartCoord([lat, lon])
