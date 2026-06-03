@@ -462,20 +462,26 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   }
 
   // ── Meal templates ──
+  const [loggingTemplate, setLoggingTemplate] = useState<string | null>(null)
+
   async function logTemplate(template: MealTemplate) {
-    if (!template.foods.length) return
-    const supabase = createClient()
-    await supabase.from('food_log').insert(
-      template.foods.map(f => ({
-        user_id: userId, date: today, meal_category: meal,
-        food_name: f.food_name, amount_g: f.amount_g,
-        kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
-        sugars: 0, brand: f.brand ?? '',
-      }))
-    )
-    // Refresh food log
-    globalMutate('food-log')
-    onClose()
+    if (!template.foods.length || loggingTemplate) return
+    setLoggingTemplate(template.id)
+    try {
+      const supabase = createClient()
+      await supabase.from('food_log').insert(
+        template.foods.map(f => ({
+          user_id: userId, date: today, meal_category: meal,
+          food_name: f.food_name, amount_g: f.amount_g,
+          kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
+          sugars: 0, brand: f.brand ?? '',
+        }))
+      )
+      globalMutate(`food-log-${today}`)
+      onClose()
+    } finally {
+      setLoggingTemplate(null)
+    }
   }
 
   async function saveTemplate() {
@@ -634,14 +640,17 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   const totalProtein = t.foods.reduce((s, f) => s + f.protein, 0)
                   return (
                     <div key={t.id} className="flex items-center gap-3 px-4 py-3.5 rounded-[14px]"
-                      style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <button className="flex-1 text-left" onClick={() => logTemplate(t)}>
+                      style={{ background: 'rgba(255,255,255,0.06)', opacity: loggingTemplate === t.id ? 0.5 : 1 }}>
+                      <button className="flex-1 text-left" onClick={() => logTemplate(t)} disabled={!!loggingTemplate}>
                         <p className="text-[16px] font-semibold text-white">{t.name}</p>
                         <p className="text-[12px] text-white/40">
                           {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
                         </p>
+                        {loggingTemplate === t.id && (
+                          <p className="text-[12px] text-teal-400 mt-0.5">Wordt toegevoegd…</p>
+                        )}
                       </button>
-                      <button onClick={() => deleteTemplate(t.id)}>
+                      <button onClick={() => deleteTemplate(t.id)} disabled={!!loggingTemplate}>
                         <Trash2 size={15} className="text-white/20 hover:text-red-400" />
                       </button>
                     </div>
