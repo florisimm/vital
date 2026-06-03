@@ -1,9 +1,9 @@
 'use client'
 
 import useSWR from 'swr'
-import { Sparkles, Heart, Moon, CloudSun, Droplets, PersonStanding, BedDouble } from 'lucide-react'
+import { Sparkles, Heart, Moon, CloudSun } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
-import { Card, SectionHeader, MetricTile, MetricRow } from '@/components/ui'
+import { Card, SectionHeader, MetricTile } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
@@ -14,15 +14,23 @@ async function fetchTodayData() {
   if (!user) throw new Error('Not authenticated')
   const today = new Date().toISOString().split('T')[0]
 
-  const [{ data: weather }, { data: upcoming }, { data: gezondheid }, { data: foodLog }, { data: settings }] = await Promise.all([
+  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }, { data: calendarEvents }] = await Promise.all([
     supabase.from('weather_cache').select('*').eq('id', 'current').single(),
-    supabase.from('strava_activities').select('name,sport_type,start_date,distance,moving_time').eq('user_id', user.id).gte('start_date', new Date().toISOString()).order('start_date', { ascending: true }).limit(1).maybeSingle(),
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('food_log').select('kcal,protein').eq('user_id', user.id).eq('date', today),
     supabase.from('user_settings').select('macro_kcal,macro_protein').eq('user_id', user.id).maybeSingle(),
+    supabase.from('calendar_events').select('title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }).limit(20),
   ])
 
-  return { weather, upcoming, gezondheid, foodLog: foodLog ?? [], settings }
+  const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit']
+  const now = new Date()
+  const nextWorkout = (calendarEvents ?? []).find(e => {
+    const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    if (t < now) return false
+    return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
+  }) ?? null
+
+  return { weather, gezondheid, foodLog: foodLog ?? [], settings, nextWorkout }
 }
 
 // ─── Date string ──────────────────────────────────────────────────────────────
@@ -33,13 +41,22 @@ function formatSubtitle() {
 
 // ─── Hero action card ─────────────────────────────────────────────────────────
 
-function HeroActionCard({ upcoming, kcalLeft, proteinLeft }: {
-  upcoming: string | null; kcalLeft: number; proteinLeft: number
+function HeroActionCard({ nextWorkout, proteinLeft }: {
+  nextWorkout: { title: string; start_datetime: string | null } | null
+  proteinLeft: number
 }) {
+  const workoutLabel = nextWorkout
+    ? (() => {
+        const t = nextWorkout.start_datetime ? new Date(nextWorkout.start_datetime) : null
+        const time = t ? t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null
+        return time ? `${nextWorkout.title} at ${time}` : nextWorkout.title
+      })()
+    : 'No workout planned today'
+
   const actions = [
-    upcoming ?? 'Plan je training voor vandaag',
-    proteinLeft > 10 ? `Eet nog ${Math.round(proteinLeft)}g eiwit vandaag` : 'Eiwitdoel bereikt ✓',
-    'Prioritize sleep tonight',
+    workoutLabel,
+    proteinLeft > 10 ? `Eat ${Math.round(proteinLeft)}g more protein today` : 'Protein goal reached ✓',
+    'Be in bed by 23:00',
   ]
 
   return (
@@ -65,7 +82,7 @@ function HeroActionCard({ upcoming, kcalLeft, proteinLeft }: {
         href="/food"
         className="flex items-center justify-center w-full h-[54px] rounded-[18px] bg-white text-black font-semibold text-[16px]"
       >
-        {upcoming ? 'Start with the run' : 'Log voeding'}
+        Log food
       </a>
     </div>
   )
@@ -77,7 +94,7 @@ function WeatherImpactCard({ weather }: { weather: any }) {
   const temp = weather ? Math.round(Number(weather.temp)) : null
   const wind = weather ? Math.round(Number(weather.windspeed)) : null
   const desc = temp !== null
-    ? `Het is ${temp}°C met wind van ${wind} km/u. ${temp < 20 && (wind ?? 0) < 20 ? 'Goed trainingsmoment vandaag.' : 'Houd rekening met het weer bij je training.'}`
+    ? `It's ${temp}°C with ${wind} km/h wind. ${temp < 20 && (wind ?? 0) < 20 ? 'Good conditions for training today.' : 'Factor in the weather when planning your workout.'}`
     : '–'
 
   return (
@@ -93,56 +110,6 @@ function WeatherImpactCard({ weather }: { weather: any }) {
   )
 }
 
-// ─── Upcoming workout card ────────────────────────────────────────────────────
-
-function UpcomingWorkoutCard({ upcoming }: { upcoming: { name: string; start_date: string; distance: number | null } | null }) {
-  const time = upcoming
-    ? new Date(upcoming.start_date).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
-    : '–'
-  const name = upcoming
-    ? upcoming.name
-    : '–'
-  const dist = upcoming?.distance ? `${(upcoming.distance / 1000).toFixed(1)} km · ` : ''
-
-  return (
-    <Card>
-      <div className="flex flex-col gap-3">
-        <SectionHeader title="Upcoming workout" detail={time} />
-        <span className="text-[22px] font-bold text-white">{name}</span>
-        <p className="text-white/50 leading-relaxed text-[17px]">
-          {dist}Keep effort controlled. Target Zone 2 for 45 minutes, finish with 4 relaxed strides only if HR remains stable.
-        </p>
-      </div>
-    </Card>
-  )
-}
-
-// ─── Daily priorities card ────────────────────────────────────────────────────
-
-function DailyPrioritiesCard({ steps, weight }: { steps: number | null; weight: number | null }) {
-  return (
-    <Card>
-      <div className="flex flex-col gap-3">
-        <SectionHeader title="Daily priorities" detail="–" />
-        <MetricRow
-          title="Hydration"
-          value="–"
-          detail="–"
-        />
-        <MetricRow
-          title="Mobility"
-          value="–"
-          detail="–"
-        />
-        <MetricRow
-          title="Sleep window"
-          value="–"
-          detail="–"
-        />
-      </div>
-    </Card>
-  )
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -152,21 +119,15 @@ export default function TodayPage() {
     dedupingInterval: 30_000,
   })
 
-  const totalKcal = (data?.foodLog ?? []).reduce((s, f) => s + Number(f.kcal ?? 0), 0)
   const totalProtein = (data?.foodLog ?? []).reduce((s, f) => s + Number(f.protein ?? 0), 0)
-  const targetKcal = Number(data?.settings?.macro_kcal ?? 2500)
   const targetProtein = Number(data?.settings?.macro_protein ?? 180)
-  const kcalLeft = Math.max(0, targetKcal - totalKcal)
   const proteinLeft = Math.max(0, targetProtein - totalProtein)
-  const upcomingName = data?.upcoming?.name ?? null
-  const steps = data?.gezondheid?.stappen ?? null
-  const weight = data?.gezondheid?.gewicht ? Number(data.gezondheid.gewicht) : null
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
 
       {/* Hero */}
-      <HeroActionCard upcoming={upcomingName} kcalLeft={kcalLeft} proteinLeft={proteinLeft} />
+      <HeroActionCard nextWorkout={data?.nextWorkout ?? null} proteinLeft={proteinLeft} />
 
       {/* Current state */}
       <SectionHeader title="Current state" detail="AI summary" />
@@ -191,12 +152,6 @@ export default function TodayPage() {
 
       {/* Weather */}
       <WeatherImpactCard weather={data?.weather} />
-
-      {/* Upcoming workout */}
-      <UpcomingWorkoutCard upcoming={data?.upcoming ?? null} />
-
-      {/* Daily priorities */}
-      <DailyPrioritiesCard steps={steps} weight={weight} />
 
     </PremiumScreen>
   )
