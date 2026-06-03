@@ -29,6 +29,7 @@ type Product = {
   protein: number | null
   carbs: number | null
   fat: number | null
+  servings: { label: string; amount_g: number }[] | null
 }
 
 type Targets = { kcal: number; protein: number; carbs: number; fat: number }
@@ -603,6 +604,23 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
                   className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
                   style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
               </div>
+              {(pickerProduct.servings ?? []).length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {(pickerProduct.servings ?? []).map((s, i) => (
+                    <button key={i}
+                      onClick={() => setPickerGrams(String(s.amount_g))}
+                      className="px-3 py-1.5 rounded-full text-[13px] font-semibold transition-all"
+                      style={
+                        pickerGrams === String(s.amount_g)
+                          ? { background: 'white', color: 'black' }
+                          : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }
+                      }
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { label: 'Kcal',  value: `${Math.round(Number(pickerProduct.kcal??0)*Number(pickerGrams)/100)}`,       color: '#fb923c' },
@@ -765,7 +783,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       const supabase = createClient()
       const { data: localProduct } = await supabase
         .from('products')
-        .select('id,name,brand,kcal,protein,carbs,fat')
+        .select('id,name,brand,kcal,protein,carbs,fat,servings')
         .eq('barcode', barcode)
         .maybeSingle()
 

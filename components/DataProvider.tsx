@@ -29,7 +29,7 @@ export function DataProvider() {
       ] = await Promise.all([
         supabase.from('food_log').select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
         supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat').eq('user_id', user.id).single(),
-        supabase.from('products').select('id,name,brand,kcal,protein,carbs,fat').or(`user_id.eq.${user.id},user_id.is.null`).order('name'),
+        supabase.from('products').select('id,name,brand,kcal,protein,carbs,fat,servings').or(`user_id.eq.${user.id},user_id.is.null`).order('name'),
         supabase.from('weather_cache').select('*').eq('id', 'current').single(),
         supabase.from('strava_activities').select('name,sport_type,start_date,distance,moving_time').eq('user_id', user.id).gte('start_date', new Date().toISOString()).order('start_date', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('gezondheid').select('datum,stappen,gewicht').eq('user_id', user.id).order('datum', { ascending: false }).limit(30),
