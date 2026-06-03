@@ -314,23 +314,38 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [error, setError] = useState<string | null>(null)
   const seedRef = useRef(Math.floor(Math.random() * 10000))
   const kmRef = useRef(advice.targetKm)
+  const startCoordRef = useRef<[number, number] | null>(null)
+  const heuvelsRef = useRef(true)
+  const groteWegRef = useRef(false)
+  const mtbRef = useRef(false)
+
+  // Keep refs in sync with latest state on every render
   kmRef.current = Math.max(1, parseFloat(distanceInput) || advice.targetKm)
+  heuvelsRef.current = heuvels
+  groteWegRef.current = groteWeg
+  mtbRef.current = mtb
 
   function parsedKm() { return kmRef.current }
 
-  async function generateLoop(lat: number, lon: number) {
-    setLoading(true); setError(null); setStartCoord([lat, lon])
+  // Ref to latest generateLoop so GPS callbacks never use a stale version
+  const generateLoopRef = useRef<(lat: number, lon: number) => void>()
+  generateLoopRef.current = async (lat: number, lon: number) => {
+    startCoordRef.current = [lat, lon]
+    setStartCoord([lat, lon])
+    setLoading(true); setError(null)
     try {
-      const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvels, groteWeg, mtb)
+      const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
       setRouteCoords(result.coords); setActualKm(result.actualKm)
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
   }
 
+  function generateLoop(lat: number, lon: number) { generateLoopRef.current!(lat, lon) }
+
   function triggerGps() {
     setLocMode('gps'); setError(null)
     navigator.geolocation.getCurrentPosition(
-      pos => generateLoop(pos.coords.latitude, pos.coords.longitude),
+      pos => generateLoopRef.current!(pos.coords.latitude, pos.coords.longitude),
       () => { setLocMode('manual'); setError('Locatie toegang geweigerd') }
     )
   }
@@ -340,15 +355,14 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     setLoading(true); setError(null)
     try {
       const coord = await nominatim(fromQuery)
-      setStartCoord(coord)
-      await generateLoop(coord[0], coord[1])
+      await generateLoopRef.current!(coord[0], coord[1])
     } catch { setError('Vertrekpunt niet gevonden') }
     finally { setLoading(false) }
   }
 
   function retry() {
     seedRef.current = Math.floor(Math.random() * 10000)
-    if (startCoord) generateLoop(startCoord[0], startCoord[1])
+    if (startCoordRef.current) generateLoopRef.current!(startCoordRef.current[0], startCoordRef.current[1])
     else triggerGps()
   }
 
