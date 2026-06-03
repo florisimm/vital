@@ -11,15 +11,8 @@ export function DataProvider() {
   useEffect(() => {
     async function prefetch() {
       const supabase = createClient()
-      const { data: { user }, } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
-      // Kick off calendar sync in the background — don't await, don't block UI
-      const { data: { session } } = await supabase.auth.getSession()
-      fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-calendar-sync`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) } }
-      ).then(() => mutate('training')).catch(() => {/* silent */})
 
       const today = new Date().toISOString().split('T')[0]
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
@@ -29,11 +22,11 @@ export function DataProvider() {
         return d.toISOString()
       })()
 
-      // Fire all queries in parallel
+      // Fire all queries in parallel — including calendar_events so training tab has data immediately
       const [
         { data: foodLog }, { data: settings }, { data: products },
         { data: weather }, { data: upcoming }, { data: gezondheid },
-        { data: activities }, { data: hevy },
+        { data: activities }, { data: hevy }, { data: calendarEvents },
       ] = await Promise.all([
         supabase.from('food_log').select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
         supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat').eq('user_id', user.id).single(),
@@ -43,6 +36,7 @@ export function DataProvider() {
         supabase.from('gezondheid').select('datum,stappen,gewicht').eq('user_id', user.id).order('datum', { ascending: false }).limit(30),
         supabase.from('strava_activities').select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules').eq('user_id', user.id).gte('start_date', thirtyDaysAgo).order('start_date', { ascending: false }),
         supabase.from('hevy_workouts').select('id,title,start_time,end_time,duration,volume_kg,sets,exercises').eq('user_id', user.id).gte('start_time', thirtyDaysAgo).order('start_time', { ascending: false }),
+        supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
       ])
 
       // Populate SWR cache for all pages
@@ -64,7 +58,15 @@ export function DataProvider() {
 
       mutate('health-gezondheid', gezondheid ?? [], false)
 
-      mutate('training', { activities: activities ?? [], hevy: hevy ?? [] }, false)
+      // Include calendarEvents so training tab shows upcoming workouts immediately
+      mutate('training', { activities: activities ?? [], hevy: hevy ?? [], calendarEvents: calendarEvents ?? [] }, false)
+
+      // Sync Google Calendar in background AFTER cache is warm — when done, revalidate training
+      const { data: { session } } = await supabase.auth.getSession()
+      fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-calendar-sync`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) } }
+      ).then(() => mutate('training')).catch(() => {/* silent */})
     }
 
     prefetch()
@@ -72,3 +74,4 @@ export function DataProvider() {
 
   return null
 }
+
