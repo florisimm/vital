@@ -58,8 +58,14 @@ export function DataProvider() {
 
       mutate('health-gezondheid', gezondheid ?? [], false)
 
-      // Include calendarEvents so training tab shows upcoming workouts immediately
-      mutate('training', { activities: activities ?? [], hevy: hevy ?? [], calendarEvents: calendarEvents ?? [] }, false)
+      // Filter out events that have already started, same as trainingFetcher does
+      const now = new Date()
+      const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
+        const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+        return t >= now
+      })
+
+      mutate('training', { activities: activities ?? [], hevy: hevy ?? [], calendarEvents: upcomingCalendar }, false)
 
       // Sync Google Calendar in background AFTER cache is warm — when done, revalidate training
       const { data: { session } } = await supabase.auth.getSession()
