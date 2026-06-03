@@ -387,7 +387,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
         <div className="px-4 pb-2 flex items-center gap-2">
           <span className="text-[13px] text-white/40">Route afstand:</span>
           <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
-          <span className="text-[13px] text-white/30">· doel {targetKm} km</span>
+          <span className="text-[13px] text-white/30">· doel {parsedKm()} km</span>
         </div>
       )}
 
