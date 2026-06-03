@@ -219,14 +219,15 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-// 3 base angles with ±20° jitter — triangle loop, fewer direction changes
+// 5 waypoints on a pentagon with ±18° angle jitter.
+// More waypoints = shorter segments = OSRM has less room to wander between them.
 function newAngles(): number[] {
-  return [0, 120, 240].map(a => a + (Math.random() - 0.5) * 40)
+  return [0, 72, 144, 216, 288].map(a => a + (Math.random() - 0.5) * 36)
 }
 
 // Per-waypoint distance multipliers with ±20% variation
 function newJitter(): number[] {
-  return Array.from({ length: 3 }, () => 1 + (Math.random() - 0.5) * 0.4)
+  return Array.from({ length: 5 }, () => 1 + (Math.random() - 0.5) * 0.4)
 }
 
 // Compass bearing (°) from point A to point B
@@ -261,7 +262,7 @@ async function osrmRequest(
   const bearingStr = all.map(([lt, ln], i) => {
     if (i >= all.length - 1) return ''
     const [nlt, nln] = all[i + 1]
-    return `${Math.round(geoBearing(lt, ln, nlt, nln))},60`
+    return `${Math.round(geoBearing(lt, ln, nlt, nln))},40`
   }).join(';')
 
   const res = await fetch(
