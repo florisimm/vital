@@ -71,9 +71,19 @@ function HeroActionCard({ nextWorkout, proteinLeft }: {
 
       <div className="flex flex-col gap-4 mb-6">
         {actions.map((a, i) => (
-          <div key={i} className="flex items-center gap-3.5">
-            <div className="w-[7px] h-[7px] rounded-full bg-white shrink-0" />
-            <span className="text-[20px] font-semibold text-white">{a}</span>
+          <div key={i} className="flex flex-col gap-1">
+            <div className="flex items-center gap-3.5">
+              <div className="w-[7px] h-[7px] rounded-full bg-white shrink-0" />
+              <span className="text-[20px] font-semibold text-white">{a}</span>
+            </div>
+            {i === 0 && nextWorkout && (
+              <a
+                href={`/training/session?title=${encodeURIComponent(nextWorkout.title)}&time=${encodeURIComponent(nextWorkout.start_datetime ?? '')}`}
+                className="ml-[23px] text-[14px] font-semibold text-teal-400"
+              >
+                View training →
+              </a>
+            )}
           </div>
         ))}
       </div>
