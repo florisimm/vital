@@ -3,7 +3,7 @@
 import useSWR from 'swr'
 import { Sparkles, Heart, Moon, CloudSun } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
-import { Card, SectionHeader, MetricTile } from '@/components/ui'
+import { Card, SectionHeader, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
@@ -171,6 +171,16 @@ export default function TodayPage() {
 
       {/* Weather */}
       <WeatherImpactCard weather={data?.weather} />
+
+      {/* Daily priorities */}
+      <Card>
+        <div className="flex flex-col gap-3">
+          <SectionHeader title="Daily priorities" detail="–" />
+          <MetricRow title="Hydration" value="–" detail="–" />
+          <MetricRow title="Mobility" value="–" detail="–" />
+          <MetricRow title="Sleep window" value="–" detail="–" />
+        </div>
+      </Card>
 
     </PremiumScreen>
   )
