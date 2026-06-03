@@ -67,6 +67,11 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
     return () => {
       cancelled = true
       try { reader?.reset() } catch {}
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream
+        stream.getTracks().forEach(t => t.stop())
+        videoRef.current.srcObject = null
+      }
     }
   }, [onDetected])
 
