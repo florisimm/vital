@@ -219,7 +219,7 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-async function fetchRoute(lat: number, lon: number, targetKm: number, sport: SportType, rotation: number): Promise<[number, number][]> {
+async function fetchRoute(lat: number, lon: number, targetKm: number, sport: SportType, rotation: number): Promise<{ coords: [number, number][]; actualKm: number }> {
   const radius = targetKm / (2 * Math.PI)
   const latDeg = 1 / 111
   const lonDeg = 1 / (111 * Math.cos((lat * Math.PI) / 180))
@@ -232,7 +232,11 @@ async function fetchRoute(lat: number, lon: number, targetKm: number, sport: Spo
   const coordStr = all.map(([lt, ln]) => `${ln},${lt}`).join(';')
   const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`)
   const json = await res.json()
-  return (json.routes[0].geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number])
+  const route = json.routes[0]
+  return {
+    coords: (route.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
+    actualKm: Math.round(route.distance / 100) / 10,
+  }
 }
 
 function buildGpx(coords: [number, number][], name: string): string {
@@ -259,6 +263,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [locMode, setLocMode] = useState<'gps' | 'manual'>('gps')
   const [manualQuery, setManualQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
+  const [actualKm, setActualKm] = useState<number | null>(null)
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -267,8 +272,8 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   async function generateFromCoords(lat: number, lon: number) {
     setLoading(true); setError(null)
     try {
-      const coords = await fetchRoute(lat, lon, targetKm, sport, rotationRef.current)
-      setRouteCoords(coords); setStartCoord([lat, lon])
+      const result = await fetchRoute(lat, lon, targetKm, sport, rotationRef.current)
+      setRouteCoords(result.coords); setActualKm(result.actualKm); setStartCoord([lat, lon])
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
   }
@@ -358,6 +363,15 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
           <RouteMap coords={routeCoords} />
         </div>
       ) : null}
+
+      {/* Actual route distance */}
+      {routeCoords && actualKm !== null && (
+        <div className="px-4 pb-2 flex items-center gap-2">
+          <span className="text-[13px] text-white/40">Route afstand:</span>
+          <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
+          <span className="text-[13px] text-white/30">· doel {targetKm} km</span>
+        </div>
+      )}
 
       {/* Buttons */}
       {routeCoords && (
