@@ -220,9 +220,11 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
 async function orsRoundTrip(
-  lat: number, lon: number, targetKm: number, sport: SportType, seed: number
+  lat: number, lon: number, targetKm: number, sport: SportType, seed: number, litRoute = false
 ): Promise<{ coords: [number, number][]; actualKm: number }> {
-  const profile = sport === 'cycling' ? 'cycling-regular' : 'foot-walking'
+  const profile = sport === 'cycling'
+    ? (litRoute ? 'cycling-road' : 'cycling-regular')
+    : 'foot-walking'
   const res = await fetch(
     `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
     {
@@ -262,6 +264,7 @@ function buildGoogleMapsUrl(start: [number, number], sport: SportType): string {
 
 function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string; sport: SportType }) {
   const [distanceInput, setDistanceInput] = useState(String(advice.targetKm))
+  const [litRoute, setLitRoute] = useState(false)
   const [locMode, setLocMode] = useState<'gps' | 'manual'>('gps')
   const [manualQuery, setManualQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
@@ -276,7 +279,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   async function generateFromCoords(lat: number, lon: number) {
     setLoading(true); setError(null)
     try {
-      const result = await orsRoundTrip(lat, lon, parsedKm(), sport, seedRef.current)
+      const result = await orsRoundTrip(lat, lon, parsedKm(), sport, seedRef.current, litRoute)
       setRouteCoords(result.coords); setActualKm(result.actualKm); setStartCoord([lat, lon])
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
@@ -367,6 +370,15 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
           <span className="text-[13px] text-white/50">km</span>
           <span className="text-[12px] text-white/25 ml-1">(aanbevolen: {advice.targetKm} km)</span>
         </div>
+        {sport === 'cycling' && (
+          <button
+            onClick={() => setLitRoute(v => !v)}
+            className="self-start flex items-center gap-1.5 h-[32px] px-3 rounded-full text-[13px] font-semibold"
+            style={litRoute ? { background: 'white', color: 'black' } : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.6)' }}
+          >
+            🌙 Verlichte route
+          </button>
+        )}
       </div>
 
       {/* Map */}
