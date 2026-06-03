@@ -5,7 +5,6 @@ import { Sparkles, Heart, Moon, CloudSun } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card, SectionHeader, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
-import { trainingFetcher } from '@/app/training/fetcher'
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
 
@@ -13,16 +12,23 @@ async function fetchTodayData() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
-  const today = new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const today = now.toISOString().split('T')[0]
 
-  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }] = await Promise.all([
+  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }, { data: calendarEvents }] = await Promise.all([
     supabase.from('weather_cache').select('*').eq('id', 'current').single(),
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('food_log').select('kcal,protein').eq('user_id', user.id).eq('date', today),
     supabase.from('user_settings').select('macro_kcal,macro_protein').eq('user_id', user.id).maybeSingle(),
+    supabase.from('calendar_events').select('id,title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
   ])
 
-  return { weather, gezondheid, foodLog: foodLog ?? [], settings }
+  const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
+    const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    return t >= now
+  })
+
+  return { weather, gezondheid, foodLog: foodLog ?? [], settings, calendarEvents: upcomingCalendar }
 }
 
 // ─── Date string ──────────────────────────────────────────────────────────────
@@ -143,13 +149,8 @@ export default function TodayPage() {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
   })
-  const { data: trainingData } = useSWR('training', trainingFetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 60_000,
-  })
 
-  // First upcoming sport event from Training page (same source & filtering)
-  const nextWorkout = trainingData?.calendarEvents?.[0] ?? null
+  const nextWorkout = data?.calendarEvents?.[0] ?? null
   const isStravaType = nextWorkout !== null &&
     STRAVA_KEYWORDS.some(k => nextWorkout.title.toLowerCase().includes(k))
 

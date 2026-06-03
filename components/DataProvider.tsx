@@ -54,6 +54,7 @@ export function DataProvider() {
         latestGezondheid: gezondheid?.[0] ?? null,
         foodLog: foodLog ?? [],
         settings,
+        calendarEvents: upcomingCalendar,
       }, false)
 
       mutate('health-gezondheid', gezondheid ?? [], false)
