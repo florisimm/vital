@@ -109,7 +109,7 @@ export function ProfileButton() {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex flex-col"
+          className="fixed inset-0 z-[70] flex flex-col"
           style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
           {/* Nav bar */}
@@ -210,7 +210,7 @@ export function ProfileButton() {
       )}
 
       {confirmDisconnect && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center pb-8 px-5"
+        <div className="fixed inset-0 z-[80] flex items-end justify-center pb-8 px-5"
           style={{ background: 'rgba(0,0,0,0.6)' }}
           onClick={() => setConfirmDisconnect(false)}
         >
