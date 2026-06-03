@@ -230,14 +230,6 @@ function newJitter(): number[] {
   return Array.from({ length: 5 }, () => 1 + (Math.random() - 0.5) * 0.4)
 }
 
-// Compass bearing (°) from point A to point B
-function geoBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const toR = (d: number) => d * Math.PI / 180
-  const φ1 = toR(lat1), φ2 = toR(lat2), Δλ = toR(lon2 - lon1)
-  const y = Math.sin(Δλ) * Math.cos(φ2)
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
-  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360
-}
 
 async function osrmRequest(
   lat: number, lon: number, radiusKm: number,
@@ -253,27 +245,21 @@ async function osrmRequest(
     return [lat + Math.cos(rad) * r * latDeg, lon + Math.sin(rad) * r * lonDeg]
   })
 
-  const all: [number, number][] = [[lat, lon], ...waypoints, [lat, lon]]
+  // Use OSRM trip API (TSP solver) — it finds the optimal visiting order so the
+  // route never has to backtrack or double back on the same road to reach the next
+  // waypoint. source=first keeps the start fixed; roundtrip closes the loop.
+  const all: [number, number][] = [[lat, lon], ...waypoints]
   const coordStr = all.map(([lt, ln]) => `${ln},${lt}`).join(';')
 
-  // Bearing constraint at each point: must be heading toward the NEXT point ±60°.
-  // This forces OSRM to snap to road segments going in the right direction,
-  // preventing it from routing backward through a waypoint (which causes sharp U-turns).
-  const bearingStr = all.map(([lt, ln], i) => {
-    if (i >= all.length - 1) return ''
-    const [nlt, nln] = all[i + 1]
-    return `${Math.round(geoBearing(lt, ln, nlt, nln))},40`
-  }).join(';')
-
   const res = await fetch(
-    `https://router.project-osrm.org/route/v1/${profile}/${coordStr}?overview=full&geometries=geojson&bearings=${bearingStr}`
+    `https://router.project-osrm.org/trip/v1/${profile}/${coordStr}?overview=full&geometries=geojson&roundtrip=true&source=first`
   )
   const json = await res.json()
-  const route = json.routes?.[0]
-  if (!route) throw new Error('No route')
+  const trip = json.trips?.[0]
+  if (!trip) throw new Error('No route')
   return {
-    coords: (route.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
-    actualKm: route.distance / 1000,
+    coords: (trip.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
+    actualKm: trip.distance / 1000,
   }
 }
 
