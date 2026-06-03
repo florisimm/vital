@@ -39,7 +39,7 @@ export function ProfileButton() {
       Promise.all([
         supabase.from('strava_tokens').select('id').eq('user_id', uid).limit(1),
         supabase.from('hevy_workouts').select('id').eq('user_id', uid).limit(1),
-        supabase.from('google_calendar_tokens').select('user_id').eq('user_id', uid).limit(1),
+        supabase.from('google_tokens').select('user_id').eq('user_id', uid).limit(1),
       ]).then(([strava, hevy, google]) => {
         setServices({
           strava: (strava.data?.length ?? 0) > 0,
@@ -58,6 +58,12 @@ export function ProfileButton() {
     await createClient().auth.signOut()
     router.push('/login')
     router.refresh()
+  }
+
+  function connectGoogleCalendar() {
+    if (!userId) return
+    window.location.href =
+      `https://pzuhodpxqofgzdawoydq.supabase.co/functions/v1/google-calendar-auth?user_id=${userId}`
   }
 
   async function toggleUnits() {
@@ -143,7 +149,8 @@ export function ProfileButton() {
               </ProfileRow>
               <ProfileRow>
                 <ServiceRow icon="📅" label="Google Calendar"
-                  connected={services?.google} />
+                  connected={services?.google}
+                  onConnect={services?.google === false ? connectGoogleCalendar : undefined} />
               </ProfileRow>
             </ProfileSection>
 
@@ -219,14 +226,23 @@ function ProfileRow({ children, separator }: { children: React.ReactNode; separa
   )
 }
 
-function ServiceRow({ icon, label, connected }: { icon: string; label: string; connected: boolean | undefined }) {
+function ServiceRow({ icon, label, connected, onConnect }: { icon: string; label: string; connected: boolean | undefined; onConnect?: () => void }) {
   return (
     <div className="flex items-center gap-3">
       <span className="text-[18px] w-6 text-center">{icon}</span>
       <span className="flex-1 text-[17px] text-white">{label}</span>
-      <span className={`text-[15px] ${connected ? 'text-green-400' : 'text-white/30'}`}>
-        {connected === undefined ? '…' : connected ? 'Connected' : 'Not connected'}
-      </span>
+      {onConnect ? (
+        <button
+          onClick={onConnect}
+          className="text-[15px] font-semibold text-teal-400 active:opacity-60"
+        >
+          Connect
+        </button>
+      ) : (
+        <span className={`text-[15px] ${connected ? 'text-green-400' : 'text-white/30'}`}>
+          {connected === undefined ? '…' : connected ? 'Connected' : 'Not connected'}
+        </span>
+      )}
     </div>
   )
 }
