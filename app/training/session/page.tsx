@@ -219,14 +219,13 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-async function fetchRoute(lat: number, lon: number, targetKm: number, sport: SportType, rotation: number): Promise<{ coords: [number, number][]; actualKm: number }> {
-  const radius = targetKm / (2 * Math.PI)
+async function osrmRequest(lat: number, lon: number, radiusKm: number, rotation: number) {
   const latDeg = 1 / 111
   const lonDeg = 1 / (111 * Math.cos((lat * Math.PI) / 180))
   const angles = [0, 90, 180, 270].map(a => ((a + rotation) * Math.PI) / 180)
   const waypoints: [number, number][] = angles.map(a => [
-    lat + Math.cos(a) * radius * latDeg,
-    lon + Math.sin(a) * radius * lonDeg,
+    lat + Math.cos(a) * radiusKm * latDeg,
+    lon + Math.sin(a) * radiusKm * lonDeg,
   ])
   const all: [number, number][] = [[lat, lon], ...waypoints, [lat, lon]]
   const coordStr = all.map(([lt, ln]) => `${ln},${lt}`).join(';')
@@ -235,8 +234,23 @@ async function fetchRoute(lat: number, lon: number, targetKm: number, sport: Spo
   const route = json.routes[0]
   return {
     coords: (route.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
-    actualKm: Math.round(route.distance / 100) / 10,
+    actualKm: route.distance / 1000,
   }
+}
+
+// Iteratively adjusts the radius so the routed distance converges to targetKm (±15%)
+async function fetchRoute(lat: number, lon: number, targetKm: number, sport: SportType, rotation: number): Promise<{ coords: [number, number][]; actualKm: number }> {
+  let radius = targetKm / (2 * Math.PI)
+  let result = await osrmRequest(lat, lon, radius, rotation)
+
+  for (let i = 0; i < 3; i++) {
+    const error = Math.abs(result.actualKm - targetKm) / targetKm
+    if (error <= 0.15) break
+    radius = radius * (targetKm / result.actualKm)
+    result = await osrmRequest(lat, lon, radius, rotation)
+  }
+
+  return { coords: result.coords, actualKm: Math.round(result.actualKm * 10) / 10 }
 }
 
 function buildGpx(coords: [number, number][], name: string): string {
