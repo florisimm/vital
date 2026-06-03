@@ -156,7 +156,13 @@ export function FoodClient() {
 
   useEffect(() => {
     document.body.style.overflow = showAddSheet ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
+    const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
+    if (nav) nav.style.display = showAddSheet ? 'none' : ''
+    return () => {
+      document.body.style.overflow = ''
+      const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
+      if (nav) nav.style.display = ''
+    }
   }, [showAddSheet])
 
   function goToPrevDay() {
@@ -248,9 +254,9 @@ export function FoodClient() {
   }
 
   return (
-    <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div className="flex flex-col gap-[22px]" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* Day navigation */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between">
         <button onClick={goToPrevDay} className="w-9 h-9 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <ChevronLeft size={18} className="text-white/70" />
         </button>
@@ -368,9 +374,319 @@ function MealSection({ meal, icon, label, entries, onDelete, onAdd }: {
   )
 }
 
+// ─── Custom food view ────────────────────────────────────────────────────────
+
+function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
+  userId: string; today: string; meal: string
+  setMeal: (m: string) => void
+  onAdded: (e: FoodLogEntry) => void
+  onClose: () => void
+}) {
+  const [form, setForm] = useState({ name: '', brand: '', kcal: '', protein: '', carbs: '', sugars: '', fat: '', barcode: '' })
+  const [grams, setGrams] = useState('100')
+  const [saving, setSaving] = useState(false)
+
+  function set(key: string, val: string) { setForm(f => ({ ...f, [key]: val })) }
+
+  const g = Number(grams) || 0
+  const preview = {
+    kcal:    Math.round(Number(form.kcal)    * g / 100),
+    protein: Math.round(Number(form.protein) * g / 100 * 10) / 10,
+    carbs:   Math.round(Number(form.carbs)   * g / 100 * 10) / 10,
+    fat:     Math.round(Number(form.fat)     * g / 100 * 10) / 10,
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.kcal) return
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      // Save to products table
+      await supabase.from('products').insert({
+        user_id: userId, name: form.name.trim(), brand: form.brand || '',
+        kcal: Number(form.kcal), protein: Number(form.protein), carbs: Number(form.carbs),
+        sugars: Number(form.sugars), fat: Number(form.fat),
+        barcode: form.barcode || null,
+      })
+      // Also log to food_log
+      const { data, error } = await supabase.from('food_log').insert({
+        user_id: userId, date: today, meal_category: meal,
+        food_name: form.name.trim(), amount_g: g,
+        kcal: preview.kcal, protein: preview.protein, carbs: preview.carbs, fat: preview.fat,
+        sugars: 0, brand: form.brand || '',
+      }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
+      if (!error && data) onAdded(data as FoodLogEntry)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fields = [
+    { key: 'kcal',    label: 'Calorieën',    unit: 'kcal', color: '#fb923c' },
+    { key: 'protein', label: 'Eiwit',         unit: 'g',    color: '#2dd4bf' },
+    { key: 'carbs',   label: 'Koolhydraten',  unit: 'g',    color: '#facc15' },
+    { key: 'sugars',  label: 'Waarvan suikers',unit: 'g',   color: '#f472b6' },
+    { key: 'fat',     label: 'Vet',            unit: 'g',   color: '#818cf8' },
+  ]
+
+  return (
+    <div className="flex flex-col flex-1 overflow-y-auto px-5 pb-8 gap-4">
+      {/* Name + brand */}
+      <input type="text" placeholder="Productnaam *" value={form.name} onChange={e => set('name', e.target.value)}
+        className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[16px] outline-none font-semibold"
+        style={{ background: 'rgba(255,255,255,0.08)' }} />
+      <input type="text" placeholder="Merk (optioneel)" value={form.brand} onChange={e => set('brand', e.target.value)}
+        className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[15px] outline-none"
+        style={{ background: 'rgba(255,255,255,0.08)' }} />
+
+      {/* Macros per 100g */}
+      <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest">Per 100g</p>
+      <div className="flex flex-col rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        {fields.map((f, i) => (
+          <div key={f.key} className="flex items-center justify-between px-4 py-3"
+            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <span className="text-[14px] font-medium" style={{ color: f.color }}>{f.label}</span>
+            <div className="flex items-center gap-2">
+              <input type="number" inputMode="decimal" placeholder="0"
+                value={form[f.key as keyof typeof form]}
+                onChange={e => set(f.key, e.target.value)}
+                className="w-16 text-right bg-transparent text-white text-[15px] font-semibold outline-none"
+              />
+              <span className="text-[12px] text-white/40 w-6">{f.unit}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Barcode */}
+      <input type="text" placeholder="Barcode (optioneel)" value={form.barcode} onChange={e => set('barcode', e.target.value)}
+        className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[14px] outline-none"
+        style={{ background: 'rgba(255,255,255,0.08)' }} />
+
+      {/* Gram + preview */}
+      <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest">Portie</p>
+      <div className="flex items-center justify-between py-3 px-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 25)))}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-[20px] text-white"
+          style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
+        <div className="flex items-baseline gap-1">
+          <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
+            className="text-[36px] font-bold text-white bg-transparent text-center outline-none w-24" />
+          <span className="text-[18px] text-white/50">g</span>
+        </div>
+        <button onClick={() => setGrams(g => String(Number(g) + 25))}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-[20px] text-white"
+          style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
+      </div>
+
+      {g > 0 && form.kcal && (
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: 'Kcal',   value: `${preview.kcal}`,        color: '#fb923c' },
+            { label: 'Eiwit',  value: `${preview.protein}g`,    color: '#2dd4bf' },
+            { label: 'Koolh.', value: `${preview.carbs}g`,      color: '#facc15' },
+            { label: 'Vet',    value: `${preview.fat}g`,        color: '#818cf8' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex flex-col items-center gap-1 py-3 rounded-[14px]"
+              style={{ background: 'rgba(255,255,255,0.06)' }}>
+              <span className="text-[15px] font-bold" style={{ color }}>{value}</span>
+              <span className="text-[11px] text-white/40">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Dagdeel */}
+      <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        {MEAL_ORDER.map((m, i) => (
+          <button key={m} onClick={() => setMeal(m)} className="w-full flex items-center gap-3 px-4 py-3"
+            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <span className="text-[16px] w-7 text-center">{MEAL_ICONS[m]}</span>
+            <span className="flex-1 text-[14px] text-white text-left">{MEAL_LABELS[m]}</span>
+            {meal === m && <span className="text-teal-400 text-[13px]">✓</span>}
+          </button>
+        ))}
+      </div>
+
+      <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}
+        className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
+        {saving ? 'Opslaan…' : `Toevoegen aan ${MEAL_LABELS[meal]}`}
+      </button>
+    </div>
+  )
+}
+
+// ─── Create meal view ────────────────────────────────────────────────────────
+
+function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, products, savingTemplate, onSave }: {
+  newMealName: string
+  setNewMealName: (v: string) => void
+  templateItems: TemplateFoodItem[]
+  setTemplateItems: React.Dispatch<React.SetStateAction<TemplateFoodItem[]>>
+  products: Product[]
+  savingTemplate: boolean
+  onSave: () => void
+}) {
+  const [showPicker, setShowPicker] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+  const [pickerProduct, setPickerProduct] = useState<Product | null>(null)
+  const [pickerGrams, setPickerGrams] = useState('100')
+
+  const filtered = useMemo(() => {
+    if (!pickerSearch.trim()) return products.slice(0, 40)
+    return products.filter(p => p.name.toLowerCase().includes(pickerSearch.toLowerCase())).slice(0, 40)
+  }, [pickerSearch, products])
+
+  function addToMeal() {
+    if (!pickerProduct) return
+    const g = Number(pickerGrams) || 100
+    setTemplateItems(prev => [...prev, {
+      food_name: pickerProduct.name,
+      brand: pickerProduct.brand,
+      amount_g: g,
+      kcal:    Math.round((Number(pickerProduct.kcal    ?? 0) * g) / 100),
+      protein: Math.round((Number(pickerProduct.protein ?? 0) * g) / 100 * 10) / 10,
+      carbs:   Math.round((Number(pickerProduct.carbs   ?? 0) * g) / 100 * 10) / 10,
+      fat:     Math.round((Number(pickerProduct.fat     ?? 0) * g) / 100 * 10) / 10,
+    }])
+    setPickerProduct(null)
+    setPickerGrams('100')
+    setPickerSearch('')
+    setShowPicker(false)
+  }
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Product picker overlay */}
+      {showPicker && (
+        <div className="absolute inset-0 flex flex-col z-10" style={{ background: 'rgb(10,12,14)' }}>
+          <div className="flex items-center justify-between px-5 pt-4 pb-3 shrink-0">
+            <button onClick={() => { setShowPicker(false); setPickerProduct(null); setPickerSearch('') }}
+              className="text-[16px] font-medium text-white/60">‹ Terug</button>
+            <span className="text-[16px] font-bold text-white">
+              {pickerProduct ? pickerProduct.name : 'Kies product'}
+            </span>
+            <div className="w-14" />
+          </div>
+
+          {pickerProduct ? (
+            /* Gram input */
+            <div className="flex flex-col flex-1 px-5 gap-6 pt-4">
+              <div className="flex items-center justify-between py-4 rounded-[16px] px-4"
+                style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <button onClick={() => setPickerGrams(g => String(Math.max(0, Number(g) - 25)))}
+                  className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
+                <div className="flex items-baseline gap-1">
+                  <input type="number" value={pickerGrams} onChange={e => setPickerGrams(e.target.value)}
+                    className="text-[48px] font-bold text-white bg-transparent text-center outline-none w-28" />
+                  <span className="text-[22px] text-white/50">g</span>
+                </div>
+                <button onClick={() => setPickerGrams(g => String(Number(g) + 25))}
+                  className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Kcal',  value: `${Math.round(Number(pickerProduct.kcal??0)*Number(pickerGrams)/100)}`,       color: '#fb923c' },
+                  { label: 'Eiwit', value: `${(Number(pickerProduct.protein??0)*Number(pickerGrams)/100).toFixed(1)}g`,  color: '#2dd4bf' },
+                  { label: 'Koolh',value: `${(Number(pickerProduct.carbs??0)*Number(pickerGrams)/100).toFixed(1)}g`,     color: '#facc15' },
+                  { label: 'Vet',   value: `${(Number(pickerProduct.fat??0)*Number(pickerGrams)/100).toFixed(1)}g`,      color: '#818cf8' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="flex flex-col items-center gap-1 py-3 rounded-[14px]"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <span className="text-[15px] font-bold" style={{ color }}>{value}</span>
+                    <span className="text-[11px] text-white/40">{label}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addToMeal}
+                className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px]">
+                Toevoegen aan maaltijd
+              </button>
+            </div>
+          ) : (
+            /* Product list */
+            <div className="flex flex-col flex-1 min-h-0 px-5 gap-3">
+              <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px] shrink-0"
+                style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <Search size={15} className="text-white/40 shrink-0" />
+                <input autoFocus type="text" placeholder="Zoek product…" value={pickerSearch}
+                  onChange={e => setPickerSearch(e.target.value)}
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[15px] outline-none" />
+              </div>
+              <div className="overflow-y-auto flex flex-col rounded-[14px] overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.06)' }}>
+                {filtered.map((p, i) => (
+                  <button key={p.id} onClick={() => { setPickerProduct(p); setPickerGrams('100') }}
+                    className="flex items-center justify-between px-4 py-3.5 text-left"
+                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                    <div>
+                      <p className="text-[15px] font-semibold text-white">{p.name}</p>
+                      {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                    </div>
+                    <span className="text-[13px] font-semibold text-orange-400 shrink-0 ml-3">
+                      {Math.round(Number(p.kcal ?? 0))} kcal
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main create meal view */}
+      <div className="flex flex-col flex-1 px-5 pb-8 gap-4 overflow-y-auto">
+        <input type="text" placeholder="Naam maaltijd…" value={newMealName}
+          onChange={e => setNewMealName(e.target.value)}
+          className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[16px] outline-none font-semibold shrink-0"
+          style={{ background: 'rgba(255,255,255,0.08)' }} />
+
+        {/* Added items */}
+        {templateItems.length > 0 && (
+          <div className="flex flex-col rounded-[14px] overflow-hidden shrink-0"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
+            {templateItems.map((item, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-3"
+                style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                <div>
+                  <p className="text-[14px] font-medium text-white">{item.food_name}</p>
+                  <p className="text-[12px] text-white/40">{item.amount_g}g · {item.kcal} kcal · {item.protein}g eiwit</p>
+                </div>
+                <button onClick={() => setTemplateItems(prev => prev.filter((_, j) => j !== i))}>
+                  <X size={14} className="text-white/30" />
+                </button>
+              </div>
+            ))}
+            <div className="px-4 py-2 border-t border-white/[0.05]">
+              <p className="text-[12px] text-white/40">
+                Totaal: {templateItems.reduce((s, f) => s + f.kcal, 0)} kcal · {templateItems.reduce((s, f) => s + f.protein, 0).toFixed(1)}g eiwit
+              </p>
+            </div>
+          </div>
+        )}
+
+        <button onClick={() => setShowPicker(true)}
+          className="flex items-center gap-3 w-full px-4 py-3.5 rounded-[14px] border border-white/10 shrink-0"
+          style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <Plus size={18} className="text-white/60" />
+          <span className="text-[15px] font-semibold text-white/60">Product toevoegen</span>
+        </button>
+
+        <button onClick={onSave}
+          disabled={savingTemplate || !newMealName.trim() || !templateItems.length}
+          className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30 shrink-0">
+          {savingTemplate ? 'Opslaan…' : 'Maaltijd opslaan'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Add food sheet ───────────────────────────────────────────────────────────
 
-type SheetView = 'options' | 'search' | 'detail' | 'scan' | 'meals' | 'create-meal'
+type SheetView = 'options' | 'search' | 'detail' | 'scan' | 'meals' | 'create-meal' | 'meal-confirm' | 'custom-food'
 
 function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClose }: {
   products: Product[]; preselectedMeal: string; userId: string; today: string
@@ -392,6 +708,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [templateSearch, setTemplateSearch] = useState('')
   const [templateGrams, setTemplateGrams] = useState<Record<string, string>>({})
   const [savingTemplate, setSavingTemplate] = useState(false)
+  const [confirmTemplate, setConfirmTemplate] = useState<MealTemplate | null>(null)
 
   const filtered = useMemo(() => {
     if (!search.trim()) return products.slice(0, 40)
@@ -407,8 +724,9 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
   function handleBack() {
     if (view === 'detail') { setSelected(null); setView('search') }
-    else if (view === 'search' || view === 'scan' || view === 'meals') setView('options')
+    else if (view === 'search' || view === 'scan' || view === 'meals' || view === 'custom-food') setView('options')
     else if (view === 'create-meal') { setTemplateItems([]); setNewMealName(''); setView('meals') }
+    else if (view === 'meal-confirm') { setConfirmTemplate(null); setView('meals') }
     else onClose()
   }
 
@@ -462,15 +780,15 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   }
 
   // ── Meal templates ──
-  const [loggingTemplate, setLoggingTemplate] = useState<string | null>(null)
+  const [loggingTemplate, setLoggingTemplate] = useState(false)
 
-  async function logTemplate(template: MealTemplate) {
-    if (!template.foods.length || loggingTemplate) return
-    setLoggingTemplate(template.id)
+  async function logTemplate() {
+    if (!confirmTemplate?.foods.length || loggingTemplate) return
+    setLoggingTemplate(true)
     try {
       const supabase = createClient()
       await supabase.from('food_log').insert(
-        template.foods.map(f => ({
+        confirmTemplate.foods.map(f => ({
           user_id: userId, date: today, meal_category: meal,
           food_name: f.food_name, amount_g: f.amount_g,
           kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
@@ -480,7 +798,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       globalMutate(`food-log-${today}`)
       onClose()
     } finally {
-      setLoggingTemplate(null)
+      setLoggingTemplate(false)
     }
   }
 
@@ -535,9 +853,11 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
   const sheetTitle = view === 'options' ? 'Add Food'
     : view === 'search' ? 'Search Food'
-    : view === 'scan' ? 'Scan Meal'
+    : view === 'scan' ? 'Scan Barcode'
     : view === 'meals' ? 'Meals'
+    : view === 'meal-confirm' ? confirmTemplate?.name ?? 'Maaltijd'
     : view === 'create-meal' ? 'New Meal'
+    : view === 'custom-food' ? 'Custom Food'
     : selected?.name ?? 'Detail'
 
   const filteredTemplate = useMemo(() => {
@@ -584,7 +904,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                 { Icon: Search,  iconBg: '#22d3ee', label: 'Search Food', sub: 'Find in nutrition database',       action: () => setView('search') },
                 { Icon: Utensils,iconBg: '#4ade80', label: 'Meals',       sub: 'Log a saved meal template',        action: () => setView('meals') },
                 { Icon: ScanLine,iconBg: '#fb923c', label: 'Scan Barcode',sub: 'Scan product barcode',             action: () => setShowBarcodeScanner(true) },
-                { Icon: Plus,    iconBg: '#a78bfa', label: 'Custom Food', sub: 'Enter nutrition details manually', action: () => {} },
+                { Icon: Plus,    iconBg: '#a78bfa', label: 'Custom Food', sub: 'Enter nutrition details manually', action: () => setView('custom-food') },
               ].map(({ Icon, iconBg, label, sub, action }, i) => (
                 <button key={label} onClick={action}
                   className="w-full flex items-center gap-4 px-4 py-4 text-left"
@@ -640,17 +960,14 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   const totalProtein = t.foods.reduce((s, f) => s + f.protein, 0)
                   return (
                     <div key={t.id} className="flex items-center gap-3 px-4 py-3.5 rounded-[14px]"
-                      style={{ background: 'rgba(255,255,255,0.06)', opacity: loggingTemplate === t.id ? 0.5 : 1 }}>
-                      <button className="flex-1 text-left" onClick={() => logTemplate(t)} disabled={!!loggingTemplate}>
+                      style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      <button className="flex-1 text-left" onClick={() => { setConfirmTemplate(t); setView('meal-confirm') }}>
                         <p className="text-[16px] font-semibold text-white">{t.name}</p>
                         <p className="text-[12px] text-white/40">
                           {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
                         </p>
-                        {loggingTemplate === t.id && (
-                          <p className="text-[12px] text-teal-400 mt-0.5">Wordt toegevoegd…</p>
-                        )}
                       </button>
-                      <button onClick={() => deleteTemplate(t.id)} disabled={!!loggingTemplate}>
+                      <button onClick={() => deleteTemplate(t.id)}>
                         <Trash2 size={15} className="text-white/20 hover:text-red-400" />
                       </button>
                     </div>
@@ -662,80 +979,71 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           </div>
         )}
 
-        {/* ── Create meal view ── */}
-        {view === 'create-meal' && (
-          <div className="flex flex-col min-h-0 px-5 pb-8 gap-4">
-            <input type="text" placeholder="Meal name…" value={newMealName}
-              onChange={e => setNewMealName(e.target.value)}
-              className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[16px] outline-none font-semibold"
-              style={{ background: 'rgba(255,255,255,0.08)' }} />
-
-            {/* Added items */}
-            {templateItems.length > 0 && (
-              <div className="flex flex-col gap-1 rounded-[14px] overflow-hidden"
-                style={{ background: 'rgba(255,255,255,0.06)' }}>
-                {templateItems.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-3"
-                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                    <div>
-                      <p className="text-[14px] font-medium text-white">{item.food_name}</p>
-                      <p className="text-[12px] text-white/40">{item.amount_g}g · {item.kcal} kcal</p>
-                    </div>
-                    <button onClick={() => setTemplateItems(prev => prev.filter((_, j) => j !== i))}>
-                      <X size={14} className="text-white/30" />
-                    </button>
+        {/* ── Meal confirm view ── */}
+        {view === 'meal-confirm' && confirmTemplate && (
+          <div className="flex flex-col flex-1 px-5 pb-8 gap-5 overflow-y-auto">
+            {/* Meal summary */}
+            <div className="rounded-[18px] px-5 py-5 flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.06)' }}>
+              <p className="text-[22px] font-bold text-white">{confirmTemplate.name}</p>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Kcal',    value: `${Math.round(confirmTemplate.foods.reduce((s,f)=>s+f.kcal,0))}`,       color: '#fb923c' },
+                  { label: 'Eiwit',   value: `${Math.round(confirmTemplate.foods.reduce((s,f)=>s+f.protein,0))}g`,   color: '#2dd4bf' },
+                  { label: 'Koolh.',  value: `${Math.round(confirmTemplate.foods.reduce((s,f)=>s+f.carbs,0))}g`,     color: '#facc15' },
+                  { label: 'Vet',     value: `${Math.round(confirmTemplate.foods.reduce((s,f)=>s+f.fat,0))}g`,       color: '#818cf8' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="flex flex-col items-center gap-1 py-3 rounded-[14px]"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <span className="text-[17px] font-bold" style={{ color }}>{value}</span>
+                    <span className="text-[11px] text-white/40">{label}</span>
                   </div>
                 ))}
-                <div className="px-4 py-2 border-t border-white/[0.05]">
-                  <p className="text-[12px] text-white/40">
-                    Total: {templateItems.reduce((s, f) => s + f.kcal, 0)} kcal ·{' '}
-                    {templateItems.reduce((s, f) => s + f.protein, 0).toFixed(1)}g eiwit
-                  </p>
-                </div>
               </div>
-            )}
-
-            {/* Product search */}
-            <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px]"
-              style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <Search size={15} className="text-white/40 shrink-0" />
-              <input type="text" placeholder="Voeg product toe…" value={templateSearch}
-                onChange={e => setTemplateSearch(e.target.value)}
-                className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[15px] outline-none" />
             </div>
 
-            <div className="overflow-y-auto flex flex-col rounded-[14px] overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.06)', maxHeight: '40vh' }}>
-              {filteredTemplate.map((p, i) => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3"
-                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                  <div className="flex-1">
-                    <p className="text-[14px] font-semibold text-white">{p.name}</p>
-                    <p className="text-[12px] text-white/40">{Math.round(Number(p.kcal ?? 0))} kcal/100g</p>
-                  </div>
-                  <input
-                    type="number"
-                    value={templateGrams[p.id] ?? '100'}
-                    onChange={e => setTemplateGrams(prev => ({ ...prev, [p.id]: e.target.value }))}
-                    className="w-14 h-8 text-center rounded-[8px] text-white text-[13px] outline-none"
-                    style={{ background: 'rgba(255,255,255,0.08)' }}
-                  />
-                  <span className="text-[12px] text-white/40 w-4">g</span>
-                  <button onClick={() => addProductToTemplate(p)}
-                    className="w-7 h-7 rounded-full flex items-center justify-center"
-                    style={{ background: 'rgba(45,212,191,0.15)' }}>
-                    <Plus size={14} className="text-teal-400" />
-                  </button>
-                </div>
+            {/* Dagdeel picker */}
+            <div className="rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+              {MEAL_ORDER.map((m, i) => (
+                <button key={m} onClick={() => setMeal(m)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5"
+                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                  <span className="text-[18px] w-7 text-center">{MEAL_ICONS[m]}</span>
+                  <span className="flex-1 text-[15px] font-medium text-white text-left">{MEAL_LABELS[m] ?? m}</span>
+                  {meal === m && <span className="text-teal-400 text-[15px]">✓</span>}
+                </button>
               ))}
             </div>
 
-            <button onClick={saveTemplate}
-              disabled={savingTemplate || !newMealName.trim() || !templateItems.length}
-              className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
-              {savingTemplate ? 'Saving…' : 'Save Meal Template'}
+            <button onClick={logTemplate} disabled={loggingTemplate}
+              className="h-[54px] rounded-[18px] bg-white text-black font-semibold text-[17px] disabled:opacity-40 shrink-0">
+              {loggingTemplate ? 'Toevoegen…' : `Toevoegen aan ${MEAL_LABELS[meal] ?? meal}`}
             </button>
           </div>
+        )}
+
+        {/* ── Create meal view ── */}
+        {view === 'create-meal' && (
+          <CreateMealView
+            newMealName={newMealName}
+            setNewMealName={setNewMealName}
+            templateItems={templateItems}
+            setTemplateItems={setTemplateItems}
+            products={products}
+            savingTemplate={savingTemplate}
+            onSave={saveTemplate}
+          />
+        )}
+
+        {/* ── Custom food view ── */}
+        {view === 'custom-food' && (
+          <CustomFoodView
+            userId={userId}
+            today={today}
+            meal={meal}
+            setMeal={setMeal}
+            onAdded={onAdded}
+            onClose={onClose}
+          />
         )}
 
         {/* ── Search view ── */}

@@ -17,6 +17,7 @@ export function BottomNav() {
 
   return (
     <div
+      data-bottom-nav
       className="fixed bottom-0 inset-x-0 z-[60] flex justify-center"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
     >
