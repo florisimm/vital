@@ -219,69 +219,31 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-// 5 waypoints on a pentagon with ±18° angle jitter.
-// More waypoints = shorter segments = OSRM has less room to wander between them.
-function newAngles(): number[] {
-  return [0, 72, 144, 216, 288].map(a => a + (Math.random() - 0.5) * 36)
-}
-
-// Per-waypoint distance multipliers with ±20% variation
-function newJitter(): number[] {
-  return Array.from({ length: 5 }, () => 1 + (Math.random() - 0.5) * 0.4)
-}
-
-
-async function osrmRequest(
-  lat: number, lon: number, radiusKm: number,
-  angles: number[], jitter: number[], sport: SportType
-) {
-  const latDeg = 1 / 111
-  const lonDeg = 1 / (111 * Math.cos((lat * Math.PI) / 180))
-  const profile = sport === 'cycling' ? 'cycling' : 'walking'
-
-  const waypoints: [number, number][] = angles.map((deg, i) => {
-    const rad = (deg * Math.PI) / 180
-    const r = radiusKm * jitter[i]
-    return [lat + Math.cos(rad) * r * latDeg, lon + Math.sin(rad) * r * lonDeg]
-  })
-
-  // Use OSRM trip API (TSP solver) — it finds the optimal visiting order so the
-  // route never has to backtrack or double back on the same road to reach the next
-  // waypoint. source=first keeps the start fixed; roundtrip closes the loop.
-  const all: [number, number][] = [[lat, lon], ...waypoints]
-  const coordStr = all.map(([lt, ln]) => `${ln},${lt}`).join(';')
-
+async function orsRoundTrip(
+  lat: number, lon: number, targetKm: number, sport: SportType, seed: number
+): Promise<{ coords: [number, number][]; actualKm: number }> {
+  const profile = sport === 'cycling' ? 'cycling-regular' : 'foot-walking'
   const res = await fetch(
-    `https://router.project-osrm.org/trip/v1/${profile}/${coordStr}?overview=full&geometries=geojson&roundtrip=true&source=first`
+    `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': process.env.NEXT_PUBLIC_ORS_API_KEY ?? '',
+      },
+      body: JSON.stringify({
+        coordinates: [[lon, lat]],
+        options: { round_trip: { length: Math.round(targetKm * 1000), points: 5, seed } },
+      }),
+    }
   )
   const json = await res.json()
-  const trip = json.trips?.[0]
-  if (!trip) throw new Error('No route')
+  const feature = json.features?.[0]
+  if (!feature) throw new Error('No route')
   return {
-    coords: (trip.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
-    actualKm: trip.distance / 1000,
+    coords: (feature.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
+    actualKm: Math.round(feature.properties.summary.distance / 100) / 10,
   }
-}
-
-// Up to 5 iterations, scaling radius by targetKm/actualKm each time.
-// Keeps the best result (smallest error) across all attempts.
-async function fetchRoute(
-  lat: number, lon: number, targetKm: number,
-  angles: number[], jitter: number[], sport: SportType
-): Promise<{ coords: [number, number][]; actualKm: number }> {
-  let radius = targetKm / (2 * Math.PI)
-  let best = await osrmRequest(lat, lon, radius, angles, jitter, sport)
-  let bestError = Math.abs(best.actualKm - targetKm) / targetKm
-
-  for (let i = 0; i < 4; i++) {
-    if (bestError <= 0.10) break
-    radius = radius * (targetKm / best.actualKm)
-    const result = await osrmRequest(lat, lon, radius, angles, jitter, sport)
-    const error = Math.abs(result.actualKm - targetKm) / targetKm
-    if (error < bestError) { best = result; bestError = error }
-  }
-
-  return { coords: best.coords, actualKm: Math.round(best.actualKm * 10) / 10 }
 }
 
 function buildGpx(coords: [number, number][], name: string): string {
@@ -312,13 +274,12 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const anglesRef = useRef<number[]>(newAngles())
-  const jitterRef = useRef<number[]>(newJitter())
+  const seedRef = useRef(Math.floor(Math.random() * 10000))
 
   async function generateFromCoords(lat: number, lon: number) {
     setLoading(true); setError(null)
     try {
-      const result = await fetchRoute(lat, lon, targetKm, anglesRef.current, jitterRef.current, sport)
+      const result = await orsRoundTrip(lat, lon, targetKm, sport, seedRef.current)
       setRouteCoords(result.coords); setActualKm(result.actualKm); setStartCoord([lat, lon])
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
@@ -344,8 +305,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   }
 
   function retry() {
-    anglesRef.current = newAngles()
-    jitterRef.current = newJitter()
+    seedRef.current = Math.floor(Math.random() * 10000)
     if (locMode === 'gps') triggerGps()
     else if (startCoord) generateFromCoords(startCoord[0], startCoord[1])
   }
