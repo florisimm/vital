@@ -219,14 +219,23 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-async function osrmRequest(lat: number, lon: number, radiusKm: number, rotation: number) {
+async function osrmRequest(lat: number, lon: number, sideKm: number, rotation: number) {
   const latDeg = 1 / 111
   const lonDeg = 1 / (111 * Math.cos((lat * Math.PI) / 180))
-  const angles = [0, 90, 180, 270].map(a => ((a + rotation) * Math.PI) / 180)
-  const waypoints: [number, number][] = angles.map(a => [
-    lat + Math.cos(a) * radiusKm * latDeg,
-    lon + Math.sin(a) * radiusKm * lonDeg,
-  ])
+  const rot = (rotation * Math.PI) / 180
+  const cosR = Math.cos(rot)
+  const sinR = Math.sin(rot)
+
+  // Square loop: start is at one corner, route goes around the outside.
+  // Each turn is 90°, no U-turns. Perimeter ≈ 4 × sideKm.
+  // Raw offsets (northKm, eastKm) for 3 intermediate corners:
+  const raw: [number, number][] = [[sideKm, 0], [sideKm, sideKm], [0, sideKm]]
+  const waypoints: [number, number][] = raw.map(([n, e]) => {
+    const rn = n * cosR - e * sinR
+    const re = n * sinR + e * cosR
+    return [lat + rn * latDeg, lon + re * lonDeg]
+  })
+
   const all: [number, number][] = [[lat, lon], ...waypoints, [lat, lon]]
   const coordStr = all.map(([lt, ln]) => `${ln},${lt}`).join(';')
   const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`)
@@ -238,9 +247,9 @@ async function osrmRequest(lat: number, lon: number, radiusKm: number, rotation:
   }
 }
 
-// Iteratively adjusts the radius so the routed distance converges to targetKm (±15%)
+// Iteratively adjusts the side length so the routed distance converges to targetKm (±15%)
 async function fetchRoute(lat: number, lon: number, targetKm: number, sport: SportType, rotation: number): Promise<{ coords: [number, number][]; actualKm: number }> {
-  let radius = targetKm / (2 * Math.PI)
+  let radius = targetKm / 4  // square side; perimeter ≈ 4×side
   let result = await osrmRequest(lat, lon, radius, rotation)
 
   for (let i = 0; i < 3; i++) {
