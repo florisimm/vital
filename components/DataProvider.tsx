@@ -6,12 +6,20 @@ import { createClient } from '@/lib/supabase'
 
 // Prefetches all app data into the SWR cache on first render,
 // so every tab has data ready before the user clicks it.
+// Also auto-syncs Google Calendar in the background on every app open.
 export function DataProvider() {
   useEffect(() => {
     async function prefetch() {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, } = await supabase.auth.getUser()
       if (!user) return
+
+      // Kick off calendar sync in the background — don't await, don't block UI
+      const { data: { session } } = await supabase.auth.getSession()
+      fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-calendar-sync`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) } }
+      ).then(() => mutate('training')).catch(() => {/* silent */})
 
       const today = new Date().toISOString().split('T')[0]
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
