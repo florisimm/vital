@@ -251,22 +251,17 @@ function buildGpx(coords: [number, number][], name: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Vital">\n  <trk><name>${name}</name><trkseg>\n${pts}\n  </trkseg></trk>\n</gpx>`
 }
 
-function buildGoogleMapsUrl(start: [number, number], coords: [number, number][], sport: SportType): string {
+function buildGoogleMapsUrl(start: [number, number], sport: SportType): string {
   const [lat, lon] = start
   const mode = sport === 'cycling' ? 'bicycling' : 'walking'
-  const step = Math.max(1, Math.floor(coords.length / 8))
-  const wps = coords
-    .filter((_, i) => i % step === 0 && i > 0 && i < coords.length - 1)
-    .slice(0, 8)
-    .map(([lt, ln]) => `${lt.toFixed(5)},${ln.toFixed(5)}`)
-    .join('|')
-  return `https://www.google.com/maps/dir/?api=1&origin=${lat},${lon}&destination=${lat},${lon}&waypoints=${wps}&travelmode=${mode}`
+  // Sample ~5 key waypoints spread evenly through the route to guide Google Maps
+  return `https://www.google.com/maps/dir/?api=1&origin=${lat},${lon}&destination=${lat},${lon}&travelmode=${mode}`
 }
 
 // ─── Route map card ───────────────────────────────────────────────────────────
 
 function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string; sport: SportType }) {
-  const targetKm = advice.targetKm
+  const [distanceInput, setDistanceInput] = useState(String(advice.targetKm))
   const [locMode, setLocMode] = useState<'gps' | 'manual'>('gps')
   const [manualQuery, setManualQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
@@ -276,10 +271,12 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [error, setError] = useState<string | null>(null)
   const seedRef = useRef(Math.floor(Math.random() * 10000))
 
+  function parsedKm() { return Math.max(1, parseFloat(distanceInput) || advice.targetKm) }
+
   async function generateFromCoords(lat: number, lon: number) {
     setLoading(true); setError(null)
     try {
-      const result = await orsRoundTrip(lat, lon, targetKm, sport, seedRef.current)
+      const result = await orsRoundTrip(lat, lon, parsedKm(), sport, seedRef.current)
       setRouteCoords(result.coords); setActualKm(result.actualKm); setStartCoord([lat, lon])
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
@@ -311,8 +308,8 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   }
 
   function openGoogleMaps() {
-    if (!startCoord || !routeCoords) return
-    window.open(buildGoogleMapsUrl(startCoord, routeCoords, sport), '_blank')
+    if (!startCoord) return
+    window.open(buildGoogleMapsUrl(startCoord, sport), '_blank')
   }
 
   function downloadGpx() {
@@ -356,6 +353,20 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
             <button onClick={geocodeAndGenerate} className="h-[40px] px-4 rounded-[12px] bg-white text-black text-[14px] font-semibold">Zoek</button>
           </div>
         )}
+        {/* Custom distance */}
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] text-white/50 shrink-0">Afstand</span>
+          <input
+            type="number"
+            value={distanceInput}
+            onChange={e => setDistanceInput(e.target.value)}
+            min={1} max={300} step={0.5}
+            className="w-[64px] h-[32px] px-2 rounded-[10px] text-white text-[15px] font-semibold text-center outline-none border border-white/[0.09]"
+            style={{ background: 'rgba(255,255,255,0.08)' }}
+          />
+          <span className="text-[13px] text-white/50">km</span>
+          <span className="text-[12px] text-white/25 ml-1">(aanbevolen: {advice.targetKm} km)</span>
+        </div>
       </div>
 
       {/* Map */}
