@@ -5,6 +5,7 @@ import { Sparkles, Heart, Moon, CloudSun } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card, SectionHeader, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
+import { trainingFetcher } from '@/app/training/fetcher'
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
 
@@ -14,23 +15,14 @@ async function fetchTodayData() {
   if (!user) throw new Error('Not authenticated')
   const today = new Date().toISOString().split('T')[0]
 
-  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }, { data: calendarEvents }] = await Promise.all([
+  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }] = await Promise.all([
     supabase.from('weather_cache').select('*').eq('id', 'current').single(),
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('food_log').select('kcal,protein').eq('user_id', user.id).eq('date', today),
     supabase.from('user_settings').select('macro_kcal,macro_protein').eq('user_id', user.id).maybeSingle(),
-    supabase.from('calendar_events').select('title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }).limit(20),
   ])
 
-  const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit']
-  const now = new Date()
-  const nextWorkout = (calendarEvents ?? []).find(e => {
-    const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
-    if (t < now) return false
-    return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
-  }) ?? null
-
-  return { weather, gezondheid, foodLog: foodLog ?? [], settings, nextWorkout }
+  return { weather, gezondheid, foodLog: foodLog ?? [], settings }
 }
 
 // ─── Date string ──────────────────────────────────────────────────────────────
@@ -41,10 +33,9 @@ function formatSubtitle() {
 
 // ─── Hero action card ─────────────────────────────────────────────────────────
 
-const ENDURANCE_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
-
-function HeroActionCard({ nextWorkout, proteinLeft }: {
+function HeroActionCard({ nextWorkout, showTrainingLink, proteinLeft }: {
   nextWorkout: { title: string; start_datetime: string | null } | null
+  showTrainingLink: boolean
   proteinLeft: number
 }) {
   const workoutLabel = nextWorkout
@@ -54,9 +45,6 @@ function HeroActionCard({ nextWorkout, proteinLeft }: {
         return time ? `${nextWorkout.title} at ${time}` : nextWorkout.title
       })()
     : 'No workout planned today'
-
-  const showTrainingLink = nextWorkout !== null &&
-    ENDURANCE_KEYWORDS.some(k => nextWorkout.title.toLowerCase().includes(k))
 
   const actions = [
     workoutLabel,
@@ -147,11 +135,23 @@ function WeatherImpactCard({ weather }: { weather: any }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Strava-trackable sports (cycling + running)
+const STRAVA_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
+
 export default function TodayPage() {
   const { data } = useSWR('today', fetchTodayData, {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
   })
+  const { data: trainingData } = useSWR('training', trainingFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  })
+
+  // First upcoming sport event from Training page (same source & filtering)
+  const nextWorkout = trainingData?.calendarEvents?.[0] ?? null
+  const isStravaType = nextWorkout !== null &&
+    STRAVA_KEYWORDS.some(k => nextWorkout.title.toLowerCase().includes(k))
 
   const totalProtein = (data?.foodLog ?? []).reduce((s, f) => s + Number(f.protein ?? 0), 0)
   const targetProtein = Number(data?.settings?.macro_protein ?? 180)
@@ -161,7 +161,7 @@ export default function TodayPage() {
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
 
       {/* Hero */}
-      <HeroActionCard nextWorkout={data?.nextWorkout ?? null} proteinLeft={proteinLeft} />
+      <HeroActionCard nextWorkout={nextWorkout} showTrainingLink={isStravaType} proteinLeft={proteinLeft} />
 
       {/* Current state */}
       <SectionHeader title="Current state" detail="AI summary" />
