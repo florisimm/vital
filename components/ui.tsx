@@ -160,14 +160,36 @@ export function CategoryStrip({ items }: { items: string[] }) {
 export function MinimalWorkoutList({
   title,
   workouts,
+  onRefresh,
+  refreshing,
 }: {
   title: string
   workouts: string[]
+  onRefresh?: () => void
+  refreshing?: boolean
 }) {
   return (
     <Card>
       <div className="flex flex-col gap-3.5">
-        <SectionHeader title={title} />
+        <div className="flex items-center justify-between">
+          <SectionHeader title={title} />
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="w-7 h-7 rounded-full flex items-center justify-center active:opacity-60 shrink-0"
+              style={{ background: 'rgba(255,255,255,0.08)' }}
+              aria-label="Sync calendar"
+            >
+              <svg
+                width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                className={refreshing ? 'animate-spin' : ''}
+              >
+                <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+              </svg>
+            </button>
+          )}
+        </div>
         {workouts.map((w, i) => (
           <span key={i} className="font-semibold text-white text-[17px] py-1">
             {w}
