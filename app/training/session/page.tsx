@@ -313,13 +313,15 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const seedRef = useRef(Math.floor(Math.random() * 10000))
+  const kmRef = useRef(advice.targetKm)
+  kmRef.current = Math.max(1, parseFloat(distanceInput) || advice.targetKm)
 
-  function parsedKm() { return Math.max(1, parseFloat(distanceInput) || advice.targetKm) }
+  function parsedKm() { return kmRef.current }
 
   async function generateLoop(lat: number, lon: number) {
     setLoading(true); setError(null); setStartCoord([lat, lon])
     try {
-      const result = await orsRoundTrip(lat, lon, parsedKm(), sport, seedRef.current, !heuvels, groteWeg, mtb)
+      const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvels, groteWeg, mtb)
       setRouteCoords(result.coords); setActualKm(result.actualKm)
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
