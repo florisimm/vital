@@ -139,6 +139,7 @@ async function fetchProducts() {
 export function FoodClient() {
   const todayStr = new Date().toISOString().split('T')[0]
   const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null)
   const touchStartX = useRef<number | null>(null)
 
   const { data, mutate, error, isLoading } = useSWR(
@@ -165,22 +166,18 @@ export function FoodClient() {
     }
   }, [showAddSheet])
 
-  function goToPrevDay() {
-    setSelectedDate(d => {
-      const prev = new Date(d)
-      prev.setDate(prev.getDate() - 1)
-      return prev.toISOString().split('T')[0]
-    })
-  }
-
-  function goToNextDay() {
-    setSelectedDate(d => {
-      const next = new Date(d)
-      next.setDate(next.getDate() + 1)
-      const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-      if (next.toISOString().split('T')[0] > tomorrow) return d
-      return next.toISOString().split('T')[0]
-    })
+  function navigate(dir: 'left' | 'right') {
+    setSlideDir(dir)
+    setTimeout(() => {
+      setSelectedDate(d => {
+        const date = new Date(d)
+        date.setDate(date.getDate() + (dir === 'left' ? 1 : -1))
+        const result = date.toISOString().split('T')[0]
+        const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+        return result > tomorrow ? d : result
+      })
+      setSlideDir(null)
+    }, 180)
   }
 
   function handleTouchStart(e: React.TouchEvent) {
@@ -190,7 +187,7 @@ export function FoodClient() {
   function handleTouchEnd(e: React.TouchEvent) {
     if (touchStartX.current === null) return
     const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) diff > 0 ? goToNextDay() : goToPrevDay()
+    if (Math.abs(diff) > 50) navigate(diff > 0 ? 'left' : 'right')
     touchStartX.current = null
   }
 
@@ -257,15 +254,26 @@ export function FoodClient() {
     <div className="flex flex-col gap-[22px]" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* Day navigation */}
       <div className="flex items-center justify-between">
-        <button onClick={goToPrevDay} className="w-9 h-9 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <button onClick={() => navigate('right')} className="w-9 h-9 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <ChevronLeft size={18} className="text-white/70" />
         </button>
         <span className="text-[17px] font-semibold text-white">{formatDayLabel(selectedDate)}</span>
-        <button onClick={goToNextDay} disabled={isToday} className="w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-30" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <button onClick={() => navigate('left')} disabled={isToday} className="w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-30" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <ChevronRight size={18} className="text-white/70" />
         </button>
       </div>
 
+      <div
+        key={selectedDate}
+        style={{
+          animation: slideDir === 'left'
+            ? 'slideOutLeft 180ms ease-in forwards'
+            : slideDir === 'right'
+            ? 'slideOutRight 180ms ease-in forwards'
+            : 'slideIn 220ms ease-out',
+        }}
+        className="flex flex-col gap-[22px]"
+      >
       <Card>
         <div className="flex flex-col gap-[18px]">
           <SectionHeader title="Macros" />
@@ -300,6 +308,22 @@ export function FoodClient() {
           />
         ))}
       </div>
+      </div>{/* end slide wrapper */}
+
+      <style jsx global>{`
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(var(--slide-from, 40px)); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideOutLeft {
+          from { opacity: 1; transform: translateX(0); }
+          to   { opacity: 0; transform: translateX(-40px); }
+        }
+        @keyframes slideOutRight {
+          from { opacity: 1; transform: translateX(0); }
+          to   { opacity: 0; transform: translateX(40px); }
+        }
+      `}</style>
 
       <button
         onClick={() => { setPreselectedMeal('ontbijt'); setShowAddSheet(true) }}
@@ -962,43 +986,20 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                 {templates.map(t => {
                   const totalKcal = t.foods.reduce((s, f) => s + f.kcal, 0)
                   const totalProtein = t.foods.reduce((s, f) => s + f.protein, 0)
-                  const menuOpen = menuOpenId === t.id
                   return (
-                    <div key={t.id} className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <div className="flex items-center gap-3 px-4 py-3.5">
-                        <button className="flex-1 text-left" onClick={() => { setMenuOpenId(null); setConfirmTemplate(t); setView('meal-confirm') }}>
-                          <p className="text-[16px] font-semibold text-white">{t.name}</p>
-                          <p className="text-[12px] text-white/40">
-                            {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
-                          </p>
-                        </button>
-                        <button onClick={() => setMenuOpenId(menuOpen ? null : t.id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-full"
-                          style={{ background: menuOpen ? 'rgba(255,255,255,0.12)' : 'transparent' }}>
-                          <span className="text-white/50 text-[18px] leading-none font-bold">···</span>
-                        </button>
-                      </div>
-
-                      {menuOpen && (
-                        <div className="border-t border-white/[0.06]">
-                          <button
-                            onClick={() => {
-                              setMenuOpenId(null)
-                              setConfirmTemplate(t)
-                              setNewMealName(t.name)
-                              setTemplateItems(t.foods)
-                              setView('create-meal')
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-3 text-left border-b border-white/[0.05]">
-                            <span className="text-[15px] text-white">Bewerken</span>
-                          </button>
-                          <button
-                            onClick={() => { setMenuOpenId(null); deleteTemplate(t.id) }}
-                            className="w-full flex items-center gap-3 px-4 py-3 text-left">
-                            <span className="text-[15px] text-red-400">Verwijderen</span>
-                          </button>
-                        </div>
-                      )}
+                    <div key={t.id} className="flex items-center gap-3 px-4 py-3.5 rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      <button className="flex-1 text-left" onClick={() => { setMenuOpenId(null); setConfirmTemplate(t); setView('meal-confirm') }}>
+                        <p className="text-[16px] font-semibold text-white">{t.name}</p>
+                        <p className="text-[12px] text-white/40">
+                          {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
+                        </p>
+                      </button>
+                      <button onClick={() => setMenuOpenId(menuOpenId === t.id ? null : t.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full"
+                        style={{ background: 'transparent' }}>
+                        <span className="text-white/40 text-[20px] leading-none tracking-widest">···</span>
+                      </button>
                     </div>
                   )
                 })}
@@ -1007,6 +1008,41 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
           </div>
         )}
+
+        {/* ── Meal action sheet (3-dot menu) ── */}
+        {menuOpenId && (() => {
+          const t = templates.find(t => t.id === menuOpenId)
+          if (!t) return null
+          return (
+            <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setMenuOpenId(null)}>
+              <div className="absolute inset-0 bg-black/40" />
+              <div className="relative flex flex-col gap-2 px-4 pb-8" onClick={e => e.stopPropagation()}
+                style={{ animation: 'slideIn 200ms ease-out' }}>
+                <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(30,30,34,0.98)', backdropFilter: 'blur(20px)' }}>
+                  <div className="px-4 py-4 border-b border-white/[0.07]">
+                    <p className="text-[15px] font-semibold text-white text-center">{t.name}</p>
+                    <p className="text-[12px] text-white/40 text-center mt-0.5">{t.foods.length} items · {Math.round(t.foods.reduce((s,f)=>s+f.kcal,0))} kcal</p>
+                  </div>
+                  <button
+                    onClick={() => { setMenuOpenId(null); setConfirmTemplate(t); setNewMealName(t.name); setTemplateItems(t.foods); setView('create-meal') }}
+                    className="w-full px-4 py-4 text-center text-[17px] text-white border-b border-white/[0.07]">
+                    Bewerken
+                  </button>
+                  <button
+                    onClick={() => { setMenuOpenId(null); deleteTemplate(t.id) }}
+                    className="w-full px-4 py-4 text-center text-[17px] text-red-400">
+                    Verwijderen
+                  </button>
+                </div>
+                <button onClick={() => setMenuOpenId(null)}
+                  className="w-full py-4 rounded-[18px] text-[17px] font-semibold text-white"
+                  style={{ background: 'rgba(30,30,34,0.98)' }}>
+                  Annuleren
+                </button>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Meal confirm view ── */}
         {view === 'meal-confirm' && confirmTemplate && (
