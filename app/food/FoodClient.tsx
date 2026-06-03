@@ -443,16 +443,17 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
       <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest">Per 100g</p>
       <div className="flex flex-col rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
         {fields.map((f, i) => (
-          <div key={f.key} className="flex items-center justify-between px-4 py-3"
+          <div key={f.key} className="flex items-center justify-between px-4 py-3.5"
             style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-            <span className="text-[14px] font-medium" style={{ color: f.color }}>{f.label}</span>
-            <div className="flex items-center gap-2">
+            <span className="text-[15px] font-medium text-white">{f.label}</span>
+            <div className="flex items-center gap-1">
               <input type="number" inputMode="decimal" placeholder="0"
                 value={form[f.key as keyof typeof form]}
                 onChange={e => set(f.key, e.target.value)}
-                className="w-16 text-right bg-transparent text-white text-[15px] font-semibold outline-none"
+                className="w-16 h-8 text-right rounded-[8px] text-white text-[15px] font-semibold outline-none px-2"
+                style={{ background: 'rgba(255,255,255,0.08)' }}
               />
-              <span className="text-[12px] text-white/40 w-6">{f.unit}</span>
+              <span className="text-[13px] text-white/40 w-7">{f.unit}</span>
             </div>
           </div>
         ))}
@@ -781,6 +782,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
   // ── Meal templates ──
   const [loggingTemplate, setLoggingTemplate] = useState(false)
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
   async function logTemplate() {
     if (!confirmTemplate?.foods.length || loggingTemplate) return
@@ -806,13 +808,15 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     if (!newMealName.trim() || !templateItems.length) return
     setSavingTemplate(true)
     const supabase = createClient()
-    await supabase.from('meal_templates').insert({
-      user_id: userId, name: newMealName.trim(),
-      foods: templateItems,
-    })
+    if (confirmTemplate) {
+      // Update existing
+      await supabase.from('meal_templates').update({ name: newMealName.trim(), foods: templateItems }).eq('id', confirmTemplate.id)
+    } else {
+      await supabase.from('meal_templates').insert({ user_id: userId, name: newMealName.trim(), foods: templateItems })
+    }
     setSavingTemplate(false)
     mutateTemplates()
-    setTemplateItems([]); setNewMealName('')
+    setTemplateItems([]); setNewMealName(''); setConfirmTemplate(null)
     setView('meals')
   }
 
@@ -958,18 +962,43 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                 {templates.map(t => {
                   const totalKcal = t.foods.reduce((s, f) => s + f.kcal, 0)
                   const totalProtein = t.foods.reduce((s, f) => s + f.protein, 0)
+                  const menuOpen = menuOpenId === t.id
                   return (
-                    <div key={t.id} className="flex items-center gap-3 px-4 py-3.5 rounded-[14px]"
-                      style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <button className="flex-1 text-left" onClick={() => { setConfirmTemplate(t); setView('meal-confirm') }}>
-                        <p className="text-[16px] font-semibold text-white">{t.name}</p>
-                        <p className="text-[12px] text-white/40">
-                          {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
-                        </p>
-                      </button>
-                      <button onClick={() => deleteTemplate(t.id)}>
-                        <Trash2 size={15} className="text-white/20 hover:text-red-400" />
-                      </button>
+                    <div key={t.id} className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      <div className="flex items-center gap-3 px-4 py-3.5">
+                        <button className="flex-1 text-left" onClick={() => { setMenuOpenId(null); setConfirmTemplate(t); setView('meal-confirm') }}>
+                          <p className="text-[16px] font-semibold text-white">{t.name}</p>
+                          <p className="text-[12px] text-white/40">
+                            {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
+                          </p>
+                        </button>
+                        <button onClick={() => setMenuOpenId(menuOpen ? null : t.id)}
+                          className="w-8 h-8 flex items-center justify-center rounded-full"
+                          style={{ background: menuOpen ? 'rgba(255,255,255,0.12)' : 'transparent' }}>
+                          <span className="text-white/50 text-[18px] leading-none font-bold">···</span>
+                        </button>
+                      </div>
+
+                      {menuOpen && (
+                        <div className="border-t border-white/[0.06]">
+                          <button
+                            onClick={() => {
+                              setMenuOpenId(null)
+                              setConfirmTemplate(t)
+                              setNewMealName(t.name)
+                              setTemplateItems(t.foods)
+                              setView('create-meal')
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left border-b border-white/[0.05]">
+                            <span className="text-[15px] text-white">Bewerken</span>
+                          </button>
+                          <button
+                            onClick={() => { setMenuOpenId(null); deleteTemplate(t.id) }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left">
+                            <span className="text-[15px] text-red-400">Verwijderen</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
