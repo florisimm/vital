@@ -98,7 +98,7 @@ export function ZoneBar({ label, percent, color }: { label: string; percent: num
 
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
-export function OverviewSection({ activities, hevy, calendarEvents }: { activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[] }) {
+export function OverviewSection({ activities, hevy, calendarEvents, onRefresh, refreshing }: { activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]; onRefresh?: () => void; refreshing?: boolean }) {
   const weekStart = startOfWeek()
   const weekActivities = activities.filter(a => a.start_date >= weekStart)
   const weekKm = weekActivities.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
@@ -126,7 +126,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: { activiti
       <MetricRow title="Training load"     value="–" detail="–" />
       <MetricRow title="Performance trend" value="–" detail="–" />
       <MetricRow title="Personal record"   value="–" detail="–" />
-      <MinimalWorkoutList title="Upcoming workouts" workouts={workouts} />
+      <MinimalWorkoutList title="Upcoming workouts" workouts={workouts} onRefresh={onRefresh} refreshing={refreshing} />
     </div>
   )
 }

@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import useSWR, { mutate } from 'swr'
-import { RefreshCw } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { OverviewSection } from './sections'
 import { trainingFetcher } from './fetcher'
@@ -38,36 +37,26 @@ export default function TrainingPage() {
 
   return (
     <PremiumScreen title="Training" subtitle="Performance signal" contentGap={18}>
-      {/* Category strip + refresh */}
-      <div className="flex items-center gap-2.5">
-        <div className="flex gap-2.5 overflow-x-auto pb-0.5 flex-1" style={{ scrollbarWidth: 'none' }}>
-          {CATEGORIES.map(({ label, href }) =>
-            href ? (
-              <Link key={label} href={href} prefetch={true}
-                className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
-                style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}>
-                {label}
-              </Link>
-            ) : (
-              <span key={label}
-                className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
-                style={{ background: 'white', color: 'black' }}>
-                {label}
-              </span>
-            )
-          )}
-        </div>
-        <button
-          onClick={syncCalendar}
-          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center active:opacity-60"
-          style={{ background: 'rgba(255,255,255,0.08)' }}
-          aria-label="Sync calendar"
-        >
-          <RefreshCw size={15} className={`text-white/60 ${syncing ? 'animate-spin' : ''}`} />
-        </button>
+      {/* Category strip */}
+      <div className="flex gap-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+        {CATEGORIES.map(({ label, href }) =>
+          href ? (
+            <Link key={label} href={href} prefetch={true}
+              className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}>
+              {label}
+            </Link>
+          ) : (
+            <span key={label}
+              className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
+              style={{ background: 'white', color: 'black' }}>
+              {label}
+            </span>
+          )
+        )}
       </div>
 
-      <OverviewSection activities={data?.activities ?? []} hevy={data?.hevy ?? []} calendarEvents={data?.calendarEvents ?? []} />
+      <OverviewSection activities={data?.activities ?? []} hevy={data?.hevy ?? []} calendarEvents={data?.calendarEvents ?? []} onRefresh={syncCalendar} refreshing={syncing} />
     </PremiumScreen>
   )
 }
