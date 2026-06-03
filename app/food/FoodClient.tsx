@@ -659,23 +659,22 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
                   className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
                   style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
               </div>
-              {(pickerProduct.servings ?? []).length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {(pickerProduct.servings ?? []).map((s, i) => (
-                    <button key={i}
-                      onClick={() => setPickerGrams(String(s.amount_g))}
-                      className="px-3 py-1.5 rounded-full text-[13px] font-semibold transition-all"
-                      style={
-                        pickerGrams === String(s.amount_g)
-                          ? { background: 'white', color: 'black' }
-                          : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }
-                      }
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  ...(pickerProduct.servings ?? []),
+                  ...[30, 50, 100, 150, 200]
+                    .filter(g => !(pickerProduct.servings ?? []).some(s => s.amount_g === g))
+                    .map(g => ({ label: `${g}g`, amount_g: g })),
+                ].sort((a, b) => a.amount_g - b.amount_g).map((s, i) => (
+                  <button key={i} onClick={() => setPickerGrams(String(s.amount_g))}
+                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
+                    style={pickerGrams === String(s.amount_g)
+                      ? { background: 'white', color: 'black' }
+                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { label: 'Kcal',  value: `${Math.round(Number(pickerProduct.kcal??0)*Number(pickerGrams)/100)}`,       color: '#fb923c' },
@@ -1244,19 +1243,22 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             </div>
 
             {/* Serving size pills */}
-            {(selected.servings ?? []).length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {(selected.servings ?? []).map((s, i) => (
-                  <button key={i} onClick={() => setGrams(String(s.amount_g))}
-                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                    style={grams === String(s.amount_g)
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex gap-2 flex-wrap">
+              {[
+                ...(selected.servings ?? []),
+                ...[30, 50, 100, 150, 200]
+                  .filter(g => !(selected.servings ?? []).some(s => s.amount_g === g))
+                  .map(g => ({ label: `${g}g`, amount_g: g })),
+              ].sort((a, b) => a.amount_g - b.amount_g).map((s, i) => (
+                <button key={i} onClick={() => setGrams(String(s.amount_g))}
+                  className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
+                  style={grams === String(s.amount_g)
+                    ? { background: 'white', color: 'black' }
+                    : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
 
             {/* Macro preview */}
             {preview && (
