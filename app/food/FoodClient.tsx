@@ -856,6 +856,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       if (json.status === 1 && json.product) {
         const p = json.product
         const n = p.nutriments ?? {}
+        const servingQ = p.serving_quantity ? Math.round(Number(p.serving_quantity)) : null
+        const servingLabel = p.serving_size ?? (servingQ ? `${servingQ}g` : null)
         setSelected({
           id: 'barcode-' + barcode,
           name: p.product_name || p.product_name_nl || 'Unknown product',
@@ -864,7 +866,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
           carbs: Math.round((n.carbohydrates_100g ?? 0) * 10) / 10,
           fat: Math.round((n.fat_100g ?? 0) * 10) / 10,
-          servings: null,
+          servings: servingQ ? [{ label: servingLabel!, amount_g: servingQ }] : null,
         })
         setGrams('100')
         setView('detail')
