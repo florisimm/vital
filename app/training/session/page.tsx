@@ -301,18 +301,15 @@ async function nominatim(query: string): Promise<[number, number]> {
 // ─── Route map card ───────────────────────────────────────────────────────────
 
 function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string; sport: SportType }) {
-  const [routeMode, setRouteMode] = useState<'loop' | 'atob'>('loop')
   const [distanceInput, setDistanceInput] = useState(String(advice.targetKm))
   const [heuvels, setHeuvels] = useState(true)
   const [groteWeg, setGroteWeg] = useState(false)
   const [mtb, setMtb] = useState(false)
   const [locMode, setLocMode] = useState<'gps' | 'manual'>('gps')
   const [fromQuery, setFromQuery] = useState('')
-  const [toQuery, setToQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
   const [actualKm, setActualKm] = useState<number | null>(null)
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
-  const [endCoord, setEndCoord] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const seedRef = useRef(Math.floor(Math.random() * 10000))
@@ -331,7 +328,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   function triggerGps() {
     setLocMode('gps'); setError(null)
     navigator.geolocation.getCurrentPosition(
-      pos => { if (routeMode === 'loop') generateLoop(pos.coords.latitude, pos.coords.longitude); else setStartCoord([pos.coords.latitude, pos.coords.longitude]) },
+      pos => generateLoop(pos.coords.latitude, pos.coords.longitude),
       () => { setLocMode('manual'); setError('Locatie toegang geweigerd') }
     )
   }
@@ -342,48 +339,21 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     try {
       const coord = await nominatim(fromQuery)
       setStartCoord(coord)
-      if (routeMode === 'loop') await generateLoop(coord[0], coord[1])
+      await generateLoop(coord[0], coord[1])
     } catch { setError('Vertrekpunt niet gevonden') }
-    finally { setLoading(false) }
-  }
-
-  async function routeAtoB() {
-    setLoading(true); setError(null)
-    try {
-      let start = startCoord
-      if (!start) {
-        if (locMode === 'gps') {
-          start = await new Promise<[number, number]>((res, rej) =>
-            navigator.geolocation.getCurrentPosition(p => res([p.coords.latitude, p.coords.longitude]), rej)
-          )
-          setStartCoord(start)
-        } else if (fromQuery.trim()) {
-          start = await nominatim(fromQuery)
-          setStartCoord(start)
-        } else { setError('Voer een vertrekpunt in'); setLoading(false); return }
-      }
-      if (!toQuery.trim()) { setError('Voer een bestemming in'); setLoading(false); return }
-      const end = await nominatim(toQuery)
-      setEndCoord(end)
-      const result = await orsDirectRoute(start[0], start[1], end[0], end[1], sport, !heuvels, groteWeg, mtb)
-      setRouteCoords(result.coords); setActualKm(result.actualKm)
-    } catch (e: any) {
-      setError(e?.message === 'not found' ? 'Bestemming niet gevonden' : 'Kon geen route laden')
-    }
     finally { setLoading(false) }
   }
 
   function retry() {
     seedRef.current = Math.floor(Math.random() * 10000)
-    if (locMode === 'gps') triggerGps()
-    else if (startCoord) generateLoop(startCoord[0], startCoord[1])
+    if (startCoord) generateLoop(startCoord[0], startCoord[1])
+    else triggerGps()
   }
 
   function openGoogleMaps() {
     if (!startCoord) return
     const mode = sport === 'cycling' ? 'bicycling' : 'walking'
-    const dest = (routeMode === 'atob' && endCoord) ? `${endCoord[0]},${endCoord[1]}` : `${startCoord[0]},${startCoord[1]}`
-    window.open(`https://www.google.com/maps/dir/?api=1&origin=${startCoord[0]},${startCoord[1]}&destination=${dest}&travelmode=${mode}`, '_blank')
+    window.open(`https://www.google.com/maps/dir/?api=1&origin=${startCoord[0]},${startCoord[1]}&destination=${startCoord[0]},${startCoord[1]}&travelmode=${mode}`, '_blank')
   }
 
   function downloadGpx() {
@@ -402,18 +372,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     <div className="rounded-[18px] overflow-hidden border border-white/[0.09]" style={{ background: 'rgba(255,255,255,0.075)' }}>
       <div className="px-4 pt-4 pb-3 flex flex-col gap-3">
 
-        {/* Route mode toggle */}
-        <div className="flex gap-2">
-          {(['loop', 'atob'] as const).map(m => (
-            <button key={m} onClick={() => setRouteMode(m)}
-              className="flex-1 h-[36px] rounded-full text-[14px] font-semibold"
-              style={routeMode === m ? { background: 'white', color: 'black' } : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.6)' }}>
-              {m === 'loop' ? '🔄 Rondje' : '→ A naar B'}
-            </button>
-          ))}
-        </div>
-
-        {/* Start location picker */}
+        {/* Location picker */}
         <div className="flex gap-2">
           {(['gps', 'manual'] as const).map(mode => (
             <button key={mode}
@@ -424,7 +383,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
             </button>
           ))}
         </div>
-        {locMode === 'manual' && routeMode === 'loop' && (
+        {locMode === 'manual' && (
           <div className="flex gap-2">
             <input value={fromQuery} onChange={e => setFromQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && geocodeFrom()}
@@ -435,38 +394,16 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
           </div>
         )}
 
-        {/* A→B destination */}
-        {routeMode === 'atob' && (
-          <>
-            {locMode === 'manual' && (
-              <input value={fromQuery} onChange={e => setFromQuery(e.target.value)}
-                placeholder="Vertrekpunt (dorp of stad)…"
-                className="h-[40px] px-3 rounded-[12px] text-white placeholder:text-white/30 outline-none text-[15px] border border-white/[0.09]"
-                style={{ background: 'rgba(255,255,255,0.08)' }} />
-            )}
-            <div className="flex gap-2">
-              <input value={toQuery} onChange={e => setToQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && routeAtoB()}
-                placeholder="Bestemming (dorp of stad)…"
-                className="flex-1 h-[40px] px-3 rounded-[12px] text-white placeholder:text-white/30 outline-none text-[15px] border border-white/[0.09]"
-                style={{ background: 'rgba(255,255,255,0.08)' }} />
-              <button onClick={routeAtoB} className="h-[40px] px-4 rounded-[12px] bg-white text-black text-[14px] font-semibold">Routeer</button>
-            </div>
-          </>
-        )}
-
-        {/* Distance (loop only) */}
-        {routeMode === 'loop' && (
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-white/50 shrink-0">Afstand</span>
-            <input type="number" value={distanceInput} onChange={e => setDistanceInput(e.target.value)}
-              min={1} max={300} step={0.5}
-              className="w-[64px] h-[32px] px-2 rounded-[10px] text-white text-[15px] font-semibold text-center outline-none border border-white/[0.09]"
-              style={{ background: 'rgba(255,255,255,0.08)' }} />
-            <span className="text-[13px] text-white/50">km</span>
-            <span className="text-[12px] text-white/25 ml-1">(aanbevolen: {advice.targetKm} km)</span>
-          </div>
-        )}
+        {/* Distance */}
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] text-white/50 shrink-0">Afstand</span>
+          <input type="number" value={distanceInput} onChange={e => setDistanceInput(e.target.value)}
+            min={1} max={300} step={0.5}
+            className="w-[64px] h-[32px] px-2 rounded-[10px] text-white text-[15px] font-semibold text-center outline-none border border-white/[0.09]"
+            style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <span className="text-[13px] text-white/50">km</span>
+          <span className="text-[12px] text-white/25 ml-1">(aanbevolen: {advice.targetKm} km)</span>
+        </div>
 
         {/* Route option toggles */}
         <div className="flex flex-wrap gap-2">
@@ -498,18 +435,16 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
         <div className="px-4 pb-2 flex items-center gap-2">
           <span className="text-[13px] text-white/40">Route afstand:</span>
           <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
-          {routeMode === 'loop' && <span className="text-[13px] text-white/30">· doel {parsedKm()} km</span>}
+          <span className="text-[13px] text-white/30">· doel {parsedKm()} km</span>
         </div>
       )}
 
       {/* Buttons */}
       {routeCoords && (
         <div className="px-4 pb-4 flex gap-2">
-          {routeMode === 'loop' && (
-            <button onClick={retry} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-              <RefreshCw size={14} />Nieuwe route
-            </button>
-          )}
+          <button onClick={retry} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
+            <RefreshCw size={14} />Nieuwe route
+          </button>
           <button onClick={openGoogleMaps} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold flex-1 justify-center" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
             <Map size={14} />Google Maps
           </button>
