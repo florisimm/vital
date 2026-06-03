@@ -254,7 +254,7 @@ export function FoodClient() {
           <ChevronLeft size={18} className="text-white/70" />
         </button>
         <span className="text-[17px] font-semibold text-white">{formatDayLabel(selectedDate)}</span>
-        <button onClick={() => navigate('left')} disabled={isToday} className="w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-30" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <button onClick={() => navigate('left')} className="w-9 h-9 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <ChevronRight size={18} className="text-white/70" />
         </button>
       </div>
