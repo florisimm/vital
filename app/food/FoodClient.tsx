@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
-import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils, ScanLine } from 'lucide-react'
+import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils, ScanLine, ChevronDown, Check } from 'lucide-react'
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import { BarcodeScanner } from '@/components/BarcodeScanner'
@@ -792,6 +792,9 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Product | null>(null)
   const [grams, setGrams] = useState('100')
+  const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(null)
+  const [servingMultiplier, setServingMultiplier] = useState('1')
+  const [showServingPicker, setShowServingPicker] = useState(false)
   const [meal, setMeal] = useState(preselectedMeal)
   const [saving, setSaving] = useState(false)
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
@@ -1226,39 +1229,93 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
         {/* ── Detail view ── */}
         {view === 'detail' && selected && (
           <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
-            {/* Amount stepper */}
-            <div className="flex items-center justify-between py-4 rounded-[16px] px-4"
-              style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 25)))}
-                className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
-                style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
-              <div className="flex items-baseline gap-1">
-                <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
-                  className="text-[48px] font-bold text-white bg-transparent text-center outline-none w-28" />
-                <span className="text-[22px] text-white/50">g</span>
-              </div>
-              <button onClick={() => setGrams(g => String(Number(g) + 25))}
-                className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
-                style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
-            </div>
-
-            {/* Serving size pills */}
-            <div className="flex gap-2 flex-wrap">
-              {[
+            {/* Portion selector */}
+            {(() => {
+              const allServings = [
                 ...(selected.servings ?? []),
                 ...[30, 50, 100, 150, 200]
                   .filter(g => !(selected.servings ?? []).some(s => s.amount_g === g))
                   .map(g => ({ label: `${g}g`, amount_g: g })),
-              ].sort((a, b) => a.amount_g - b.amount_g).map((s, i) => (
-                <button key={i} onClick={() => setGrams(String(s.amount_g))}
-                  className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                  style={grams === String(s.amount_g)
-                    ? { background: 'white', color: 'black' }
-                    : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
+              ].sort((a, b) => a.amount_g - b.amount_g)
+
+              function pickServing(s: { label: string; amount_g: number } | null) {
+                setSelectedServing(s)
+                setShowServingPicker(false)
+                if (s) setGrams(String(Math.round(Number(servingMultiplier) * s.amount_g)))
+              }
+
+              return (
+                <>
+                  <div className="flex gap-2">
+                    {/* Multiplier */}
+                    <div className="flex items-center justify-center gap-1 px-3 rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.08)', minWidth: 72 }}>
+                      <input type="number" inputMode="decimal" value={servingMultiplier}
+                        onChange={e => {
+                          setServingMultiplier(e.target.value)
+                          if (selectedServing) setGrams(String(Math.round(Number(e.target.value) * selectedServing.amount_g)))
+                          else setGrams(e.target.value)
+                        }}
+                        className="text-[22px] font-bold text-white bg-transparent text-center outline-none w-12" />
+                      <span className="text-[15px] text-white/50">x</span>
+                    </div>
+                    {/* Portion picker */}
+                    <button onClick={() => setShowServingPicker(true)}
+                      className="flex-1 flex items-center justify-between px-4 py-4 rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <span className="text-[16px] font-medium text-white">
+                        {selectedServing ? selectedServing.label : 'gram / ml'}
+                      </span>
+                      <ChevronDown size={16} className="text-white/40" />
+                    </button>
+                  </div>
+
+                  {/* When gram/ml: direct gram input */}
+                  {!selectedServing && (
+                    <div className="flex items-center justify-between py-3 px-4 rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 5)))}
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-[22px] text-white"
+                        style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
+                      <div className="flex items-baseline gap-1">
+                        <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
+                          className="text-[40px] font-bold text-white bg-transparent text-center outline-none w-24" />
+                        <span className="text-[18px] text-white/50">g</span>
+                      </div>
+                      <button onClick={() => setGrams(g => String(Number(g) + 5))}
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-[22px] text-white"
+                        style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
+                    </div>
+                  )}
+
+                  {/* Serving picker sheet */}
+                  {showServingPicker && (
+                    <div className="fixed inset-0 z-[200] flex flex-col justify-end"
+                      style={{ background: 'rgba(0,0,0,0.5)' }}
+                      onClick={() => setShowServingPicker(false)}>
+                      <div className="rounded-t-[20px] overflow-hidden pb-safe"
+                        style={{ background: 'rgb(28,28,30)' }}
+                        onClick={e => e.stopPropagation()}>
+                        {allServings.map((s, i) => (
+                          <button key={i} onClick={() => pickServing(s)}
+                            className="w-full flex items-center justify-between px-5 py-4"
+                            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                            <span className="text-[17px] text-white">{s.label}</span>
+                            {selectedServing?.label === s.label && <Check size={18} className="text-teal-400" />}
+                          </button>
+                        ))}
+                        <button onClick={() => pickServing(null)}
+                          className="w-full flex items-center justify-between px-5 py-4"
+                          style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                          <span className="text-[17px] text-white">gram / ml</span>
+                          {!selectedServing && <Check size={18} className="text-teal-400" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             {/* Macro preview */}
             {preview && (
