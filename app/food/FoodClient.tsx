@@ -687,7 +687,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
                 style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                 <button className="flex-1 text-left" onClick={() => {
                   // Find matching product or create synthetic one for editing
-                  const synth: Product = { id: 'edit', name: item.food_name, brand: item.brand, kcal: item.amount_g > 0 ? Math.round(item.kcal / item.amount_g * 100) : 0, protein: item.amount_g > 0 ? Math.round(item.protein / item.amount_g * 1000) / 10 : 0, carbs: item.amount_g > 0 ? Math.round(item.carbs / item.amount_g * 1000) / 10 : 0, fat: item.amount_g > 0 ? Math.round(item.fat / item.amount_g * 1000) / 10 : 0 }
+                  const synth: Product = { id: 'edit', name: item.food_name, brand: item.brand, kcal: item.amount_g > 0 ? Math.round(item.kcal / item.amount_g * 100) : 0, protein: item.amount_g > 0 ? Math.round(item.protein / item.amount_g * 1000) / 10 : 0, carbs: item.amount_g > 0 ? Math.round(item.carbs / item.amount_g * 1000) / 10 : 0, fat: item.amount_g > 0 ? Math.round(item.fat / item.amount_g * 1000) / 10 : 0, servings: null }
                   setPickerProduct(synth)
                   setPickerGrams(String(item.amount_g))
                   setEditIndex(i)
