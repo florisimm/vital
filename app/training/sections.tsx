@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Card, SectionHeader, BigMetricCard, MetricRow, MinimalWorkoutList } from '@/components/ui'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,12 +63,12 @@ export function AiInsight({ text }: { text: string }) {
   )
 }
 
-export function SmallCard({ title, value, unit = '', detail, Icon, tint }: {
+export function SmallCard({ title, value, unit = '', detail, Icon, tint, onClick }: {
   title: string; value: string; unit?: string; detail: string
-  Icon: React.ElementType; tint: string
+  Icon: React.ElementType; tint: string; onClick?: () => void
 }) {
   return (
-    <Card className="flex-1">
+    <Card className="flex-1" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div className="flex flex-col gap-2.5">
         <Icon size={16} className={tint} />
         <div className="flex items-baseline gap-[3px]">
@@ -133,6 +133,44 @@ export function OverviewSection({ activities, hevy, calendarEvents }: { activiti
 
 // ─── Running ──────────────────────────────────────────────────────────────────
 
+// ─── Activity detail sheet ────────────────────────────────────────────────────
+
+type DetailRow = { label: string; value: string; sub?: string }
+
+function ActivityDetailSheet({ title, rows, onClose }: { title: string; rows: DetailRow[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative flex flex-col max-h-[80vh] rounded-t-[24px] overflow-hidden"
+        style={{ background: 'rgb(10,12,14)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+          <span className="text-[17px] font-bold text-white">{title}</span>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <X size={16} className="text-white/70" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-1">
+          {rows.length === 0 ? (
+            <p className="text-white/30 text-[15px] text-center py-8">No data available</p>
+          ) : rows.map((row, i) => (
+            <div key={i} className="flex items-center justify-between py-3.5"
+              style={{ borderBottom: i < rows.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+              <div>
+                <p className="text-[15px] font-medium text-white">{row.label}</p>
+                {row.sub && <p className="text-[12px] text-white/40 mt-0.5">{row.sub}</p>}
+              </div>
+              <span className="text-[15px] font-semibold text-white/80 shrink-0 ml-4">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Running ──────────────────────────────────────────────────────────────────
+
 export function RunningSection({ activities }: { activities: Activity[] }) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const weekRuns = activities.filter(a => a.sport_type?.toLowerCase().includes('run') && a.start_date >= sevenDaysAgo)
@@ -142,20 +180,36 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
   const cadenceRuns = weekRuns.filter(a => a.average_cadence)
   const avgCadence = cadenceRuns.length ? Math.round(cadenceRuns.reduce((s, a) => s + (a.average_cadence ?? 0), 0) / cadenceRuns.length * 2) : 178
 
+  const [sheet, setSheet] = useState<'distance' | 'pace' | null>(null)
+
   const prs = [
-    { dist: '5K', time: '20:15', projected: false },
-    { dist: '10K', time: '42:30', projected: true },
-    { dist: 'Half', time: '1:35:20', projected: false },
-    { dist: 'Marathon', time: '3:28:00', projected: true },
+    { dist: '5K', time: '–', projected: false },
+    { dist: '10K', time: '–', projected: false },
+    { dist: 'Half', time: '–', projected: false },
+    { dist: 'Marathon', time: '–', projected: false },
   ]
 
   const paceZones = [
-    { label: 'Easy', percent: 0.40, color: '#4ade80' },
-    { label: 'Moderate', percent: 0.30, color: '#facc15' },
-    { label: 'Tempo', percent: 0.18, color: '#fb923c' },
-    { label: 'Threshold', percent: 0.10, color: '#f87171' },
-    { label: 'Interval', percent: 0.02, color: '#f472b6' },
+    { label: 'Easy', percent: 0, color: '#4ade80' },
+    { label: 'Moderate', percent: 0, color: '#facc15' },
+    { label: 'Tempo', percent: 0, color: '#fb923c' },
+    { label: 'Threshold', percent: 0, color: '#f87171' },
+    { label: 'Interval', percent: 0, color: '#f472b6' },
   ]
+
+  const allRuns = activities.filter(a => a.sport_type?.toLowerCase().includes('run'))
+
+  const distanceRows: DetailRow[] = allRuns.map(a => ({
+    label: a.name,
+    sub: formatDate(a.start_date),
+    value: a.distance ? `${(a.distance / 1000).toFixed(2)} km` : '–',
+  }))
+
+  const paceRows: DetailRow[] = allRuns.filter(a => a.average_speed).map(a => ({
+    label: a.name,
+    sub: formatDate(a.start_date),
+    value: a.average_speed ? `${formatPace(a.average_speed)} /km` : '–',
+  }))
 
   return (
     <div className="flex flex-col gap-6">
@@ -179,8 +233,8 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
       </Card>
 
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Weekly Distance" value={weekKm > 0 ? weekKm.toFixed(1) : '–'} unit="km" detail="Running" Icon={PersonStanding} tint="text-teal-400" />
-        <SmallCard title="Avg Pace" value={avgSpeed > 0 ? formatPace(avgSpeed) : '–'} unit="/km" detail="This week" Icon={TrendingUp} tint="text-blue-400" />
+        <SmallCard title="Weekly Distance" value={weekKm > 0 ? weekKm.toFixed(1) : '–'} unit="km" detail="Running" Icon={PersonStanding} tint="text-teal-400" onClick={() => setSheet('distance')} />
+        <SmallCard title="Avg Pace" value={avgSpeed > 0 ? formatPace(avgSpeed) : '–'} unit="/km" detail="This week" Icon={TrendingUp} tint="text-blue-400" onClick={() => setSheet('pace')} />
       </div>
 
       <Card>
@@ -209,6 +263,9 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
           {paceZones.map(z => <ZoneBar key={z.label} label={z.label} percent={z.percent} color={z.color} />)}
         </div>
       </Card>
+
+      {sheet === 'distance' && <ActivityDetailSheet title="Distance per run" rows={distanceRows} onClose={() => setSheet(null)} />}
+      {sheet === 'pace' && <ActivityDetailSheet title="Pace per run" rows={paceRows} onClose={() => setSheet(null)} />}
     </div>
   )
 }
@@ -225,12 +282,34 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
     ? weekRides.filter(a => a.average_speed).reduce((s, a) => s + (a.average_speed ?? 0), 0) / weekRides.filter(a => a.average_speed).length
     : 0
 
+  const [sheet, setSheet] = useState<'duration' | 'elevation' | 'speed' | null>(null)
+
+  const allRides = activities.filter(a => a.sport_type?.toLowerCase().includes('ride'))
+
+  const durationRows: DetailRow[] = allRides.map(a => ({
+    label: a.name,
+    sub: formatDate(a.start_date),
+    value: a.moving_time ? formatDuration(a.moving_time) : '–',
+  }))
+
+  const elevationRows: DetailRow[] = allRides.map(a => ({
+    label: a.name,
+    sub: formatDate(a.start_date),
+    value: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)} m` : '–',
+  }))
+
+  const speedRows: DetailRow[] = allRides.filter(a => a.average_speed).map(a => ({
+    label: a.name,
+    sub: formatDate(a.start_date),
+    value: a.average_speed ? `${(a.average_speed * 3.6).toFixed(1)} km/h` : '–',
+  }))
+
   const powerZones = [
-    { label: 'Active Recovery', percent: 0.15, color: '#9ca3af' },
-    { label: 'Endurance', percent: 0.35, color: '#4ade80' },
-    { label: 'Tempo', percent: 0.28, color: '#facc15' },
-    { label: 'Threshold', percent: 0.17, color: '#fb923c' },
-    { label: 'VO₂ Max', percent: 0.05, color: '#f87171' },
+    { label: 'Active Recovery', percent: 0, color: '#9ca3af' },
+    { label: 'Endurance', percent: 0, color: '#4ade80' },
+    { label: 'Tempo', percent: 0, color: '#facc15' },
+    { label: 'Threshold', percent: 0, color: '#fb923c' },
+    { label: 'VO₂ Max', percent: 0, color: '#f87171' },
   ]
 
   return (
@@ -249,8 +328,8 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Duration" value={weekSecs > 0 ? formatDuration(weekSecs) : '–'} detail="This week" Icon={Timer} tint="text-blue-400" />
-        <SmallCard title="Elevation" value={weekElev > 0 ? `${Math.round(weekElev).toLocaleString('nl-NL')}` : '–'} unit="m" detail="Climbing" Icon={TrendingUp} tint="text-orange-400" />
+        <SmallCard title="Duration" value={weekSecs > 0 ? formatDuration(weekSecs) : '–'} detail="This week" Icon={Timer} tint="text-blue-400" onClick={() => setSheet('duration')} />
+        <SmallCard title="Elevation" value={weekElev > 0 ? `${Math.round(weekElev).toLocaleString('nl-NL')}` : '–'} unit="m" detail="Climbing" Icon={TrendingUp} tint="text-orange-400" onClick={() => setSheet('elevation')} />
       </div>
 
       <Card>
@@ -277,9 +356,13 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
       </Card>
 
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Avg Speed" value={avgSpeedMs > 0 ? (avgSpeedMs * 3.6).toFixed(1) : '–'} unit="km/h" detail="This week" Icon={TrendingUp} tint="text-yellow-400" />
+        <SmallCard title="Avg Speed" value={avgSpeedMs > 0 ? (avgSpeedMs * 3.6).toFixed(1) : '–'} unit="km/h" detail="This week" Icon={TrendingUp} tint="text-yellow-400" onClick={() => setSheet('speed')} />
         <SmallCard title="Est. FTP" value="–" unit="W" detail="–" Icon={Bike} tint="text-purple-400" />
       </div>
+
+      {sheet === 'duration' && <ActivityDetailSheet title="Duration per ride" rows={durationRows} onClose={() => setSheet(null)} />}
+      {sheet === 'elevation' && <ActivityDetailSheet title="Elevation per ride" rows={elevationRows} onClose={() => setSheet(null)} />}
+      {sheet === 'speed' && <ActivityDetailSheet title="Avg speed per ride" rows={speedRows} onClose={() => setSheet(null)} />}
     </div>
   )
 }

@@ -3,11 +3,12 @@ import type { LucideIcon } from 'lucide-react'
 
 /* ─── Card shell ──────────────────────────────────────────────────────────── */
 // padding 18, cornerRadius 24, bg white/0.075, border white/0.09
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = '', onClick, style }: { children: ReactNode; className?: string; onClick?: () => void; style?: React.CSSProperties }) {
   return (
     <div
       className={`p-[18px] rounded-3xl border border-white/[0.09] ${className}`}
-      style={{ background: 'rgba(255,255,255,0.075)' }}
+      style={{ background: 'rgba(255,255,255,0.075)', ...style }}
+      onClick={onClick}
     >
       {children}
     </div>
