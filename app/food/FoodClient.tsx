@@ -203,11 +203,6 @@ export function FoodClient() {
     fat: log.reduce((s, f) => s + Number(f.fat ?? 0), 0),
   }), [log])
 
-  const proteinLeft = targets.protein - totals.protein
-  const aiText = proteinLeft > 5
-    ? `Nog ${Math.round(proteinLeft)}g eiwit te gaan. Voeg eiwitrijke maaltijd toe bij het avondeten.`
-    : 'Alle macro-doelen lopen goed. Blijf consistent met de maaltijdtiming.'
-
   async function deleteEntry(id: string) {
     mutate(prev => prev ? { ...prev, foodLog: prev.foodLog.filter(f => f.id !== id) } : prev, false)
     const supabase = createClient()
@@ -281,16 +276,6 @@ export function FoodClient() {
           <NutritionProgressBar label="Eiwit"        current={totals.protein} target={targets.protein} unit="g"    tint="bg-teal-400"   />
           <NutritionProgressBar label="Koolhydraten" current={totals.carbs}   target={targets.carbs}   unit="g"    tint="bg-yellow-400" />
           <NutritionProgressBar label="Vet"          current={totals.fat}     target={targets.fat}     unit="g"    tint="bg-indigo-400" />
-        </div>
-      </Card>
-
-      <Card>
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-orange-400">✦</span>
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Inzicht</span>
-          </div>
-          <p className="text-[20px] font-bold text-white leading-snug">{aiText}</p>
         </div>
       </Card>
 
@@ -459,7 +444,7 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
       <input type="text" placeholder="Productnaam *" value={form.name} onChange={e => set('name', e.target.value)}
         className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[16px] outline-none font-semibold"
         style={{ background: 'rgba(255,255,255,0.08)' }} />
-      <input type="text" placeholder="Merk (optioneel)" value={form.brand} onChange={e => set('brand', e.target.value)}
+      <input type="text" placeholder="Brand (optional)" value={form.brand} onChange={e => set('brand', e.target.value)}
         className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[15px] outline-none"
         style={{ background: 'rgba(255,255,255,0.08)' }} />
 
@@ -489,7 +474,7 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
         style={{ background: 'rgba(255,255,255,0.08)' }} />
 
       {/* Gram + preview */}
-      <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest">Portie</p>
+      <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest">Serving size</p>
       <div className="flex items-center justify-between py-3 px-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
         <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 25)))}
           className="w-10 h-10 rounded-full flex items-center justify-center text-[20px] text-white"
@@ -535,7 +520,7 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
 
       <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}
         className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
-        {saving ? 'Opslaan…' : `Toevoegen aan ${MEAL_LABELS[meal]}`}
+        {saving ? 'Saving…' : `Add to ${MEAL_LABELS[meal]}`}
       </button>
     </div>
   )
@@ -556,6 +541,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
   const [pickerSearch, setPickerSearch] = useState('')
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null)
   const [pickerGrams, setPickerGrams] = useState('100')
+  const [editIndex, setEditIndex] = useState<number | null>(null)
 
   const filtered = useMemo(() => {
     if (!pickerSearch.trim()) return products.slice(0, 40)
@@ -565,7 +551,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
   function addToMeal() {
     if (!pickerProduct) return
     const g = Number(pickerGrams) || 100
-    setTemplateItems(prev => [...prev, {
+    const item = {
       food_name: pickerProduct.name,
       brand: pickerProduct.brand,
       amount_g: g,
@@ -573,7 +559,13 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
       protein: Math.round((Number(pickerProduct.protein ?? 0) * g) / 100 * 10) / 10,
       carbs:   Math.round((Number(pickerProduct.carbs   ?? 0) * g) / 100 * 10) / 10,
       fat:     Math.round((Number(pickerProduct.fat     ?? 0) * g) / 100 * 10) / 10,
-    }])
+    }
+    if (editIndex !== null) {
+      setTemplateItems(prev => prev.map((p, i) => i === editIndex ? item : p))
+      setEditIndex(null)
+    } else {
+      setTemplateItems(prev => [...prev, item])
+    }
     setPickerProduct(null)
     setPickerGrams('100')
     setPickerSearch('')
@@ -589,7 +581,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
             <button onClick={() => { setShowPicker(false); setPickerProduct(null); setPickerSearch('') }}
               className="text-[16px] font-medium text-white/60">‹ Terug</button>
             <span className="text-[16px] font-bold text-white">
-              {pickerProduct ? pickerProduct.name : 'Kies product'}
+              {pickerProduct ? pickerProduct.name : 'Pick product'}
             </span>
             <div className="w-14" />
           </div>
@@ -627,7 +619,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
               </div>
               <button onClick={addToMeal}
                 className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px]">
-                Toevoegen aan maaltijd
+                {editIndex !== null ? 'Update' : 'Add to meal'}
               </button>
             </div>
           ) : (
@@ -636,7 +628,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
               <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px] shrink-0"
                 style={{ background: 'rgba(255,255,255,0.08)' }}>
                 <Search size={15} className="text-white/40 shrink-0" />
-                <input autoFocus type="text" placeholder="Zoek product…" value={pickerSearch}
+                <input autoFocus type="text" placeholder="Search product…" value={pickerSearch}
                   onChange={e => setPickerSearch(e.target.value)}
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[15px] outline-none" />
               </div>
@@ -663,7 +655,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
 
       {/* Main create meal view */}
       <div className="flex flex-col flex-1 px-5 pb-8 gap-4 overflow-y-auto">
-        <input type="text" placeholder="Naam maaltijd…" value={newMealName}
+        <input type="text" placeholder="Meal name…" value={newMealName}
           onChange={e => setNewMealName(e.target.value)}
           className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[16px] outline-none font-semibold shrink-0"
           style={{ background: 'rgba(255,255,255,0.08)' }} />
@@ -675,10 +667,17 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
             {templateItems.map((item, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-3"
                 style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                <div>
+                <button className="flex-1 text-left" onClick={() => {
+                  // Find matching product or create synthetic one for editing
+                  const synth: Product = { id: 'edit', name: item.food_name, brand: item.brand, kcal: item.amount_g > 0 ? Math.round(item.kcal / item.amount_g * 100) : 0, protein: item.amount_g > 0 ? Math.round(item.protein / item.amount_g * 1000) / 10 : 0, carbs: item.amount_g > 0 ? Math.round(item.carbs / item.amount_g * 1000) / 10 : 0, fat: item.amount_g > 0 ? Math.round(item.fat / item.amount_g * 1000) / 10 : 0 }
+                  setPickerProduct(synth)
+                  setPickerGrams(String(item.amount_g))
+                  setEditIndex(i)
+                  setShowPicker(true)
+                }}>
                   <p className="text-[14px] font-medium text-white">{item.food_name}</p>
-                  <p className="text-[12px] text-white/40">{item.amount_g}g · {item.kcal} kcal · {item.protein}g eiwit</p>
-                </div>
+                  <p className="text-[12px] text-white/40">{item.amount_g}g · {item.kcal} kcal · {item.protein}g protein</p>
+                </button>
                 <button onClick={() => setTemplateItems(prev => prev.filter((_, j) => j !== i))}>
                   <X size={14} className="text-white/30" />
                 </button>
@@ -686,7 +685,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
             ))}
             <div className="px-4 py-2 border-t border-white/[0.05]">
               <p className="text-[12px] text-white/40">
-                Totaal: {templateItems.reduce((s, f) => s + f.kcal, 0)} kcal · {templateItems.reduce((s, f) => s + f.protein, 0).toFixed(1)}g eiwit
+                Total: {templateItems.reduce((s, f) => s + f.kcal, 0)} kcal · {templateItems.reduce((s, f) => s + f.protein, 0).toFixed(1)}g protein
               </p>
             </div>
           </div>
@@ -696,13 +695,13 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
           className="flex items-center gap-3 w-full px-4 py-3.5 rounded-[14px] border border-white/10 shrink-0"
           style={{ background: 'rgba(255,255,255,0.06)' }}>
           <Plus size={18} className="text-white/60" />
-          <span className="text-[15px] font-semibold text-white/60">Product toevoegen</span>
+          <span className="text-[15px] font-semibold text-white/60">Add product</span>
         </button>
 
         <button onClick={onSave}
           disabled={savingTemplate || !newMealName.trim() || !templateItems.length}
           className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30 shrink-0">
-          {savingTemplate ? 'Opslaan…' : 'Maaltijd opslaan'}
+          {savingTemplate ? 'Saving…' : 'Save meal'}
         </button>
       </div>
     </div>
@@ -786,7 +785,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
         const n = p.nutriments ?? {}
         setSelected({
           id: 'barcode-' + barcode,
-          name: p.product_name || p.product_name_nl || 'Onbekend product',
+          name: p.product_name || p.product_name_nl || 'Unknown product',
           brand: p.brands ?? null,
           kcal: Math.round(n['energy-kcal_100g'] ?? n['energy-kcal'] ?? 0),
           protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
@@ -813,14 +812,19 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     setLoggingTemplate(true)
     try {
       const supabase = createClient()
-      await supabase.from('food_log').insert(
-        confirmTemplate.foods.map(f => ({
-          user_id: userId, date: today, meal_category: meal,
-          food_name: f.food_name, amount_g: f.amount_g,
-          kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
-          sugars: 0, brand: f.brand ?? '',
-        }))
-      )
+      const totalKcal    = confirmTemplate.foods.reduce((s, f) => s + f.kcal, 0)
+      const totalProtein = confirmTemplate.foods.reduce((s, f) => s + f.protein, 0)
+      const totalCarbs   = confirmTemplate.foods.reduce((s, f) => s + f.carbs, 0)
+      const totalFat     = confirmTemplate.foods.reduce((s, f) => s + f.fat, 0)
+      await supabase.from('food_log').insert({
+        user_id: userId, date: today, meal_category: meal,
+        food_name: confirmTemplate.name, amount_g: null,
+        kcal: Math.round(totalKcal),
+        protein: Math.round(totalProtein * 10) / 10,
+        carbs: Math.round(totalCarbs * 10) / 10,
+        fat: Math.round(totalFat * 10) / 10,
+        sugars: 0, brand: '',
+      })
       globalMutate(`food-log-${today}`)
       onClose()
     } finally {
@@ -884,7 +888,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     : view === 'scan' ? 'Scan Barcode'
     : view === 'meals' ? 'Meals'
     : view === 'meal-confirm' ? confirmTemplate?.name ?? 'Maaltijd'
-    : view === 'create-meal' ? 'New Meal'
+    : view === 'create-meal' ? (confirmTemplate ? 'Edit meal' : 'New meal')
     : view === 'custom-food' ? 'Custom Food'
     : selected?.name ?? 'Detail'
 
@@ -963,7 +967,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             ) : (
               <>
                 <p className="text-white/40 text-[15px] text-center">Product niet gevonden. Probeer handmatig te zoeken.</p>
-                <button onClick={() => setView('search')} className="text-teal-400 font-semibold text-[15px]">Zoeken</button>
+                <button onClick={() => setView('search')} className="text-teal-400 font-semibold text-[15px]">Search</button>
               </>
             )}
           </div>
@@ -1026,18 +1030,18 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   <button
                     onClick={() => { setMenuOpenId(null); setConfirmTemplate(t); setNewMealName(t.name); setTemplateItems(t.foods); setView('create-meal') }}
                     className="w-full px-4 py-4 text-center text-[17px] text-white border-b border-white/[0.07]">
-                    Bewerken
+                    Edit
                   </button>
                   <button
                     onClick={() => { setMenuOpenId(null); deleteTemplate(t.id) }}
                     className="w-full px-4 py-4 text-center text-[17px] text-red-400">
-                    Verwijderen
+                    Delete
                   </button>
                 </div>
                 <button onClick={() => setMenuOpenId(null)}
                   className="w-full py-4 rounded-[18px] text-[17px] font-semibold text-white"
                   style={{ background: 'rgba(30,30,34,0.98)' }}>
-                  Annuleren
+                  Cancel
                 </button>
               </div>
             </div>
@@ -1081,7 +1085,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
 
             <button onClick={logTemplate} disabled={loggingTemplate}
               className="h-[54px] rounded-[18px] bg-white text-black font-semibold text-[17px] disabled:opacity-40 shrink-0">
-              {loggingTemplate ? 'Toevoegen…' : `Toevoegen aan ${MEAL_LABELS[meal] ?? meal}`}
+              {loggingTemplate ? 'Adding…' : `Add to ${MEAL_LABELS[meal] ?? meal}`}
             </button>
           </div>
         )}
