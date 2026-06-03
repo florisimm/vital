@@ -219,22 +219,23 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-// 6 base angles with ±15° jitter — call once per "Nieuwe route"
+// 3 base angles with ±20° jitter — triangle loop, fewer direction changes
 function newAngles(): number[] {
-  return [0, 60, 120, 180, 240, 300].map(a => a + (Math.random() - 0.5) * 30)
+  return [0, 120, 240].map(a => a + (Math.random() - 0.5) * 40)
 }
 
-// Per-waypoint distance multipliers with ±15% variation
+// Per-waypoint distance multipliers with ±20% variation
 function newJitter(): number[] {
-  return Array.from({ length: 6 }, () => 1 + (Math.random() - 0.5) * 0.3)
+  return Array.from({ length: 3 }, () => 1 + (Math.random() - 0.5) * 0.4)
 }
 
 async function osrmRequest(
   lat: number, lon: number, radiusKm: number,
-  angles: number[], jitter: number[]
+  angles: number[], jitter: number[], sport: SportType
 ) {
   const latDeg = 1 / 111
   const lonDeg = 1 / (111 * Math.cos((lat * Math.PI) / 180))
+  const profile = sport === 'cycling' ? 'cycling' : 'walking'
 
   const waypoints: [number, number][] = angles.map((deg, i) => {
     const rad = (deg * Math.PI) / 180
@@ -245,7 +246,7 @@ async function osrmRequest(
   const all: [number, number][] = [[lat, lon], ...waypoints, [lat, lon]]
   const coordStr = all.map(([lt, ln]) => `${ln},${lt}`).join(';')
   const res = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`
+    `https://router.project-osrm.org/route/v1/${profile}/${coordStr}?overview=full&geometries=geojson`
   )
   const json = await res.json()
   const route = json.routes[0]
@@ -259,16 +260,16 @@ async function osrmRequest(
 // Keeps the best result (smallest error) across all attempts.
 async function fetchRoute(
   lat: number, lon: number, targetKm: number,
-  angles: number[], jitter: number[]
+  angles: number[], jitter: number[], sport: SportType
 ): Promise<{ coords: [number, number][]; actualKm: number }> {
   let radius = targetKm / (2 * Math.PI)
-  let best = await osrmRequest(lat, lon, radius, angles, jitter)
+  let best = await osrmRequest(lat, lon, radius, angles, jitter, sport)
   let bestError = Math.abs(best.actualKm - targetKm) / targetKm
 
   for (let i = 0; i < 4; i++) {
     if (bestError <= 0.10) break
     radius = radius * (targetKm / best.actualKm)
-    const result = await osrmRequest(lat, lon, radius, angles, jitter)
+    const result = await osrmRequest(lat, lon, radius, angles, jitter, sport)
     const error = Math.abs(result.actualKm - targetKm) / targetKm
     if (error < bestError) { best = result; bestError = error }
   }
@@ -310,7 +311,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   async function generateFromCoords(lat: number, lon: number) {
     setLoading(true); setError(null)
     try {
-      const result = await fetchRoute(lat, lon, targetKm, anglesRef.current, jitterRef.current)
+      const result = await fetchRoute(lat, lon, targetKm, anglesRef.current, jitterRef.current, sport)
       setRouteCoords(result.coords); setActualKm(result.actualKm); setStartCoord([lat, lon])
     } catch { setError('Kon geen route laden') }
     finally { setLoading(false) }
