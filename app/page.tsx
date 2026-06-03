@@ -90,12 +90,31 @@ function HeroActionCard({ nextWorkout, proteinLeft }: {
 
 // ─── Weather card ─────────────────────────────────────────────────────────────
 
+function buildWeatherText(weather: any): string {
+  const temp     = Math.round(Number(weather.temp))
+  const feels    = Math.round(Number(weather.feels_like))
+  const wind     = Math.round(Number(weather.windspeed))
+  const code     = Number(weather.weather_code)
+  const precip   = Number(weather.precipitation)
+  const uv       = Number(weather.uv_index_max)
+
+  if (code >= 95)
+    return `Thunderstorm expected — skip outdoor training today.`
+  if (code >= 51 || precip > 2)
+    return `Rain expected (${precip}mm) — consider training indoors.`
+  if (wind > 30)
+    return `Strong winds (${wind} km/h) — avoid cycling outdoors.`
+  if (uv > 7)
+    return `UV index ${uv.toFixed(1)} — protect yourself if training outdoors between 11:00–15:00.`
+  if (temp > 28)
+    return `It's warm (${temp}°C, feels like ${feels}°C) — hydrate well and train in the morning or evening.`
+  if (temp < 5)
+    return `Cold outside (${temp}°C, feels like ${feels}°C) — warm up well before training.`
+  return `${temp}°C with ${wind} km/h wind — good conditions for training today.`
+}
+
 function WeatherImpactCard({ weather }: { weather: any }) {
-  const temp = weather ? Math.round(Number(weather.temp)) : null
-  const wind = weather ? Math.round(Number(weather.windspeed)) : null
-  const desc = temp !== null
-    ? `It's ${temp}°C with ${wind} km/h wind. ${temp < 20 && (wind ?? 0) < 20 ? 'Good conditions for training today.' : 'Factor in the weather when planning your workout.'}`
-    : '–'
+  const desc = weather ? buildWeatherText(weather) : '–'
 
   return (
     <Card>
