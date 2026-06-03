@@ -104,8 +104,10 @@ async function fetchFoodData(date: string) {
 function formatDayLabel(dateStr: string) {
   const today = new Date().toISOString().split('T')[0]
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
   if (dateStr === today) return 'Vandaag'
   if (dateStr === yesterday) return 'Gisteren'
+  if (dateStr === tomorrow) return 'Morgen'
   return new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
 }
 
@@ -172,9 +174,7 @@ export function FoodClient() {
       setSelectedDate(d => {
         const date = new Date(d)
         date.setDate(date.getDate() + (dir === 'left' ? 1 : -1))
-        const result = date.toISOString().split('T')[0]
-        const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-        return result > tomorrow ? d : result
+        return date.toISOString().split('T')[0]
       })
       setSlideDir(null)
     }, 180)
