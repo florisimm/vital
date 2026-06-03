@@ -20,6 +20,12 @@ export function ProfileButton() {
   const router = useRouter()
 
   useEffect(() => {
+    const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
+    if (nav) nav.style.display = open ? 'none' : ''
+    return () => { if (nav) nav.style.display = '' }
+  }, [open])
+
+  useEffect(() => {
     if (!open) return
     const supabase = createClient()
 
