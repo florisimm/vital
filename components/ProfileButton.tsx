@@ -16,14 +16,13 @@ export function ProfileButton() {
   const [units, setUnits] = useState<Units>('metric')
   const [notifStatus, setNotifStatus] = useState<NotifStatus>('default')
   const [userId, setUserId] = useState<string | null>(null)
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [confirmDisconnect, setConfirmDisconnect] = useState<'strava' | 'google' | null>(null)
   const router = useRouter()
 
   useEffect(() => {
     if (!open) return
     const supabase = createClient()
 
-    // Notification permission status
     if ('Notification' in window) {
       setNotifStatus(Notification.permission as NotifStatus)
     } else {
@@ -36,7 +35,6 @@ export function ProfileButton() {
       setUserId(uid)
       if (!uid) return
 
-      // Connected services
       Promise.all([
         supabase.from('strava_tokens').select('id').eq('user_id', uid).limit(1),
         supabase.from('hevy_workouts').select('id').eq('user_id', uid).limit(1),
@@ -49,7 +47,6 @@ export function ProfileButton() {
         })
       })
 
-      // Units preference
       supabase.from('user_settings').select('units').eq('user_id', uid).single()
         .then(({ data }) => { if (data?.units) setUnits(data.units as Units) })
     })
@@ -67,11 +64,17 @@ export function ProfileButton() {
       `https://pzuhodpxqofgzdawoydq.supabase.co/functions/v1/google-calendar-auth?user_id=${userId}`
   }
 
-  async function disconnectGoogleCalendar() {
-    if (!userId) return
-    await createClient().from('google_tokens').delete().eq('user_id', userId)
-    setServices(s => s ? { ...s, google: false } : s)
-    setConfirmDisconnect(false)
+  async function handleDisconnect() {
+    if (!userId || !confirmDisconnect) return
+    const supabase = createClient()
+    if (confirmDisconnect === 'google') {
+      await supabase.from('google_tokens').delete().eq('user_id', userId)
+      setServices(s => s ? { ...s, google: false } : s)
+    } else if (confirmDisconnect === 'strava') {
+      await supabase.from('strava_tokens').delete().eq('user_id', userId)
+      setServices(s => s ? { ...s, strava: false } : s)
+    }
+    setConfirmDisconnect(null)
   }
 
   async function toggleUnits() {
@@ -96,6 +99,8 @@ export function ProfileButton() {
     : notifStatus === 'unsupported' ? 'N/A'
     : 'Ask'
 
+  const disconnectLabel = confirmDisconnect === 'strava' ? 'Strava' : 'Google Calendar'
+
   return (
     <>
       <button
@@ -109,7 +114,7 @@ export function ProfileButton() {
 
       {open && (
         <div
-          className="fixed inset-0 z-[70] flex flex-col"
+          className="fixed inset-0 z-[9999] flex flex-col"
           style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
           {/* Nav bar */}
@@ -148,18 +153,18 @@ export function ProfileButton() {
             {/* Connected Services */}
             <ProfileSection title="Connected Services">
               <ProfileRow separator>
-                <ServiceRow icon="🏋️" label="Hevy"
-                  connected={services?.hevy} />
+                <ServiceRow icon="🏋️" label="Hevy" connected={services?.hevy} />
               </ProfileRow>
               <ProfileRow separator>
                 <ServiceRow icon="🏃" label="Strava"
-                  connected={services?.strava} />
+                  connected={services?.strava}
+                  onDisconnect={services?.strava === true ? () => setConfirmDisconnect('strava') : undefined} />
               </ProfileRow>
               <ProfileRow>
                 <ServiceRow icon="📅" label="Google Calendar"
                   connected={services?.google}
                   onConnect={services?.google === false ? connectGoogleCalendar : undefined}
-                  onDisconnect={services?.google === true ? () => setConfirmDisconnect(true) : undefined} />
+                  onDisconnect={services?.google === true ? () => setConfirmDisconnect('google') : undefined} />
               </ProfileRow>
             </ProfileSection>
 
@@ -210,25 +215,25 @@ export function ProfileButton() {
       )}
 
       {confirmDisconnect && (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center pb-8 px-5"
+        <div className="fixed inset-0 z-[10000] flex items-end justify-center pb-8 px-5"
           style={{ background: 'rgba(0,0,0,0.6)' }}
-          onClick={() => setConfirmDisconnect(false)}
+          onClick={() => setConfirmDisconnect(null)}
         >
           <div className="w-full max-w-sm flex flex-col gap-3" onClick={e => e.stopPropagation()}>
             <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(30,30,30,0.98)' }}>
               <div className="px-5 pt-5 pb-4 text-center border-b border-white/[0.08]">
-                <p className="text-[17px] font-semibold text-white mb-1">Google Calendar loskoppelen</p>
-                <p className="text-[13px] text-white/50">Je agenda wordt niet meer gesynchroniseerd.</p>
+                <p className="text-[17px] font-semibold text-white mb-1">{disconnectLabel} loskoppelen</p>
+                <p className="text-[13px] text-white/50">Je data wordt niet meer gesynchroniseerd.</p>
               </div>
               <button
-                onClick={disconnectGoogleCalendar}
+                onClick={handleDisconnect}
                 className="w-full py-4 text-[17px] font-semibold text-red-400 text-center"
               >
                 Loskoppelen
               </button>
             </div>
             <button
-              onClick={() => setConfirmDisconnect(false)}
+              onClick={() => setConfirmDisconnect(null)}
               className="w-full py-4 rounded-[14px] text-[17px] font-semibold text-white text-center"
               style={{ background: 'rgba(30,30,30,0.98)' }}
             >
