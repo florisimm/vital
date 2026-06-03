@@ -809,6 +809,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
           carbs: Math.round((n.carbohydrates_100g ?? 0) * 10) / 10,
           fat: Math.round((n.fat_100g ?? 0) * 10) / 10,
+          servings: null,
         })
         setGrams('100')
         setView('detail')
