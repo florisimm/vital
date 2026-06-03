@@ -795,6 +795,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(null)
   const [servingMultiplier, setServingMultiplier] = useState('1')
   const [showServingPicker, setShowServingPicker] = useState(false)
+  const [showMealPicker, setShowMealPicker] = useState(false)
   const [meal, setMeal] = useState(preselectedMeal)
   const [saving, setSaving] = useState(false)
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
@@ -1330,17 +1331,35 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             )}
 
             {/* Meal picker */}
-            <div className="rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {MEAL_ORDER.map((m, i) => (
-                <button key={m} onClick={() => setMeal(m)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5"
-                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                  <span className="text-[18px] w-7 text-center">{MEAL_ICONS[m]}</span>
-                  <span className="flex-1 text-[15px] font-medium text-white text-left">{MEAL_LABELS[m] ?? m}</span>
-                  {meal === m && <span className="text-teal-400 text-[15px]">✓</span>}
-                </button>
-              ))}
-            </div>
+            <button onClick={() => setShowMealPicker(true)}
+              className="w-full flex flex-col px-4 py-3.5 rounded-[14px] text-left"
+              style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <span className="text-[12px] text-white/40 mb-0.5">Gegeten als</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-semibold text-white">{MEAL_LABELS[meal] ?? meal}</span>
+                <ChevronDown size={16} className="text-white/40" />
+              </div>
+            </button>
+
+            {showMealPicker && (
+              <div className="fixed inset-0 z-[200] flex flex-col justify-end"
+                style={{ background: 'rgba(0,0,0,0.5)' }}
+                onClick={() => setShowMealPicker(false)}>
+                <div className="rounded-t-[20px] overflow-hidden"
+                  style={{ background: 'rgb(28,28,30)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                  onClick={e => e.stopPropagation()}>
+                  {MEAL_ORDER.map((m, i) => (
+                    <button key={m} onClick={() => { setMeal(m); setShowMealPicker(false) }}
+                      className="w-full flex items-center gap-3 px-5 py-4"
+                      style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                      <span className="text-[18px] w-7 text-center">{MEAL_ICONS[m]}</span>
+                      <span className="flex-1 text-[17px] text-white text-left">{MEAL_LABELS[m] ?? m}</span>
+                      {meal === m && <Check size={18} className="text-teal-400" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Save */}
             <button onClick={handleSave} disabled={saving || !preview}
