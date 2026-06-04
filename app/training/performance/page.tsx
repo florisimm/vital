@@ -6,7 +6,7 @@ import { trainingFetcher } from '../fetcher'
 import { Card } from '@/components/ui'
 import {
   computePerformanceScore, computeFTP, estimateVO2max, extractKeyLifts,
-  computeMuscleRecovery, computeRaceProjections, startOfWeek,
+  computeRaceProjections, startOfWeek,
   type Activity, type HevyWorkout,
 } from '../sections'
 
@@ -74,7 +74,6 @@ export default function PerformancePage() {
   const lifts = extractKeyLifts(hevy)
   const strScore = computeStrengthScore(hevy)
   const hyroxScore = computeHyroxScore(activities, hevy)
-  const muscleRecovery = computeMuscleRecovery(hevy)
 
   const weekStart = startOfWeek()
   const weekWorkouts = [
@@ -84,9 +83,6 @@ export default function PerformancePage() {
 
   const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
   const hoursSince = allTimes.length ? (Date.now() - new Date(allTimes[0]).getTime()) / 3600000 : null
-  const fatigue = hoursSince !== null
-    ? hoursSince < 12 ? 80 : hoursSince < 24 ? 55 : hoursSince < 48 ? 25 : 10
-    : 10
 
   const recoveryPct = hoursSince !== null
     ? hoursSince < 12 ? 45 : hoursSince < 24 ? 65 : hoursSince < 48 ? 82 : 95
@@ -182,21 +178,13 @@ export default function PerformancePage() {
         />
       </div>
 
-      {/* Fatigue + Consistency */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Fatigue Level"
-          value={`${fatigue}%`}
-          sub={hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent workout'}
-          color={fatigue > 60 ? 'text-red-400' : fatigue > 30 ? 'text-yellow-400' : 'text-teal-400'}
-        />
-        <StatCard
-          label="Recovery"
-          value={`${recoveryPct}%`}
-          sub="Based on time since last session"
-          color={recoveryPct >= 85 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
-        />
-      </div>
+      {/* Recovery */}
+      <StatCard
+        label="Recovery"
+        value={`${recoveryPct}%`}
+        sub={hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent workout'}
+        color={recoveryPct >= 85 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
+      />
 
       {/* Consistency */}
       <Card>
@@ -231,26 +219,6 @@ export default function PerformancePage() {
         </Card>
       )}
 
-      {/* Muscle Recovery */}
-      <Card>
-        <div className="flex flex-col gap-4">
-          <span className="text-[15px] font-semibold text-white/50">Muscle Recovery</span>
-          {muscleRecovery.map(g => {
-            const c = g.recovery >= 80 ? '#4ade80' : g.recovery >= 50 ? '#facc15' : '#f87171'
-            return (
-              <div key={g.label} className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[15px] text-white">{g.label}</span>
-                  <span className="text-[13px] font-semibold" style={{ color: c }}>{g.recovery}%</span>
-                </div>
-                <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <div className="h-full rounded-full" style={{ width: `${g.recovery}%`, background: c }} />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </Card>
     </TrainingDetailScreen>
   )
 }
