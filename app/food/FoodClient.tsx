@@ -1034,6 +1034,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
         const n = p.nutriments ?? {}
         const servingQ = p.serving_quantity ? Math.round(Number(p.serving_quantity)) : null
         const servingLabel = p.serving_size ?? (servingQ ? `${servingQ}g` : null)
+        const servings: { label: string; amount_g: number }[] = []
+        if (servingQ && servingLabel) servings.push({ label: servingLabel, amount_g: servingQ })
         setSelected({
           id: 'barcode-' + barcode,
           name: p.product_name || p.product_name_nl || 'Unknown product',
@@ -1042,9 +1044,10 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
           carbs: Math.round((n.carbohydrates_100g ?? 0) * 10) / 10,
           fat: Math.round((n.fat_100g ?? 0) * 10) / 10,
-          servings: servingQ ? [{ label: servingLabel!, amount_g: servingQ }] : null,
+          servings,
         })
-        setGrams('100')
+        setSelectedServing(servings[0] ?? null)
+        setGrams(servingQ ? String(servingQ) : '100')
         setView('detail')
       } else {
         // Not found
@@ -1122,6 +1125,21 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     if (!selected || !preview) return
     setSaving(true)
     const supabase = createClient()
+
+    // Save barcode-scanned products to the user's own products table
+    if (selected.id.startsWith('barcode-')) {
+      await supabase.from('products').upsert({
+        user_id: userId,
+        name: selected.name,
+        brand: selected.brand ?? '',
+        kcal: selected.kcal,
+        protein: selected.protein,
+        carbs: selected.carbs,
+        fat: selected.fat,
+        servings: selected.servings?.length ? selected.servings : null,
+      }, { onConflict: 'user_id,name', ignoreDuplicates: true })
+    }
+
     const { data, error } = await supabase.from('food_log').insert({
       user_id: userId, date: today, meal_category: meal,
       food_name: selected.name, amount_g: Number(grams),
@@ -1407,9 +1425,9 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
         {/* ── Detail view ── */}
         {view === 'detail' && selected && (
           <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
-            {/* Portion selector — only when product has servings */}
-            {(selected.servings ?? []).length > 0 ? (() => {
-              const servings = selected.servings!
+            {/* Portion selector */}
+            {(() => {
+              const servings = selected.servings ?? []
               const GRAM_SERVING = { label: 'gram / ml', amount_g: 1 }
 
               function pickServing(s: { label: string; amount_g: number }) {
@@ -1470,23 +1488,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   )}
                 </>
               )
-            })() : (
-              /* No servings: plain gram stepper */
-              <div className="flex items-center justify-between py-3 px-4 rounded-[14px]"
-                style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 5)))}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-[22px] text-white"
-                  style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
-                <div className="flex items-baseline gap-1">
-                  <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
-                    className="text-[40px] font-bold text-white bg-transparent text-center outline-none w-24" />
-                  <span className="text-[18px] text-white/50">g</span>
-                </div>
-                <button onClick={() => setGrams(g => String(Number(g) + 5))}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-[22px] text-white"
-                  style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
-              </div>
-            )}
+            })()}
 
             {/* Macro preview */}
             {preview && (
