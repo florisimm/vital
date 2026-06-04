@@ -39,9 +39,11 @@ async function fetchTodayData() {
     supabase.from('calendar_events').select('id,title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
   ])
 
+  const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit', 'yoga', 'padel', 'hockey', 'basketbal', 'wielrennen']
   const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
     const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
-    return t >= now
+    if (t < now) return false
+    return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
   })
 
   return { weather, latestGezondheid: gezondheid, foodLog: foodLog ?? [], settings, calendarEvents: upcomingCalendar }
@@ -77,27 +79,27 @@ function nutritionInsight(today: any): Insight | null {
 
   if (pct >= 1.0) {
     status = 'good'
-    explanation = 'Eiwitdoel behaald'
-    trend = surplus > 0 ? `+${surplus}g boven target` : undefined
+    explanation = 'Protein goal reached'
+    trend = surplus > 0 ? `+${surplus}g above target` : undefined
   } else if (pct >= 0.85) {
     status = 'good'
-    explanation = `Nog ${Math.round(remaining)}g — bijna op schema`
-    trend = hour > 8 ? `Prognose: ~${Math.min(projected, Math.round(targetProtein * 1.1))}g einde dag` : undefined
+    explanation = `${Math.round(remaining)}g to go — almost there`
+    trend = hour > 8 ? `Projected: ~${Math.min(projected, Math.round(targetProtein * 1.1))}g end of day` : undefined
   } else if (pct >= 0.5) {
     status = 'warning'
     explanation = projected >= targetProtein
-      ? `Op schema — nog ${Math.round(remaining)}g te gaan`
-      : `Nog ${Math.round(remaining)}g te gaan — eet extra eiwit`
-    trend = hour > 8 ? `Prognose: ~${Math.min(projected, Math.round(targetProtein * 1.1))}g einde dag` : undefined
+      ? `On track — ${Math.round(remaining)}g to go`
+      : `${Math.round(remaining)}g to go — eat more protein`
+    trend = hour > 8 ? `Projected: ~${Math.min(projected, Math.round(targetProtein * 1.1))}g end of day` : undefined
   } else {
     status = 'alert'
-    explanation = `Nog ${Math.round(remaining)}g te gaan — eiwitinname loopt achter`
-    trend = hour > 8 ? `Prognose: ~${projected}g einde dag` : undefined
+    explanation = `${Math.round(remaining)}g to go — protein intake behind schedule`
+    trend = hour > 8 ? `Projected: ~${projected}g end of day` : undefined
   }
 
   return {
     id: 'nutrition',
-    title: 'Eiwit',
+    title: 'Protein',
     value: `${Math.round(totalProtein)}`,
     unit: `/ ${targetProtein}g`,
     status,
@@ -125,10 +127,10 @@ function trainingInsight(training: any): Insight | null {
     return {
       id: 'training',
       title: 'Training Momentum',
-      value: 'Geen data',
+      value: 'No data',
       unit: '',
       status: 'alert',
-      explanation: 'Geen recente training gevonden',
+      explanation: 'No recent training found',
       href: '/training',
       priority: 65,
     }
@@ -139,20 +141,20 @@ function trainingInsight(training: any): Insight | null {
   const status: InsightStatus = daysSince <= 1 ? 'good' : daysSince <= 3 ? 'warning' : 'alert'
 
   const momentumLabel =
-    daysSince === 0 ? 'Vandaag actief'
-    : weekCount >= 3 ? 'Sterk ritme'
-    : weekCount >= 2 && daysSince <= 2 ? 'Op koers'
-    : daysSince === 1 ? 'Goed herstel'
-    : `${daysSince}d rust`
+    daysSince === 0 ? 'Active today'
+    : weekCount >= 3 ? 'Strong rhythm'
+    : weekCount >= 2 && daysSince <= 2 ? 'On track'
+    : daysSince === 1 ? 'Good recovery'
+    : `${daysSince}d rest`
 
   const explanation =
-    daysSince === 0 ? 'Al getraind vandaag — herstel staat centraal'
-    : daysSince === 1 ? 'Gisteren getraind — herstel loopt goed'
-    : weekCount >= 3 ? `${weekCount} sessies deze week — sterke consistentie`
-    : daysSince <= 3 ? `${daysSince} dagen zonder training`
-    : `${daysSince} dagen zonder training — plan een sessie`
+    daysSince === 0 ? 'Already trained today — focus on recovery'
+    : daysSince === 1 ? 'Trained yesterday — recovery on track'
+    : weekCount >= 3 ? `${weekCount} sessions this week — great consistency`
+    : daysSince <= 3 ? `${daysSince} days without training`
+    : `${daysSince} days without training — plan a session`
 
-  const lastLabel = daysSince === 0 ? 'vandaag' : daysSince === 1 ? 'gisteren' : `${daysSince} dagen geleden`
+  const lastLabel = daysSince === 0 ? 'today' : daysSince === 1 ? 'yesterday' : `${daysSince} days ago`
 
   return {
     id: 'training',
@@ -161,7 +163,7 @@ function trainingInsight(training: any): Insight | null {
     unit: '',
     status,
     explanation,
-    trend: `Laatste training: ${lastLabel}`,
+    trend: `Last workout: ${lastLabel}`,
     href: '/training',
     priority: status === 'alert' ? 65 : status === 'warning' ? 50 : 40,
   }
@@ -179,19 +181,19 @@ function activityInsight(today: any): Insight | null {
 
   const status: InsightStatus = pct >= 1 ? 'good' : pct >= 0.6 ? 'warning' : 'alert'
   const explanation = pct >= 1
-    ? 'Dagtarget bereikt — goed gedaan'
+    ? 'Daily goal reached — great job'
     : projected >= stepGoal
-    ? `Op koers — nog ${(stepGoal - stappen).toLocaleString('nl-NL')} stappen`
-    : `${(stepGoal - stappen).toLocaleString('nl-NL')} stappen tot dagtarget`
+    ? `On track — ${(stepGoal - stappen).toLocaleString('en')} steps to go`
+    : `${(stepGoal - stappen).toLocaleString('en')} steps to daily goal`
 
   return {
     id: 'activity',
-    title: 'Stappen',
-    value: stappen.toLocaleString('nl-NL'),
+    title: 'Steps',
+    value: stappen.toLocaleString('en'),
     unit: '',
     status,
     explanation,
-    trend: hour > 8 && projected < stepGoal * 1.5 ? `Prognose: ~${projected.toLocaleString('nl-NL')}` : undefined,
+    trend: hour > 8 && projected < stepGoal * 1.5 ? `Projected: ~${projected.toLocaleString('en')}` : undefined,
     href: '/health/activity',
     priority: status === 'alert' ? 45 : status === 'warning' ? 35 : 25,
   }
@@ -211,18 +213,18 @@ function weightInsight(gezondheid: any[]): Insight | null {
   const projected7 = current + dailyDelta * 7
 
   const trend = Math.abs(dailyDelta) < 0.02
-    ? 'Gewicht stabiel'
+    ? 'Weight stable'
     : dailyDelta < 0
-    ? `↓ ${Math.abs(dailyDelta * 7).toFixed(1)}kg in 7 dagen verwacht`
-    : `↑ ${(dailyDelta * 7).toFixed(1)}kg in 7 dagen verwacht`
+    ? `↓ ${Math.abs(dailyDelta * 7).toFixed(1)}kg expected in 7 days`
+    : `↑ ${(dailyDelta * 7).toFixed(1)}kg expected in 7 days`
 
   return {
     id: 'weight',
-    title: 'Gewicht',
+    title: 'Weight',
     value: current.toFixed(1),
     unit: 'kg',
     status: 'neutral',
-    explanation: `Over 7 dagen: ~${projected7.toFixed(1)} kg`,
+    explanation: `In 7 days: ~${projected7.toFixed(1)} kg`,
     trend,
     href: '/health/weight',
     priority: 55,
@@ -247,22 +249,22 @@ function weatherInsight(weather: any): Insight | null {
 
   if (code >= 95) {
     status = 'alert'
-    explanation = 'Onweer — geen buiten training vandaag'
+    explanation = 'Thunderstorm — skip outdoor training today'
   } else if (precip > 3) {
-    explanation = `Regen (${precip}mm) — overweeg binnen te trainen`
+    explanation = `Rain (${precip}mm) — consider training indoors`
   } else if (wind > 25) {
-    explanation = `Harde wind (${wind} km/u) — vermijd fietsen buiten`
+    explanation = `Strong wind (${wind} km/h) — avoid cycling outdoors`
   } else if (temp < 0) {
-    explanation = `Vriesweer (${temp}°C) — warm goed op voor training`
+    explanation = `Freezing (${temp}°C) — warm up well before training`
   } else if (temp > 28) {
-    explanation = `Warm (${temp}°C) — train vroeg of 's avonds`
+    explanation = `Hot (${temp}°C) — train early or in the evening`
   } else {
-    explanation = `Hoge UV — bescherm jezelf tussen 11:00–15:00`
+    explanation = `High UV — protect yourself between 11:00–15:00`
   }
 
   return {
     id: 'weather',
-    title: 'Weer',
+    title: 'Weather',
     value: `${temp}°C`,
     unit: '',
     status,
@@ -286,7 +288,7 @@ function calendarInsight(calendarEvents: any[]): Insight | null {
   if (!isToday && !isTomorrow) return null
 
   const time = next.start_datetime
-    ? new Date(next.start_datetime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    ? new Date(next.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
     : null
 
   // Countdown for today's events
@@ -294,23 +296,23 @@ function calendarInsight(calendarEvents: any[]): Insight | null {
   if (isToday && next.start_datetime) {
     const msUntil = eventDate.getTime() - now.getTime()
     if (msUntil <= 0) {
-      trend = 'Nu bezig'
+      trend = 'In progress'
     } else {
       const h = Math.floor(msUntil / 3600000)
       const m = Math.floor((msUntil % 3600000) / 60000)
-      trend = h > 0 ? `Over ${h}u ${m}m` : `Over ${m}m`
+      trend = h > 0 ? `In ${h}h ${m}m` : `In ${m}m`
     }
   } else {
-    trend = 'Morgen gepland'
+    trend = 'Planned tomorrow'
   }
 
   return {
     id: 'calendar',
-    title: 'Volgende Training',
+    title: 'Next Training',
     value: next.title,
     unit: '',
     status: 'neutral',
-    explanation: time ? `Gepland om ${time}` : (isToday ? 'Vandaag gepland' : 'Morgen gepland'),
+    explanation: time ? `Scheduled at ${time}` : (isToday ? 'Today' : 'Tomorrow'),
     trend,
     href: `/training/session?title=${encodeURIComponent(next.title)}&time=${encodeURIComponent(next.start_datetime ?? '')}`,
     priority: isToday ? 100 : 65,
@@ -358,13 +360,13 @@ function buildBriefing(insights: Insight[], today: any): string {
 
   // Collect positive facts for state sentence
   const positives: string[] = []
-  if (proteinAchieved) positives.push('je eiwitdoel is al bereikt')
-  if (trainI?.status === 'good') positives.push('je trainingsweek loopt goed')
+  if (proteinAchieved) positives.push('protein goal already reached')
+  if (trainI?.status === 'good') positives.push('training week is going well')
 
   // Collect what needs attention
   const needsAttention: string[] = []
-  if (!proteinAchieved && nutriI?.status === 'alert') needsAttention.push(`eiwitinname loopt achter (${proteinLeft}g te gaan)`)
-  if (trainI?.status === 'alert') needsAttention.push('je hebt al een tijdje niet getraind')
+  if (!proteinAchieved && nutriI?.status === 'alert') needsAttention.push(`protein intake behind (${proteinLeft}g to go)`)
+  if (trainI?.status === 'alert') needsAttention.push("you haven't trained in a while")
   if (weatherI) needsAttention.push(weatherI.explanation.toLowerCase())
 
   // 1. State sentence
@@ -373,31 +375,31 @@ function buildBriefing(insights: Insight[], today: any): string {
     const item = needsAttention[0]
     state = item.charAt(0).toUpperCase() + item.slice(1)
   } else if (positives.length >= 2) {
-    state = positives.slice(0, -1).join(', ') + ' en ' + positives[positives.length - 1]
+    state = positives.slice(0, -1).join(', ') + ' and ' + positives[positives.length - 1]
     state = state.charAt(0).toUpperCase() + state.slice(1)
   } else if (positives.length === 1) {
     state = positives[0].charAt(0).toUpperCase() + positives[0].slice(1)
   } else {
-    state = 'Je zit op koers vandaag'
+    state = "You're on track today"
   }
 
   // 2. Action sentence
   let action: string
   if (!proteinAchieved && nutriI && proteinLeft > 15) {
-    action = `Focus op nog ${proteinLeft}g eiwit voor optimaal herstel`
+    action = `Focus on ${proteinLeft}g more protein for optimal recovery`
   } else if (trainI?.status === 'alert') {
-    action = 'Plan vandaag of morgen een training om je schema bij te houden'
+    action = 'Plan a workout today or tomorrow to stay on track'
   } else if (nextIsToday && nextEvent) {
     const t = nextEvent.start_datetime
-      ? new Date(nextEvent.start_datetime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+      ? new Date(nextEvent.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
       : null
-    action = t ? `Bereid je voor op ${nextEvent.title} om ${t}` : `Bereid je voor op ${nextEvent.title} vandaag`
+    action = t ? `Prepare for ${nextEvent.title} at ${t}` : `Prepare for ${nextEvent.title} today`
   } else if (nextIsTomorrow && nextEvent) {
-    action = `Focus op herstel zodat je klaar bent voor ${nextEvent.title} morgen`
+    action = `Focus on recovery to be ready for ${nextEvent.title} tomorrow`
   } else if (!proteinAchieved && proteinLeft > 10) {
-    action = `Eet nog ${proteinLeft}g eiwit voor het einde van de dag`
+    action = `Eat ${proteinLeft}g more protein before end of day`
   } else {
-    action = 'Blijf consistent en geniet van de dag'
+    action = 'Stay consistent and enjoy the day'
   }
 
   return `${state}. ${action}.`
