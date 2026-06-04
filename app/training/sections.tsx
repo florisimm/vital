@@ -1657,11 +1657,9 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
               const day = i + 1
               const isToday = day === todayDay
               const types = workoutDays.get(day)
-              const hasWorkout = !!types && types.size > 0
-              const primary: 'run' | 'ride' | 'strength' | null = hasWorkout
-                ? (types!.has('run') ? 'run' : types!.has('ride') ? 'ride' : 'strength')
-                : null
-              const secondaryTypes = primary ? Array.from(types!).filter(t => t !== primary) : []
+              const count = types?.size ?? 0
+              const hasWorkout = count > 0
+              const dotColor = count >= 3 ? '#fb923c' : count === 2 ? '#60a5fa' : '#2dd4bf'
               return (
                 <div key={day} className="h-[42px] flex flex-col items-center justify-center gap-[2px]">
                   <div
@@ -1670,7 +1668,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
                       isToday && !hasWorkout
                         ? { background: 'white' }
                         : hasWorkout
-                          ? { background: calTypeColor(primary!) }
+                          ? { background: dotColor }
                           : {}
                     }
                   >
@@ -1689,10 +1687,10 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
             })}
           </div>
           <div className="flex gap-4 pt-2 border-t border-white/[0.06]">
-            {([['Run', '#2dd4bf'], ['Ride', '#60a5fa'], ['Strength', '#fb923c']] as const).map(([label, color]) => (
+            {([['1', '#2dd4bf'], ['2', '#60a5fa'], ['3+', '#fb923c']] as const).map(([label, color]) => (
               <div key={label} className="flex items-center gap-1.5">
                 <div className="w-[8px] h-[8px] rounded-full" style={{ background: color }} />
-                <span className="text-[11px] text-white/40">{label}</span>
+                <span className="text-[11px] text-white/40">{label} workout{label === '1' ? '' : 's'}</span>
               </div>
             ))}
           </div>
