@@ -399,7 +399,15 @@ const MACRO_LABEL: Record<MacroKey, string> = { kcal: 'Calorieën', protein: 'Ei
 const MACRO_UNIT: Record<MacroKey, string>  = { kcal: 'kcal', protein: 'g', carbs: 'g', fat: 'g' }
 
 function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log: FoodLogEntry[]; onClose: () => void }) {
-  const sorted = [...log].sort((a, b) => Number(b[macro] ?? 0) - Number(a[macro] ?? 0))
+  const groups = MEAL_ORDER
+    .map(meal => ({
+      meal,
+      items: log
+        .filter(e => e.meal_category === meal)
+        .sort((a, b) => Number(b[macro] ?? 0) - Number(a[macro] ?? 0)),
+    }))
+    .filter(g => g.items.length > 0)
+
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="flex items-center justify-between px-5 py-4 shrink-0">
@@ -407,20 +415,41 @@ function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log: FoodLo
         <span className="text-[17px] font-semibold text-white">{MACRO_LABEL[macro]}</span>
         <button onClick={onClose} className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold">Klaar</button>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-2">
-        {sorted.length === 0 ? (
+      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5">
+        {groups.length === 0 ? (
           <p className="text-white/40 text-[15px] text-center mt-10">Nog niets gelogd vandaag</p>
-        ) : sorted.map((item, i) => (
-          <div key={item.id ?? i} className="flex items-center justify-between px-4 py-3.5 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.07)' }}>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[16px] font-semibold text-white">{item.food_name}</span>
-              <span className="text-[13px] text-white/40">{MEAL_LABELS[item.meal_category] ?? item.meal_category} · {item.amount_g}g</span>
+        ) : groups.map(({ meal, items }) => {
+          const groupTotal = items.reduce((s, e) => s + Number(e[macro] ?? 0), 0)
+          return (
+            <div key={meal} className="flex flex-col gap-2">
+              {/* Group header */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[13px] font-semibold text-white/50 uppercase tracking-wider">
+                  {MEAL_ICONS[meal]} {MEAL_LABELS[meal] ?? meal}
+                </span>
+                <span className="text-[13px] font-semibold text-white/50">
+                  {Math.round(groupTotal)}{MACRO_UNIT[macro]}
+                </span>
+              </div>
+              {/* Items */}
+              <div className="rounded-[14px] overflow-hidden flex flex-col" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                {items.map((item, i) => (
+                  <div key={item.id ?? i}
+                    className="flex items-center justify-between px-4 py-3.5"
+                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[15px] font-semibold text-white">{item.food_name}</span>
+                      {item.amount_g ? <span className="text-[12px] text-white/40">{item.amount_g}g</span> : null}
+                    </div>
+                    <span className="text-[17px] font-bold text-white shrink-0 ml-3">
+                      {Math.round(Number(item[macro] ?? 0))}<span className="text-[13px] text-white/50 font-medium ml-0.5">{MACRO_UNIT[macro]}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <span className="text-[17px] font-bold text-white shrink-0 ml-3">
-              {Math.round(Number(item[macro] ?? 0))}<span className="text-[13px] text-white/50 font-medium ml-0.5">{MACRO_UNIT[macro]}</span>
-            </span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
