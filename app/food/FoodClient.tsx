@@ -435,15 +435,13 @@ function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log: FoodLo
               <div className="rounded-[14px] overflow-hidden flex flex-col" style={{ background: 'rgba(255,255,255,0.07)' }}>
                 {items.map((item, i) => (
                   <div key={item.id ?? i}
-                    className="flex items-center justify-between px-4 py-3.5"
+                    className="px-4 py-3.5"
                     style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[15px] font-semibold text-white">{item.food_name}</span>
-                      {item.amount_g ? <span className="text-[12px] text-white/40">{item.amount_g}g</span> : null}
-                    </div>
-                    <span className="text-[17px] font-bold text-white shrink-0 ml-3">
-                      {Math.round(Number(item[macro] ?? 0))}<span className="text-[13px] text-white/50 font-medium ml-0.5">{MACRO_UNIT[macro]}</span>
-                    </span>
+                    <span className="text-[15px] font-semibold text-white">{item.food_name}</span>
+                    <p className="text-[13px] text-white/40 mt-0.5">
+                      {item.amount_g ? `${item.amount_g}g • ` : ''}
+                      {Math.round(Number(item[macro] ?? 0))} {MACRO_UNIT[macro]}
+                    </p>
                   </div>
                 ))}
               </div>
