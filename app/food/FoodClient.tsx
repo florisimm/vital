@@ -1410,12 +1410,15 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             {/* Portion selector — only when product has servings */}
             {(selected.servings ?? []).length > 0 ? (() => {
               const servings = selected.servings!
+              const GRAM_SERVING = { label: 'gram / ml', amount_g: 1 }
 
-              function pickServing(s: { label: string; amount_g: number } | null) {
+              function pickServing(s: { label: string; amount_g: number }) {
                 setSelectedServing(s)
                 setShowServingPicker(false)
-                if (s) setGrams(String(Math.round(Number(servingMultiplier) * s.amount_g)))
+                setGrams(String(Math.round(Number(servingMultiplier) * s.amount_g)))
               }
+
+              const active = selectedServing ?? servings[0]
 
               return (
                 <>
@@ -1426,7 +1429,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                       <input type="number" inputMode="decimal" value={servingMultiplier}
                         onChange={e => {
                           setServingMultiplier(e.target.value)
-                          if (selectedServing) setGrams(String(Math.round(Number(e.target.value) * selectedServing.amount_g)))
+                          setGrams(String(Math.round(Number(e.target.value) * active.amount_g)))
                         }}
                         className="text-[22px] font-bold text-white bg-transparent text-center outline-none w-12" />
                       <span className="text-[15px] text-white/50">x</span>
@@ -1435,9 +1438,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                     <button onClick={() => setShowServingPicker(true)}
                       className="flex-1 flex items-center justify-between px-4 py-4 rounded-[14px]"
                       style={{ background: 'rgba(255,255,255,0.08)' }}>
-                      <span className="text-[16px] font-medium text-white">
-                        {selectedServing ? selectedServing.label : servings[0].label}
-                      </span>
+                      <span className="text-[16px] font-medium text-white">{active.label}</span>
                       <ChevronDown size={16} className="text-white/40" />
                     </button>
                   </div>
@@ -1455,14 +1456,14 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                             className="w-full flex items-center justify-between px-5 py-4"
                             style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
                             <span className="text-[17px] text-white">{s.label}</span>
-                            {(selectedServing ?? servings[0]).label === s.label && <Check size={18} className="text-teal-400" />}
+                            {active.label === s.label && <Check size={18} className="text-teal-400" />}
                           </button>
                         ))}
-                        <button onClick={() => pickServing(null)}
+                        <button onClick={() => pickServing(GRAM_SERVING)}
                           className="w-full flex items-center justify-between px-5 py-4"
                           style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                           <span className="text-[17px] text-white">gram / ml</span>
-                          {!selectedServing && <Check size={18} className="text-teal-400" />}
+                          {active.label === GRAM_SERVING.label && <Check size={18} className="text-teal-400" />}
                         </button>
                       </div>
                     </div>
