@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { Card, SectionHeader, MinimalWorkoutList } from '@/components/ui'
+import { Card, SectionHeader } from '@/components/ui'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -347,87 +347,86 @@ function buildStrengthInsight(hevy: HevyWorkout[]): string {
   return text
 }
 
-function buildCrossInsights(
+function buildTopInsights(
   activities: Activity[],
   hevy: HevyWorkout[],
   gezondheid: { datum: string; stappen: number; gewicht: number }[] | null,
   foodData: { foodLog: any[]; targets: any } | null
 ): string[] {
   const insights: string[] = []
-
   const today = new Date().toISOString().split('T')[0]
   const weekStart = startOfWeek()
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const fifteenDaysAgo = new Date(Date.now() - 15 * 86400000).toISOString()
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
 
   const { score, loadRatio } = computePerformanceScore(activities, hevy)
 
-  // Weight 7-day trend
+  // Running volume change week-over-week
+  const vol7 = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const vol14to7 = activities.filter(a => isRun(a) && a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  if (vol14to7 > 0 && vol7 > 0) {
+    const pct = Math.round((vol7 - vol14to7) / vol14to7 * 100)
+    if (Math.abs(pct) >= 20) {
+      insights.push(pct > 0 ? `Loopvolume steeg ${pct}% t.o.v. vorige week.` : `Loopvolume daalde ${Math.abs(pct)}% t.o.v. vorige week.`)
+    }
+  }
+
+  // Consistency signal
+  const recent14 = [...activities.filter(a => a.start_date >= fourteenDaysAgo), ...hevy.filter(h => h.start_time >= fourteenDaysAgo)]
+  const consistencyPct = Math.min(Math.round((recent14.length / 6) * 100), 100)
+  if (consistencyPct === 100 && insights.length < 3) {
+    insights.push('Consistency blijft 100% — uitstekende trainingsregelmaat.')
+  }
+
+  // Weight + performance
   const withWeight = (gezondheid ?? []).filter(g => g.gewicht && Number(g.gewicht) > 0)
   let weightDelta: number | null = null
   if (withWeight.length >= 4) {
-    const recent = withWeight.slice(0, Math.min(7, Math.floor(withWeight.length / 2)))
-    const older = withWeight.slice(Math.min(7, Math.floor(withWeight.length / 2)))
+    const half = Math.min(7, Math.floor(withWeight.length / 2))
+    const recent = withWeight.slice(0, half)
+    const older = withWeight.slice(half)
     if (recent.length > 0 && older.length > 0) {
-      const recentAvg = recent.reduce((s, g) => s + Number(g.gewicht), 0) / recent.length
-      const olderAvg = older.reduce((s, g) => s + Number(g.gewicht), 0) / older.length
-      weightDelta = recentAvg - olderAvg
+      weightDelta = recent.reduce((s, g) => s + Number(g.gewicht), 0) / recent.length
+        - older.reduce((s, g) => s + Number(g.gewicht), 0) / older.length
     }
   }
-
-  // Today's nutrition
-  const todayProtein = (foodData?.foodLog ?? []).reduce((s: number, f: any) => s + (Number(f.protein) || 0), 0)
-  const proteinTarget = Number(foodData?.targets?.protein) || 0
-
-  // Today's activity
-  const hasTodayActivity = activities.some(a => a.start_date.startsWith(today)) ||
-    hevy.some(h => h.start_time.startsWith(today))
-
-  // Week strength count for recovery signal
-  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
-
-  // Recovery proxy
-  const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
-  const hoursSinceLast = allTimes.length ? (Date.now() - new Date(allTimes[0]).getTime()) / 3600000 : null
-  const recoveryPct = hoursSinceLast !== null
-    ? hoursSinceLast < 12 ? 45 : hoursSinceLast < 24 ? 65 : hoursSinceLast < 48 ? 82 : 95
-    : 95
-
-  // Load trend (15-day comparison)
-  const fifteenDaysAgo = new Date(Date.now() - 15 * 86400000).toISOString()
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-  const earlyKj = activities.filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
-  const lateKj = activities.filter(a => a.start_date >= fifteenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
-  const loadTrend = earlyKj > 0 ? (lateKj - earlyKj) / earlyKj * 100 : 0
-
-  // Rule 1: weight dropping + performance rising
-  if (weightDelta !== null && weightDelta < -0.3 && score >= 65) {
+  if (weightDelta !== null && weightDelta < -0.3 && score >= 65 && insights.length < 3) {
     insights.push('Gewicht daalt terwijl prestaties stijgen.')
   }
 
-  // Rule 2: high strength frequency hurting recovery
-  if (weekStrength >= 4 && recoveryPct < 70) {
-    insights.push('Hoge trainingsfrequentie deze week verlaagt herstel.')
+  // High strength frequency → recovery impact
+  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
+  const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
+  const hoursSinceLast = allTimes.length ? (Date.now() - new Date(allTimes[0]).getTime()) / 3600000 : null
+  const recPct = hoursSinceLast !== null ? (hoursSinceLast < 12 ? 45 : hoursSinceLast < 24 ? 65 : hoursSinceLast < 48 ? 82 : 95) : 95
+  if (weekStrength >= 4 && recPct < 70 && insights.length < 3) {
+    insights.push(`Herstel verlaagd door ${weekStrength} krachttrainingen deze week.`)
   }
 
-  // Rule 3: protein gap on training day
-  if (hasTodayActivity && proteinTarget > 0) {
-    if (todayProtein / proteinTarget < 0.75) {
-      insights.push('Actieve trainingsdag — eiwitdoel nog niet behaald.')
-    } else if (todayProtein / proteinTarget >= 1.0 && insights.length < 2) {
-      insights.push('Eiwitdoel gehaald op een actieve trainingsdag.')
-    }
+  // Protein gap on training day
+  const hasTodayActivity = activities.some(a => a.start_date.startsWith(today)) || hevy.some(h => h.start_time.startsWith(today))
+  const todayProtein = (foodData?.foodLog ?? []).reduce((s: number, f: any) => s + (Number(f.protein) || 0), 0)
+  const proteinTarget = Number(foodData?.targets?.protein) || 0
+  if (hasTodayActivity && proteinTarget > 0 && todayProtein / proteinTarget < 0.75 && insights.length < 3) {
+    insights.push('Actieve trainingsdag — eiwitdoel nog niet behaald.')
   }
 
-  // Rule 4: low load week
-  if (loadRatio < 0.6 && activities.length > 0 && insights.length < 2) {
+  // Low load week
+  if (loadRatio < 0.6 && activities.length > 0 && insights.length < 3) {
     insights.push('Trainingsbelasting deze week lager dan vorige week.')
   }
 
-  // Rule 5: building load + stable weight
-  if (loadTrend > 10 && weightDelta !== null && Math.abs(weightDelta) < 0.2 && insights.length < 2) {
+  // Building load + stable weight
+  const earlyKjCheck = activities.filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+  const lateKjCheck = activities.filter(a => a.start_date >= fifteenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+  const loadTrendPct = earlyKjCheck > 0 ? (lateKjCheck - earlyKjCheck) / earlyKjCheck * 100 : 0
+  if (loadTrendPct > 10 && weightDelta !== null && Math.abs(weightDelta) < 0.2 && insights.length < 3) {
     insights.push('Trainingsvolume stijgt terwijl gewicht stabiel blijft.')
   }
 
-  return insights.slice(0, 2)
+  return insights.slice(0, 3)
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -476,43 +475,6 @@ export function ZoneBar({ label, percent, color }: { label: string; percent: num
         <div className="h-full rounded-full" style={{ width: `${percent * 100}%`, background: color }} />
       </div>
     </div>
-  )
-}
-
-function CrossInsightCard({ insights }: { insights: string[] }) {
-  if (insights.length === 0) return null
-  return (
-    <Card>
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-teal-400 text-[14px]">↗</span>
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Training & Gezondheid</span>
-        </div>
-        <div className="flex flex-col gap-2">
-          {insights.map((insight, i) => (
-            <p key={i} className="text-[15px] text-white/85 leading-relaxed">{insight}</p>
-          ))}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function PredictiveCard({ title, value, label, context, dotColor }: {
-  title: string; value: string; label: string; context: string; dotColor: string
-}) {
-  return (
-    <Card className="flex-1">
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">{title}</span>
-        <span className="text-[28px] font-bold text-white leading-none">{value}</span>
-        <div className="flex items-center gap-1.5">
-          <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: dotColor }} />
-          <span className="text-[13px] font-semibold text-white">{label}</span>
-        </div>
-        <span className="text-[12px] text-white/40 leading-snug">{context}</span>
-      </div>
-    </Card>
   )
 }
 
@@ -568,91 +530,343 @@ function ActivityDetailSheet({ title, rows, onClose }: { title: string; rows: De
   )
 }
 
+function computeTodaysFocus(
+  activities: Activity[],
+  hevy: HevyWorkout[],
+  calendarEvents: any[],
+  recoveryPct: number,
+  perf: { score: number; label: string; color: string; loadRatio: number }
+): { emoji: string; label: string; sub: string } {
+  const weekStart = startOfWeek()
+  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
+  const weekRuns = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
+
+  if (recoveryPct < 50 || perf.loadRatio > 1.4) {
+    return {
+      emoji: '😴',
+      label: 'Hersteldag',
+      sub: perf.loadRatio > 1.4 ? 'Trainingsbelasting is hoog — rust aangeraden' : 'Lichaam heeft rust nodig',
+    }
+  }
+
+  const now = new Date().toISOString()
+  const threeDaysAhead = new Date(Date.now() + 3 * 86400000).toISOString()
+  const nextEvent = (calendarEvents ?? [])
+    .filter((e: any) => { const dt = e.start_datetime || e.start_date; return dt >= now && dt <= threeDaysAhead })
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
+
+  if (nextEvent) {
+    const title = (nextEvent.title ?? '') as string
+    const tl = title.toLowerCase()
+    const dateStr = nextEvent.start_datetime || nextEvent.start_date
+    const when = new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
+    const time = nextEvent.start_datetime
+      ? ' · ' + new Date(nextEvent.start_datetime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+      : ''
+    if (tl.includes('strength') || tl.includes('gym') || tl.includes('kracht') || tl.includes('push') || tl.includes('pull') || tl.includes('legs')) {
+      return { emoji: '💪', label: title, sub: when + time }
+    }
+    if (tl.includes('run') || tl.includes('loop') || tl.includes('tempo') || tl.includes('interval') || tl.includes('hardloop')) {
+      return { emoji: '🏃', label: title, sub: when + time }
+    }
+    if (tl.includes('ride') || tl.includes('fiet') || tl.includes('cycl') || tl.includes('bike')) {
+      return { emoji: '🚴', label: title, sub: when + time }
+    }
+    return { emoji: '📅', label: title, sub: when + time }
+  }
+
+  if (recoveryPct >= 82 && perf.score >= 70) {
+    return weekRuns <= weekStrength
+      ? { emoji: '🏃', label: 'Tempo Run Aangeraden', sub: 'Herstel optimaal · prestaties op niveau' }
+      : { emoji: '💪', label: 'Krachttraining Aangeraden', sub: 'Herstel optimaal · prestaties op niveau' }
+  }
+  if (recoveryPct >= 65) {
+    return weekStrength < 2
+      ? { emoji: '💪', label: 'Gym Session Aangeraden', sub: 'Krachttraining dit week nog beperkt' }
+      : { emoji: '🚴', label: 'Recovery Ride Aangeraden', sub: 'Gemiddeld herstel · lichte training aangeraden' }
+  }
+  return { emoji: '🏃', label: 'Lichte Run Aangeraden', sub: 'Herstel aan de gang · rustig tempo aangeraden' }
+}
+
+function computeRecoveryDetail(
+  activities: Activity[],
+  hevy: HevyWorkout[]
+): { pct: number; label: string; factors: string[] } {
+  const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
+  if (allTimes.length === 0) {
+    return { pct: 95, label: 'Volledig hersteld', factors: ['Geen recente trainingen gevonden'] }
+  }
+  const hoursSinceLast = (Date.now() - new Date(allTimes[0]).getTime()) / 3600000
+  let pct = hoursSinceLast < 12 ? 45 : hoursSinceLast < 24 ? 65 : hoursSinceLast < 48 ? 82 : 95
+
+  const weekStart = startOfWeek()
+  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
+  const weekActivity = activities.filter(a => a.start_date >= weekStart).length
+  const weekTotal = weekStrength + weekActivity
+
+  const factors: string[] = []
+  const h = Math.round(hoursSinceLast)
+  factors.push(h < 24 ? `Laatste training: ${h}u geleden` : `Laatste training: ${Math.round(hoursSinceLast / 24)}d geleden`)
+
+  if (weekStrength >= 4) {
+    pct = Math.round(pct * 0.85)
+    factors.push(`${weekStrength} krachttrainingen dit week verlagen herstel`)
+  } else if (weekTotal >= 6) {
+    pct = Math.round(pct * 0.90)
+    factors.push(`Hoge trainingsfrequentie: ${weekTotal} sessies dit week`)
+  } else {
+    factors.push(`${weekTotal} sessie${weekTotal !== 1 ? 's' : ''} voltooid dit week`)
+  }
+
+  pct = Math.min(95, Math.max(15, pct))
+  const label = pct >= 82 ? 'Klaar voor training' : pct >= 65 ? 'Aan het herstellen' : 'Rust aangeraden'
+  return { pct, label, factors }
+}
+
+function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub: string } }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-4">
+        <span className="text-[36px] leading-none">{focus.emoji}</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Focus Vandaag</span>
+          <span className="text-[17px] font-semibold text-white leading-snug">{focus.label}</span>
+          <span className="text-[13px] text-white/50">{focus.sub}</span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function PerformanceHeroCard({ perf }: { perf: { score: number; label: string; color: string; loadRatio: number } }) {
+  const trendLabel = perf.loadRatio > 1.1 ? '↑ Belasting stijgend' : perf.loadRatio < 0.9 ? '↓ Belasting dalend' : '→ Belasting stabiel'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Performance Score</span>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-[56px] font-bold text-white leading-none">{perf.score}</span>
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="w-[8px] h-[8px] rounded-full" style={{ background: perf.color }} />
+              <span className="text-[17px] font-semibold text-white">{perf.label}</span>
+            </div>
+          </div>
+          <span className="text-[13px] text-white/40 pb-1">{trendLabel}</span>
+        </div>
+        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${perf.score}%`, background: perf.color }} />
+        </div>
+        <span className="text-[12px] text-white/30">Gebaseerd op consistentie · belasting · trend</span>
+      </div>
+    </Card>
+  )
+}
+
+function RecoveryDetailCard({ recovery }: { recovery: { pct: number; label: string; factors: string[] } }) {
+  const c = recovery.pct >= 82 ? '#4ade80' : recovery.pct >= 65 ? '#facc15' : '#f87171'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Herstel</span>
+        <div className="flex items-end justify-between">
+          <span className="text-[40px] font-bold text-white leading-none">{recovery.pct}%</span>
+          <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{recovery.label}</span>
+        </div>
+        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full" style={{ width: `${recovery.pct}%`, background: c }} />
+        </div>
+        <div className="flex flex-col gap-1.5 pt-1">
+          {recovery.factors.map((f, i) => (
+            <span key={i} className="text-[13px] text-white/50">· {f}</span>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, earlyKj, loadTrend }: {
+  weekCompleted: number; weekPlanned: number; weekKm: number; weekDurationSecs: number
+  earlyKj: number; loadTrend: number
+}) {
+  const hasLoadData = earlyKj > 0
+  const trendSign = loadTrend > 0 ? '+' : ''
+  const trendColor = loadTrend > 10 ? 'text-teal-400' : loadTrend < -10 ? 'text-red-400' : 'text-white/50'
+  const trendSub = !hasLoadData ? null : Math.abs(loadTrend) <= 10
+    ? 'Geen significante verandering in belasting'
+    : loadTrend > 10 ? 'Trainingsbelasting neemt toe' : 'Trainingsbelasting neemt af'
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Trainingsbelasting</span>
+        <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-baseline gap-1">
+              <span className="text-[24px] font-bold text-white">{weekCompleted}</span>
+              <span className="text-[13px] text-white/50">sessies</span>
+            </div>
+            {weekPlanned > 0 && <span className="text-[12px] text-white/30">{weekPlanned} gepland deze week</span>}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {hasLoadData ? (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-[24px] font-bold ${trendColor}`}>{trendSign}{loadTrend}%</span>
+                  <span className="text-[13px] text-white/50">vs 14d</span>
+                </div>
+                <span className="text-[12px] text-white/30">belastingstrend</span>
+              </>
+            ) : (
+              <span className="text-[24px] font-bold text-white/20">–</span>
+            )}
+          </div>
+          {weekKm > 0 && (
+            <span className="text-[13px] text-white/50">{weekKm.toFixed(1)} km gelopen</span>
+          )}
+          {weekDurationSecs > 0 && (
+            <span className="text-[13px] text-white/50">{formatDuration(weekDurationSecs)} totaal</span>
+          )}
+        </div>
+        {trendSub && <span className="text-[12px] text-white/30">{trendSub}</span>}
+      </div>
+    </Card>
+  )
+}
+
+function TopInsightsCard({ insights }: { insights: string[] }) {
+  if (insights.length === 0) return null
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-teal-400 text-[14px]">↗</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Top Inzichten</span>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          {insights.map((insight, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="text-white/30 text-[13px] mt-0.5 shrink-0">·</span>
+              <p className="text-[15px] text-white/85 leading-relaxed">{insight}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function NextWorkoutCard({ calendarEvents, onRefresh, refreshing }: {
+  calendarEvents: any[]; onRefresh?: () => void; refreshing?: boolean
+}) {
+  const now = new Date().toISOString()
+  const next = (calendarEvents ?? [])
+    .filter((e: any) => (e.start_datetime || e.start_date) >= now)
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
+
+  const dateStr = next ? (next.start_datetime || next.start_date) : null
+  const when = dateStr ? new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' }) : null
+  const time = next?.start_datetime
+    ? new Date(next.start_datetime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    : null
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Volgende Workout</span>
+          {next ? (
+            <>
+              <span className="text-[17px] font-semibold text-white mt-1">{next.title}</span>
+              <span className="text-[13px] text-white/50">{when}{time ? ` · ${time}` : ''}</span>
+            </>
+          ) : (
+            <span className="text-[15px] text-white/30 mt-1">Geen geplande trainingen</span>
+          )}
+        </div>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className={`text-teal-400 text-[13px] font-semibold px-3 py-1.5 rounded-full transition-opacity ${refreshing ? 'opacity-40' : ''}`}
+            style={{ background: 'rgba(45,212,191,0.12)' }}
+          >
+            {refreshing ? '...' : 'Sync'}
+          </button>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
 export function OverviewSection({ activities, hevy, calendarEvents, onRefresh, refreshing }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   onRefresh?: () => void; refreshing?: boolean
 }) {
-  // Cache-only reads for cross-dataset insights — data pre-warmed by DataProvider
   const { data: gezondheid } = useSWR<{ datum: string; stappen: number; gewicht: number }[]>('health-gezondheid', null)
   const { data: foodData } = useSWR<{ foodLog: any[]; targets: any }>('food-log', null)
 
   const perf = computePerformanceScore(activities, hevy)
-  const weekStart = startOfWeek()
-  const weekWorkouts = [
-    ...activities.filter(a => a.start_date >= weekStart),
-    ...hevy.filter(h => h.start_time >= weekStart),
-  ].length
-
-  const allTimes = [
-    ...activities.map(a => a.start_date),
-    ...hevy.map(h => h.start_time),
-  ].sort().reverse()
-  const lastWorkoutMs = allTimes.length > 0 ? new Date(allTimes[0]).getTime() : null
-  const hoursSinceLast = lastWorkoutMs ? (Date.now() - lastWorkoutMs) / 3600000 : null
-  const recoveryPct = hoursSinceLast !== null
-    ? hoursSinceLast < 12 ? 45 : hoursSinceLast < 24 ? 65 : hoursSinceLast < 48 ? 82 : 95
-    : 95
+  const recoveryDetail = computeRecoveryDetail(activities, hevy)
 
   const now = Date.now()
+  const weekStart = startOfWeek()
   const fifteenDaysAgo = new Date(now - 15 * 86400000).toISOString()
   const thirtyDaysAgo = new Date(now - 30 * 86400000).toISOString()
-  const earlyKj = activities.filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
-  const lateKj = activities.filter(a => a.start_date >= fifteenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+
+  const earlyKj = activities
+    .filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo)
+    .reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+  const lateKj = activities
+    .filter(a => a.start_date >= fifteenDaysAgo)
+    .reduce((s, a) => s + (a.kilojoules ?? 0), 0)
   const loadTrend = earlyKj > 0 ? Math.round((lateKj - earlyKj) / earlyKj * 100) : 0
 
-  const upcoming = (calendarEvents ?? []).slice(0, 3).map((e: any) => {
-    const dateStr = e.start_datetime || e.start_date
-    const label = new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'short', month: 'short', day: 'numeric' })
-    return `${label} · ${e.title}`
-  })
+  const weekActivities = activities.filter(a => a.start_date >= weekStart)
+  const weekHevy = hevy.filter(h => h.start_time >= weekStart)
+  const weekCompleted = weekActivities.length + weekHevy.length
+  const weekEnd = new Date(new Date(weekStart).getTime() + 7 * 86400000).toISOString()
+  const weekPlanned = (calendarEvents ?? []).filter((e: any) => {
+    const dt = e.start_datetime || e.start_date
+    return dt >= weekStart && dt < weekEnd
+  }).length
+  const weekKm = weekActivities.filter(isRun).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const weekDurationSecs = [...weekActivities, ...weekHevy].reduce((s: number, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
 
-  const crossInsights = buildCrossInsights(activities, hevy, gezondheid ?? null, foodData ?? null)
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, recoveryDetail.pct, perf)
+  const topInsights = buildTopInsights(activities, hevy, gezondheid ?? null, foodData ?? null)
 
   return (
     <div className="flex flex-col gap-[18px]">
+      {/* 1. AI Insight */}
       <AiInsight text={buildOverviewInsight(activities, hevy)} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <PredictiveCard
-          title="Performance Score"
-          value={`${perf.score}`}
-          label={perf.label}
-          context="Consistency · load · trend"
-          dotColor={perf.color}
-        />
-        <PredictiveCard
-          title="This Week"
-          value={`${weekWorkouts}/4`}
-          label={weekWorkouts >= 4 ? 'On target' : weekWorkouts >= 2 ? 'In progress' : 'Getting started'}
-          context="Sessions completed"
-          dotColor={weekWorkouts >= 4 ? '#4ade80' : weekWorkouts >= 2 ? '#facc15' : '#fb923c'}
-        />
-        <PredictiveCard
-          title="Recovery"
-          value={`${recoveryPct}%`}
-          label={recoveryPct >= 85 ? 'Ready to train' : recoveryPct >= 65 ? 'Recovering' : 'Rest needed'}
-          context={hoursSinceLast !== null ? `Last workout ${Math.round(hoursSinceLast)}h ago` : 'No recent workout'}
-          dotColor={recoveryPct >= 85 ? '#4ade80' : recoveryPct >= 65 ? '#facc15' : '#fb923c'}
-        />
-        <PredictiveCard
-          title="Load Trend"
-          value={earlyKj > 0 ? `${loadTrend > 0 ? '+' : ''}${loadTrend}%` : '–'}
-          label={perf.loadRatio > 1.4 ? 'Overreaching' : loadTrend > 10 ? 'Building' : loadTrend < -10 ? 'Tapering' : 'Stable'}
-          context="Last 15 vs prior 15 days"
-          dotColor={perf.loadRatio > 1.4 ? '#f87171' : loadTrend > 10 ? '#4ade80' : '#60a5fa'}
-        />
-      </div>
+      {/* 2. Today's Focus */}
+      <TodaysFocusCard focus={todaysFocus} />
 
-      <CrossInsightCard insights={crossInsights} />
+      {/* 3. Performance Score */}
+      <PerformanceHeroCard perf={perf} />
 
-      <MinimalWorkoutList
-        title="Upcoming workouts"
-        workouts={upcoming.length > 0 ? upcoming : ['–', '–', '–']}
-        onRefresh={onRefresh}
-        refreshing={refreshing}
+      {/* 4. Recovery */}
+      <RecoveryDetailCard recovery={recoveryDetail} />
+
+      {/* 5. Training Load */}
+      <TrainingLoadCard
+        weekCompleted={weekCompleted}
+        weekPlanned={weekPlanned}
+        weekKm={weekKm}
+        weekDurationSecs={weekDurationSecs}
+        earlyKj={earlyKj}
+        loadTrend={loadTrend}
       />
+
+      {/* 6. Top Insights */}
+      <TopInsightsCard insights={topInsights} />
+
+      {/* 7. Next Workout */}
+      <NextWorkoutCard calendarEvents={calendarEvents} onRefresh={onRefresh} refreshing={refreshing} />
     </div>
   )
 }
