@@ -9,11 +9,12 @@ import { trainingFetcher } from './fetcher'
 import { createClient } from '@/lib/supabase'
 
 const CATEGORIES = [
-  { label: 'Overview', href: null },
-  { label: 'Running',  href: '/training/running' },
-  { label: 'Cycling',  href: '/training/cycling' },
-  { label: 'Strength', href: '/training/strength' },
-  { label: 'History',  href: '/training/history' },
+  { label: 'Overview',     href: null },
+  { label: 'Running',      href: '/training/running' },
+  { label: 'Cycling',      href: '/training/cycling' },
+  { label: 'Strength',     href: '/training/strength' },
+  { label: 'History',      href: '/training/history' },
+  { label: 'Performance',  href: '/training/performance' },
 ]
 
 export default function TrainingPage() {

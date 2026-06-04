@@ -6,10 +6,11 @@ import { ChevronLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 const CATEGORIES = [
-  { label: 'Running',  href: '/training/running'  },
-  { label: 'Cycling',  href: '/training/cycling'  },
-  { label: 'Strength', href: '/training/strength' },
-  { label: 'History',  href: '/training/history'  },
+  { label: 'Running',     href: '/training/running'     },
+  { label: 'Cycling',     href: '/training/cycling'     },
+  { label: 'Strength',    href: '/training/strength'    },
+  { label: 'History',     href: '/training/history'     },
+  { label: 'Performance', href: '/training/performance' },
 ]
 
 export function TrainingDetailScreen({
