@@ -1406,7 +1406,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
               style={{ background: 'rgba(255,255,255,0.06)' }}>
               {filtered.map((p, i) => (
                 <button key={p.id}
-                  onClick={() => { setSelected(p); setSelectedServing(null); setServingMultiplier('1'); setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100'); setView('detail') }}
+                  onClick={() => { setSelected(p); setSelectedServing(null); setServingMultiplier(p.servings?.[0] ? '1' : '100'); setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100'); setView('detail') }}
                   className="flex items-center justify-between px-4 py-3.5 text-left"
                   style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                   <div>
@@ -1439,7 +1439,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                 setGrams(String(Math.round(Number(servingMultiplier) * s.amount_g)))
               }
 
-              const active = selectedServing ?? servings[0]
+              const active = selectedServing ?? servings[0] ?? GRAM_SERVING
 
               return (
                 <>
