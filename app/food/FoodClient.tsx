@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
-import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils, ScanLine } from 'lucide-react'
+import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils, ScanLine, ChevronDown, Check } from 'lucide-react'
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import { BarcodeScanner } from '@/components/BarcodeScanner'
@@ -584,12 +584,13 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
 
 // ─── Create meal view ────────────────────────────────────────────────────────
 
-function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, products, savingTemplate, onSave }: {
+function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, products, freqMap, savingTemplate, onSave }: {
   newMealName: string
   setNewMealName: (v: string) => void
   templateItems: TemplateFoodItem[]
   setTemplateItems: React.Dispatch<React.SetStateAction<TemplateFoodItem[]>>
   products: Product[]
+  freqMap: Record<string, number>
   savingTemplate: boolean
   onSave: () => void
 }) {
@@ -600,9 +601,15 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
   const filtered = useMemo(() => {
-    if (!pickerSearch.trim()) return products.slice(0, 40)
-    return products.filter(p => p.name.toLowerCase().includes(pickerSearch.toLowerCase())).slice(0, 40)
-  }, [pickerSearch, products])
+    const query = pickerSearch.trim().toLowerCase()
+    const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
+    return [...list]
+      .sort((a, b) => {
+        const diff = (freqMap[b.id] ?? 0) - (freqMap[a.id] ?? 0)
+        return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
+      })
+      .slice(0, 40)
+  }, [pickerSearch, products, freqMap])
 
   function addToMeal() {
     if (!pickerProduct) return
@@ -659,23 +666,22 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
                   className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
                   style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
               </div>
-              {(pickerProduct.servings ?? []).length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {(pickerProduct.servings ?? []).map((s, i) => (
-                    <button key={i}
-                      onClick={() => setPickerGrams(String(s.amount_g))}
-                      className="px-3 py-1.5 rounded-full text-[13px] font-semibold transition-all"
-                      style={
-                        pickerGrams === String(s.amount_g)
-                          ? { background: 'white', color: 'black' }
-                          : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }
-                      }
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  ...(pickerProduct.servings ?? []),
+                  ...[30, 50, 100, 150, 200]
+                    .filter(g => !(pickerProduct.servings ?? []).some(s => s.amount_g === g))
+                    .map(g => ({ label: `${g}g`, amount_g: g })),
+                ].sort((a, b) => a.amount_g - b.amount_g).map((s, i) => (
+                  <button key={i} onClick={() => setPickerGrams(String(s.amount_g))}
+                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
+                    style={pickerGrams === String(s.amount_g)
+                      ? { background: 'white', color: 'black' }
+                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { label: 'Kcal',  value: `${Math.round(Number(pickerProduct.kcal??0)*Number(pickerGrams)/100)}`,       color: '#fb923c' },
@@ -793,10 +799,26 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Product | null>(null)
   const [grams, setGrams] = useState('100')
+  const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(null)
+  const [servingMultiplier, setServingMultiplier] = useState('1')
+  const [showServingPicker, setShowServingPicker] = useState(false)
+  const [showMealPicker, setShowMealPicker] = useState(false)
   const [meal, setMeal] = useState(preselectedMeal)
   const [saving, setSaving] = useState(false)
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeLoading, setBarcodeLoading] = useState(false)
+
+  const [freqMap, setFreqMap] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('food-freq') ?? '{}') } catch { return {} }
+  })
+
+  function incrementFrequency(productId: string) {
+    setFreqMap(prev => {
+      const next = { ...prev, [productId]: (prev[productId] ?? 0) + 1 }
+      try { localStorage.setItem('food-freq', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   // Meals state
   const { data: templates = [], mutate: mutateTemplates } = useSWR('meal-templates', fetchMealTemplates, { revalidateOnFocus: false })
@@ -808,9 +830,15 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [confirmTemplate, setConfirmTemplate] = useState<MealTemplate | null>(null)
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return products.slice(0, 40)
-    return products.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 40)
-  }, [search, products])
+    const query = search.trim().toLowerCase()
+    const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
+    return [...list]
+      .sort((a, b) => {
+        const diff = (freqMap[b.id] ?? 0) - (freqMap[a.id] ?? 0)
+        return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
+      })
+      .slice(0, 40)
+  }, [search, products, freqMap])
 
   const preview = selected && Number(grams) > 0 ? {
     kcal:    (Number(selected.kcal    ?? 0) * Number(grams)) / 100,
@@ -843,8 +871,10 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
         .maybeSingle()
 
       if (localProduct) {
-        setSelected(localProduct as Product)
-        setGrams('100')
+        const p = localProduct as Product
+        setSelected(p)
+        setSelectedServing(null); setServingMultiplier('1')
+        setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100')
         setView('detail')
         return
       }
@@ -856,6 +886,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       if (json.status === 1 && json.product) {
         const p = json.product
         const n = p.nutriments ?? {}
+        const servingQ = p.serving_quantity ? Math.round(Number(p.serving_quantity)) : null
+        const servingLabel = p.serving_size ?? (servingQ ? `${servingQ}g` : null)
         setSelected({
           id: 'barcode-' + barcode,
           name: p.product_name || p.product_name_nl || 'Unknown product',
@@ -864,7 +896,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
           carbs: Math.round((n.carbohydrates_100g ?? 0) * 10) / 10,
           fat: Math.round((n.fat_100g ?? 0) * 10) / 10,
-          servings: null,
+          servings: servingQ ? [{ label: servingLabel!, amount_g: servingQ }] : null,
         })
         setGrams('100')
         setView('detail')
@@ -954,7 +986,10 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       sugars: 0, brand: selected.brand ?? '',
     }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
     setSaving(false)
-    if (!error && data) onAdded(data as FoodLogEntry)
+    if (!error && data) {
+      if (selected.id && !selected.id.startsWith('barcode-')) incrementFrequency(selected.id)
+      onAdded(data as FoodLogEntry)
+    }
   }
 
   const sheetTitle = view === 'options' ? 'Add Food'
@@ -1172,6 +1207,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             templateItems={templateItems}
             setTemplateItems={setTemplateItems}
             products={products}
+            freqMap={freqMap}
             savingTemplate={savingTemplate}
             onSave={saveTemplate}
           />
@@ -1203,7 +1239,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
               style={{ background: 'rgba(255,255,255,0.06)' }}>
               {filtered.map((p, i) => (
                 <button key={p.id}
-                  onClick={() => { setSelected(p); setView('detail') }}
+                  onClick={() => { setSelected(p); setSelectedServing(null); setServingMultiplier('1'); setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100'); setView('detail') }}
                   className="flex items-center justify-between px-4 py-3.5 text-left"
                   style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                   <div>
@@ -1225,34 +1261,83 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
         {/* ── Detail view ── */}
         {view === 'detail' && selected && (
           <div className="overflow-y-auto px-5 pb-8 flex flex-col gap-5" style={{ overscrollBehavior: 'contain' }}>
-            {/* Amount stepper */}
-            <div className="flex items-center justify-between py-4 rounded-[16px] px-4"
-              style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 25)))}
-                className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
-                style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
-              <div className="flex items-baseline gap-1">
-                <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
-                  className="text-[48px] font-bold text-white bg-transparent text-center outline-none w-28" />
-                <span className="text-[22px] text-white/50">g</span>
-              </div>
-              <button onClick={() => setGrams(g => String(Number(g) + 25))}
-                className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
-                style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
-            </div>
+            {/* Portion selector — only when product has servings */}
+            {(selected.servings ?? []).length > 0 ? (() => {
+              const servings = selected.servings!
 
-            {/* Serving size pills */}
-            {(selected.servings ?? []).length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {(selected.servings ?? []).map((s, i) => (
-                  <button key={i} onClick={() => setGrams(String(s.amount_g))}
-                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                    style={grams === String(s.amount_g)
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-                    {s.label}
-                  </button>
-                ))}
+              function pickServing(s: { label: string; amount_g: number } | null) {
+                setSelectedServing(s)
+                setShowServingPicker(false)
+                if (s) setGrams(String(Math.round(Number(servingMultiplier) * s.amount_g)))
+              }
+
+              return (
+                <>
+                  <div className="flex gap-2">
+                    {/* Multiplier */}
+                    <div className="flex items-center justify-center gap-1 px-3 rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.08)', minWidth: 72 }}>
+                      <input type="number" inputMode="decimal" value={servingMultiplier}
+                        onChange={e => {
+                          setServingMultiplier(e.target.value)
+                          if (selectedServing) setGrams(String(Math.round(Number(e.target.value) * selectedServing.amount_g)))
+                        }}
+                        className="text-[22px] font-bold text-white bg-transparent text-center outline-none w-12" />
+                      <span className="text-[15px] text-white/50">x</span>
+                    </div>
+                    {/* Portion picker */}
+                    <button onClick={() => setShowServingPicker(true)}
+                      className="flex-1 flex items-center justify-between px-4 py-4 rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <span className="text-[16px] font-medium text-white">
+                        {selectedServing ? selectedServing.label : servings[0].label}
+                      </span>
+                      <ChevronDown size={16} className="text-white/40" />
+                    </button>
+                  </div>
+
+                  {/* Serving picker sheet */}
+                  {showServingPicker && (
+                    <div className="fixed inset-0 z-[200] flex flex-col justify-end"
+                      style={{ background: 'rgba(0,0,0,0.5)' }}
+                      onClick={() => setShowServingPicker(false)}>
+                      <div className="rounded-t-[20px] overflow-hidden pb-safe"
+                        style={{ background: 'rgb(28,28,30)' }}
+                        onClick={e => e.stopPropagation()}>
+                        {servings.map((s, i) => (
+                          <button key={i} onClick={() => pickServing(s)}
+                            className="w-full flex items-center justify-between px-5 py-4"
+                            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                            <span className="text-[17px] text-white">{s.label}</span>
+                            {(selectedServing ?? servings[0]).label === s.label && <Check size={18} className="text-teal-400" />}
+                          </button>
+                        ))}
+                        <button onClick={() => pickServing(null)}
+                          className="w-full flex items-center justify-between px-5 py-4"
+                          style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                          <span className="text-[17px] text-white">gram / ml</span>
+                          {!selectedServing && <Check size={18} className="text-teal-400" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })() : (
+              /* No servings: plain gram stepper */
+              <div className="flex items-center justify-between py-3 px-4 rounded-[14px]"
+                style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 5)))}
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-[22px] text-white"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
+                <div className="flex items-baseline gap-1">
+                  <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
+                    className="text-[40px] font-bold text-white bg-transparent text-center outline-none w-24" />
+                  <span className="text-[18px] text-white/50">g</span>
+                </div>
+                <button onClick={() => setGrams(g => String(Number(g) + 5))}
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-[22px] text-white"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
               </div>
             )}
 
@@ -1275,17 +1360,35 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             )}
 
             {/* Meal picker */}
-            <div className="rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {MEAL_ORDER.map((m, i) => (
-                <button key={m} onClick={() => setMeal(m)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5"
-                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                  <span className="text-[18px] w-7 text-center">{MEAL_ICONS[m]}</span>
-                  <span className="flex-1 text-[15px] font-medium text-white text-left">{MEAL_LABELS[m] ?? m}</span>
-                  {meal === m && <span className="text-teal-400 text-[15px]">✓</span>}
-                </button>
-              ))}
-            </div>
+            <button onClick={() => setShowMealPicker(true)}
+              className="w-full flex flex-col px-4 py-3.5 rounded-[14px] text-left"
+              style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <span className="text-[12px] text-white/40 mb-0.5">Gegeten als</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-semibold text-white">{MEAL_LABELS[meal] ?? meal}</span>
+                <ChevronDown size={16} className="text-white/40" />
+              </div>
+            </button>
+
+            {showMealPicker && (
+              <div className="fixed inset-0 z-[200] flex flex-col justify-end"
+                style={{ background: 'rgba(0,0,0,0.5)' }}
+                onClick={() => setShowMealPicker(false)}>
+                <div className="rounded-t-[20px] overflow-hidden"
+                  style={{ background: 'rgb(28,28,30)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                  onClick={e => e.stopPropagation()}>
+                  {MEAL_ORDER.map((m, i) => (
+                    <button key={m} onClick={() => { setMeal(m); setShowMealPicker(false) }}
+                      className="w-full flex items-center gap-3 px-5 py-4"
+                      style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                      <span className="text-[18px] w-7 text-center">{MEAL_ICONS[m]}</span>
+                      <span className="flex-1 text-[17px] text-white text-left">{MEAL_LABELS[m] ?? m}</span>
+                      {meal === m && <Check size={18} className="text-teal-400" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Save */}
             <button onClick={handleSave} disabled={saving || !preview}
