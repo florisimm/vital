@@ -963,6 +963,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
   const { data: serverFreq = {} } = useSWR('food-frequency', fetchFoodFrequency, {
     revalidateOnFocus: false, dedupingInterval: 300_000,
   })
+  const { data: trainingCache } = useSWR('training', null, { revalidateOnMount: false, revalidateOnFocus: false })
+  const { data: healthCache } = useSWR<any[]>('health-gezondheid', null, { revalidateOnMount: false, revalidateOnFocus: false })
   const [localFreq, setLocalFreq] = useState<Record<string, number>>({})
 
   function incrementFrequency(productName: string) {
@@ -1480,6 +1482,38 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
           const afterFat     = totals.fat     + (preview?.fat     ?? 0)
           const kcalPct      = Math.round(Math.min(afterKcal / targets.kcal * 100, 999))
 
+          // ── Activity equivalents ──────────────────────────────────────────
+          const bodyWeight = (() => {
+            const row = (healthCache ?? []).find((r: any) => r.gewicht)
+            return row ? Number(row.gewicht) : 75
+          })()
+          const allActs: any[] = (trainingCache as any)?.activities ?? []
+          const runs  = allActs.filter(a => a.sport_type?.toLowerCase().includes('run')  && (a.average_speed ?? 0) > 0)
+          const rides = allActs.filter(a => (a.sport_type?.toLowerCase().includes('ride') || a.sport_type?.toLowerCase().includes('cycl')) && (a.average_speed ?? 0) > 0)
+          const runCount  = allActs.filter(a => a.sport_type?.toLowerCase().includes('run')).length
+          const rideCount = allActs.filter(a => a.sport_type?.toLowerCase().includes('ride') || a.sport_type?.toLowerCase().includes('cycl')).length
+          const runMet = runs.length
+            ? (() => { const kmh = runs.reduce((s: number, a: any) => s + a.average_speed, 0) / runs.length * 3.6; return Math.max(7, Math.min(15, kmh * 0.75 + 3.5)) })()
+            : 10
+          const rideMet = rides.length
+            ? (() => { const kmh = rides.reduce((s: number, a: any) => s + a.average_speed * 3.6, 0) / rides.length; return kmh < 18 ? 5.5 : kmh < 24 ? 7.5 : kmh < 30 ? 9.5 : 11.5 })()
+            : 7.5
+          const burnMin = (met: number, kcal: number) => Math.max(1, Math.round(kcal * 60 / (met * bodyWeight)))
+          const actItems = (() => {
+            const kcal = preview?.kcal ?? 0
+            if (kcal <= 5) return []
+            const walk = { emoji: '🚶', label: 'walking',  min: burnMin(3.5,    kcal) }
+            const run  = { emoji: '🏃', label: 'running',  min: burnMin(runMet, kcal) }
+            const ride = { emoji: '🚴', label: 'cycling',  min: burnMin(rideMet,kcal) }
+            if (runCount === 0 && rideCount === 0) return [walk]
+            const userActs = ([
+              runCount  > 0 ? { ...run,  cnt: runCount  } : null,
+              rideCount > 0 ? { ...ride, cnt: rideCount } : null,
+            ].filter(Boolean) as any[]).sort((a, b) => b.cnt - a.cnt).slice(0, 2)
+            return [...userActs, walk]
+          })()
+          const isPersonalized = runs.length > 0 || rides.length > 0
+
           return (
             <div className="overflow-y-auto pb-8 flex flex-col gap-4" style={{ overscrollBehavior: 'contain' }}>
 
@@ -1600,6 +1634,25 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
                   {saving ? '…' : `Log · ${MEAL_LABELS_SHORT[meal] ?? meal}`}
                 </button>
               </div>
+
+              {/* Activity equivalent */}
+              {actItems.length > 0 && (
+                <div className="mx-5 rounded-[16px] px-4 py-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {actItems.map((a: any, i: number) => (
+                      <span key={i} className="flex items-center gap-1.5">
+                        <span className="text-[15px]">{a.emoji}</span>
+                        <span className="text-[14px] font-semibold text-white/70">{a.min} min</span>
+                        <span className="text-[13px] text-white/35">{a.label}</span>
+                        {i < actItems.length - 1 && <span className="text-white/15 ml-1 text-[13px]">·</span>}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-white/25 mt-1.5 leading-none">
+                    {isPersonalized ? 'Personalised to your weight & pace' : 'General estimate · connect Strava for personalised values'}
+                  </p>
+                </div>
+              )}
             </div>
           )
         })()}
