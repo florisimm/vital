@@ -716,54 +716,9 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
         className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[14px] outline-none"
         style={{ background: 'rgba(255,255,255,0.08)' }} />
 
-      {/* Gram + preview */}
-      <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest">Serving size</p>
-      <div className="flex items-center justify-between py-3 px-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        <button onClick={() => setGrams(g => String(Math.max(0, Number(g) - 25)))}
-          className="w-10 h-10 rounded-full flex items-center justify-center text-[20px] text-white"
-          style={{ background: 'rgba(255,255,255,0.08)' }}>−</button>
-        <div className="flex items-baseline gap-1">
-          <input type="number" value={grams} onChange={e => setGrams(e.target.value)}
-            className="text-[36px] font-bold text-white bg-transparent text-center outline-none w-24" />
-          <span className="text-[18px] text-white/50">g</span>
-        </div>
-        <button onClick={() => setGrams(g => String(Number(g) + 25))}
-          className="w-10 h-10 rounded-full flex items-center justify-center text-[20px] text-white"
-          style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
-      </div>
-
-      {g > 0 && form.kcal && (
-        <div className="grid grid-cols-4 gap-2">
-          {[
-            { label: 'Kcal',   value: `${preview.kcal}`,        color: '#fb923c' },
-            { label: 'Eiwit',  value: `${preview.protein}g`,    color: '#2dd4bf' },
-            { label: 'Koolh.', value: `${preview.carbs}g`,      color: '#facc15' },
-            { label: 'Vet',    value: `${preview.fat}g`,        color: '#818cf8' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex flex-col items-center gap-1 py-3 rounded-[14px]"
-              style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <span className="text-[15px] font-bold" style={{ color }}>{value}</span>
-              <span className="text-[11px] text-white/40">{label}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Dagdeel */}
-      <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        {MEAL_ORDER.map((m, i) => (
-          <button key={m} onClick={() => setMeal(m)} className="w-full flex items-center gap-3 px-4 py-3"
-            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-            <span className="text-[16px] w-7 text-center">{MEAL_ICONS[m]}</span>
-            <span className="flex-1 text-[14px] text-white text-left">{MEAL_LABELS[m]}</span>
-            {meal === m && <span className="text-teal-400 text-[13px]">✓</span>}
-          </button>
-        ))}
-      </div>
-
       <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}
         className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
-        {saving ? 'Saving…' : `Add to ${MEAL_LABELS[meal]}`}
+        {saving ? 'Opslaan…' : 'Toevoegen'}
       </button>
     </div>
   )
