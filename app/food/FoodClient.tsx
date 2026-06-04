@@ -1637,19 +1637,25 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
 
               {/* Activity equivalent */}
               {actItems.length > 0 && (
-                <div className="mx-5 rounded-[16px] px-4 py-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="flex items-center gap-3 flex-wrap">
+                <div className="mx-5 rounded-[20px] px-5 py-4 flex flex-col items-center gap-3"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.12em]">🔥 Activity Equivalent</span>
+                  <div className="flex items-center justify-center gap-5">
                     {actItems.map((a: any, i: number) => (
-                      <span key={i} className="flex items-center gap-1.5">
-                        <span className="text-[15px]">{a.emoji}</span>
-                        <span className="text-[14px] font-semibold text-white/70">{a.min} min</span>
-                        <span className="text-[13px] text-white/35">{a.label}</span>
-                        {i < actItems.length - 1 && <span className="text-white/15 ml-1 text-[13px]">·</span>}
+                      <span key={i} className="flex items-center gap-5">
+                        <span className="flex flex-col items-center gap-1">
+                          <span className="text-[22px] leading-none">{a.emoji}</span>
+                          <span className="text-[16px] font-bold text-white leading-none">{a.min} min</span>
+                          <span className="text-[11px] text-white/35 leading-none">{a.label}</span>
+                        </span>
+                        {i < actItems.length - 1 && (
+                          <span className="text-white/15 text-[18px] font-light">·</span>
+                        )}
                       </span>
                     ))}
                   </div>
-                  <p className="text-[11px] text-white/25 mt-1.5 leading-none">
-                    {isPersonalized ? 'Personalised to your weight & pace' : 'General estimate · connect Strava for personalised values'}
+                  <p className="text-[11px] text-white/25 text-center leading-relaxed">
+                    {isPersonalized ? 'Based on your weight & activity profile' : 'General estimate · connect Strava to personalise'}
                   </p>
                 </div>
               )}
