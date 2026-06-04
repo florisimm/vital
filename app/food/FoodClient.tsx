@@ -634,7 +634,7 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
   onAdded: (e: FoodLogEntry) => void
   onClose: () => void
 }) {
-  const [form, setForm] = useState({ name: '', brand: '', kcal: '', protein: '', carbs: '', sugars: '', fat: '', barcode: '' })
+  const [form, setForm] = useState({ name: '', brand: '', kcal: '', protein: '', carbs: '', sugars: '', fat: '', caffeine: '', alcohol: '', barcode: '' })
   const [grams, setGrams] = useState('100')
   const [saving, setSaving] = useState(false)
 
@@ -658,7 +658,8 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
         user_id: userId, name: form.name.trim(), brand: form.brand || '',
         kcal: Number(form.kcal), protein: Number(form.protein), carbs: Number(form.carbs),
         sugars: Number(form.sugars), fat: Number(form.fat),
-        barcode: form.barcode || null,
+        caffeine: form.caffeine ? Number(form.caffeine) : null,
+        alcohol: form.alcohol ? Number(form.alcohol) : null,
       })
       // Also log to food_log
       const { data, error } = await supabase.from('food_log').insert({
@@ -674,11 +675,13 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
   }
 
   const fields = [
-    { key: 'kcal',    label: 'Calorieën',    unit: 'kcal', color: '#fb923c' },
-    { key: 'protein', label: 'Eiwit',         unit: 'g',    color: '#2dd4bf' },
-    { key: 'carbs',   label: 'Koolhydraten',  unit: 'g',    color: '#facc15' },
-    { key: 'sugars',  label: 'Waarvan suikers',unit: 'g',   color: '#f472b6' },
-    { key: 'fat',     label: 'Vet',            unit: 'g',   color: '#818cf8' },
+    { key: 'kcal',     label: 'Calorieën',      unit: 'kcal', color: '#fb923c' },
+    { key: 'protein',  label: 'Eiwit',           unit: 'g',    color: '#2dd4bf' },
+    { key: 'carbs',    label: 'Koolhydraten',    unit: 'g',    color: '#facc15' },
+    { key: 'sugars',   label: 'Waarvan suikers', unit: 'g',    color: '#f472b6' },
+    { key: 'fat',      label: 'Vet',             unit: 'g',    color: '#818cf8' },
+    { key: 'caffeine', label: 'Cafeïne',         unit: 'mg',   color: '#a78bfa' },
+    { key: 'alcohol',  label: 'Alcohol',         unit: 'g',    color: '#f87171' },
   ]
 
   return (
@@ -710,11 +713,6 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
           </div>
         ))}
       </div>
-
-      {/* Barcode */}
-      <input type="text" placeholder="Barcode (optioneel)" value={form.barcode} onChange={e => set('barcode', e.target.value)}
-        className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[14px] outline-none"
-        style={{ background: 'rgba(255,255,255,0.08)' }} />
 
       <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}
         className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
