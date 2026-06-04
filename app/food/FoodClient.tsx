@@ -44,6 +44,8 @@ type MealTemplate = {
   foods: TemplateFoodItem[]
 }
 
+const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+
 // ─── Meal config ──────────────────────────────────────────────────────────────
 
 function getMealForHour(): string {
@@ -438,7 +440,7 @@ function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log: FoodLo
                   <div key={item.id ?? i}
                     className="px-4 py-3.5"
                     style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                    <span className="text-[15px] font-semibold text-white">{item.food_name}</span>
+                    <span className="text-[15px] font-semibold text-white">{cap(item.food_name)}</span>
                     <p className="text-[13px] text-white/40 mt-0.5">
                       {item.amount_g ? `${item.amount_g}g • ` : ''}
                       {Math.round(Number(item[macro] ?? 0))} {MACRO_UNIT[macro]}
@@ -509,7 +511,7 @@ function EditFoodSheet({ entry, userId, onSaved, onClose }: {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
-          <span className="text-[17px] font-bold text-white flex-1 mr-4 truncate">{entry.food_name}</span>
+          <span className="text-[17px] font-bold text-white flex-1 mr-4 truncate">{cap(entry.food_name)}</span>
           <button onClick={handleSave} className="w-8 h-8 flex items-center justify-center rounded-full shrink-0"
             style={{ background: 'rgba(255,255,255,0.08)' }}>
             <X size={16} className="text-white/70" />
@@ -603,7 +605,7 @@ function MealSection({ meal, icon, label, entries, onDelete, onEdit, onAdd }: {
         <div key={entry.id}
           className="flex items-center justify-between px-4 py-3 border-t border-white/[0.05]">
           <button className="flex-1 text-left active:opacity-60 transition-opacity" onClick={() => onEdit(entry)}>
-            <p className="text-[15px] font-medium text-white">{entry.food_name}</p>
+            <p className="text-[15px] font-medium text-white">{cap(entry.food_name)}</p>
             <p className="text-[12px] text-white/40">
               {entry.amount_g ? `${Math.round(Number(entry.amount_g))}g · ` : ''}
               {Math.round(Number(entry.kcal ?? 0))} kcal
@@ -859,7 +861,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
                     className="flex items-center justify-between px-4 py-3.5 text-left"
                     style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                     <div>
-                      <p className="text-[15px] font-semibold text-white">{p.name}</p>
+                      <p className="text-[15px] font-semibold text-white">{cap(p.name)}</p>
                       {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
                     </div>
                     <span className="text-[13px] font-semibold text-orange-400 shrink-0 ml-3">
@@ -895,7 +897,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
                   setEditIndex(i)
                   setShowPicker(true)
                 }}>
-                  <p className="text-[14px] font-medium text-white">{item.food_name}</p>
+                  <p className="text-[14px] font-medium text-white">{cap(item.food_name)}</p>
                   <p className="text-[12px] text-white/40">{item.amount_g}g · {item.kcal} kcal · {item.protein}g protein</p>
                 </button>
                 <button onClick={() => setTemplateItems(prev => prev.filter((_, j) => j !== i))}>
@@ -1268,7 +1270,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                     <div key={t.id} className="flex items-center gap-3 px-4 py-3.5 rounded-[14px]"
                       style={{ background: 'rgba(255,255,255,0.06)' }}>
                       <button className="flex-1 text-left" onClick={() => { setMenuOpenId(null); setConfirmTemplate(t); setView('meal-confirm') }}>
-                        <p className="text-[16px] font-semibold text-white">{t.name}</p>
+                        <p className="text-[16px] font-semibold text-white">{cap(t.name)}</p>
                         <p className="text-[12px] text-white/40">
                           {t.foods.length} items · {Math.round(totalKcal)} kcal · {Math.round(totalProtein)}g eiwit
                         </p>
@@ -1298,7 +1300,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                 style={{ animation: 'slideIn 200ms ease-out' }}>
                 <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(30,30,34,0.98)', backdropFilter: 'blur(20px)' }}>
                   <div className="px-4 py-4 border-b border-white/[0.07]">
-                    <p className="text-[15px] font-semibold text-white text-center">{t.name}</p>
+                    <p className="text-[15px] font-semibold text-white text-center">{cap(t.name)}</p>
                     <p className="text-[12px] text-white/40 text-center mt-0.5">{t.foods.length} items · {Math.round(t.foods.reduce((s,f)=>s+f.kcal,0))} kcal</p>
                   </div>
                   <button
@@ -1327,7 +1329,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
           <div className="flex flex-col flex-1 px-5 pb-8 gap-5 overflow-y-auto">
             {/* Meal summary */}
             <div className="rounded-[18px] px-5 py-5 flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <p className="text-[22px] font-bold text-white">{confirmTemplate.name}</p>
+              <p className="text-[22px] font-bold text-white">{cap(confirmTemplate.name)}</p>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { label: 'Kcal',    value: `${Math.round(confirmTemplate.foods.reduce((s,f)=>s+f.kcal,0))}`,       color: '#fb923c' },
@@ -1408,7 +1410,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                   className="flex items-center justify-between px-4 py-3.5 text-left"
                   style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                   <div>
-                    <p className="text-[16px] font-semibold text-white">{p.name}</p>
+                    <p className="text-[16px] font-semibold text-white">{cap(p.name)}</p>
                     {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-3">

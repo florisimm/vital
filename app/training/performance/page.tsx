@@ -55,7 +55,7 @@ export default function PerformancePage() {
 
   // Recovery
   const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
-  const hoursSince = allTimes.length ? (Date.now() - new Date(allTimes[0]).getTime()) / 3600000 : null
+  const hoursSince = allTimes.length ? Math.max(0, (Date.now() - new Date(allTimes[0]).getTime()) / 3600000) : null
   const recoveryPct = hoursSince !== null
     ? hoursSince < 12 ? 45 : hoursSince < 24 ? 65 : hoursSince < 48 ? 82 : 95
     : 95
@@ -126,7 +126,7 @@ export default function PerformancePage() {
         <StatCard
           label="Recovery"
           value={`${recoveryPct}%`}
-          sub={hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent workout'}
+          sub={hoursSince !== null ? (hoursSince < 1 ? 'Just now' : `Last workout ${Math.round(hoursSince)}h ago`) : 'No recent workout'}
           color={recoveryPct >= 85 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
         />
         <StatCard

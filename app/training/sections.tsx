@@ -901,20 +901,25 @@ function computeTodaysFocus(
     const title = (nextEvent.title ?? '') as string
     const tl = title.toLowerCase()
     const dateStr = nextEvent.start_datetime || nextEvent.start_date
-    const when = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })
+    const eventDate = dateStr.slice(0, 10)
+    const todayDate = new Date().toISOString().slice(0, 10)
+    const tomorrowDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    const dayLabel = eventDate === todayDate ? 'Today' : eventDate === tomorrowDate ? 'Tomorrow'
+      : new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })
     const time = nextEvent.start_datetime
       ? ' · ' + new Date(nextEvent.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       : ''
+    const when = dayLabel + time
     if (tl.includes('strength') || tl.includes('gym') || tl.includes('kracht') || tl.includes('push') || tl.includes('pull') || tl.includes('legs')) {
-      return { emoji: '💪', label: title, sub: when + time }
+      return { emoji: '💪', label: title, sub: when }
     }
     if (tl.includes('run') || tl.includes('loop') || tl.includes('tempo') || tl.includes('interval') || tl.includes('hardloop')) {
-      return { emoji: '🏃', label: title, sub: when + time }
+      return { emoji: '🏃', label: title, sub: when }
     }
     if (tl.includes('ride') || tl.includes('fiet') || tl.includes('cycl') || tl.includes('bike')) {
-      return { emoji: '🚴', label: title, sub: when + time }
+      return { emoji: '🚴', label: title, sub: when }
     }
-    return { emoji: '📅', label: title, sub: when + time }
+    return { emoji: '📅', label: title, sub: when }
   }
 
   if (recoveryPct >= 82 && perf.score >= 70) {
@@ -1118,8 +1123,10 @@ function NextWorkoutCard({ calendarEvents, onRefresh, refreshing }: {
     : null
   let countdown: string | null = null
   if (dateStr) {
-    const diffDays = Math.floor((new Date(dateStr).getTime() - Date.now()) / 86400000)
-    countdown = diffDays <= 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : `In ${diffDays} days`
+    const eventDate = (next.start_datetime || next.start_date).slice(0, 10)
+    const todayDate = new Date().toISOString().slice(0, 10)
+    const tomorrowDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    countdown = eventDate === todayDate ? 'Today' : eventDate === tomorrowDate ? 'Tomorrow' : when
   }
 
   return (
@@ -1700,9 +1707,16 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
   )
 }
 
+function localDateStr(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function relativeDay(iso: string): string {
-  const diffDays = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
+  const workout = localDateStr(iso)
+  const today = localDateStr(new Date().toISOString())
+  const yesterday = localDateStr(new Date(Date.now() - 86400000).toISOString())
+  if (workout === today) return 'Today'
+  if (workout === yesterday) return 'Yesterday'
   return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
 }
