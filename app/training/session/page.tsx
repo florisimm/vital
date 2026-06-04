@@ -6,196 +6,14 @@ import dynamic from 'next/dynamic'
 import { ChevronLeft, Bike, PersonStanding, Dumbbell, RefreshCw, Map, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Card } from '@/components/ui'
+import {
+  detectSport, computeAdvice, TYPE_LABEL, TYPE_COLOR,
+  type SportType, type Advice, type ComputeAdviceResult,
+} from '@/lib/training-algorithm'
 
 const RouteMap = dynamic(() => import('./RouteMap').then(m => m.RouteMap), { ssr: false })
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type SportType = 'cycling' | 'running' | 'strength' | 'other'
-type TrainingType = 'herstel' | 'zone2' | 'tempo' | 'interval' | 'lang'
-type UserLevel = 'beginner' | 'intermediate' | 'advanced'
-
-type Advice = {
-  sport: SportType
-  trainingType: TrainingType
-  userLevel: UserLevel
-  durationMin: number
-  targetKm: number
-  targetPace: string | null   // running: mm:ss/km
-  targetSpeed: number | null  // cycling: km/h
-  zone: string
-  basis: string
-}
-
-// ─── Sport detection ──────────────────────────────────────────────────────────
-
-function detectSport(title: string): SportType {
-  const t = title.toLowerCase()
-  if (['fietsen', 'ride', 'cycling', 'wielren', 'cycl'].some(k => t.includes(k))) return 'cycling'
-  if (['hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempo'].some(k => t.includes(k))) return 'running'
-  if (['gym', 'strength', 'push', 'pull', 'squat', 'crossfit'].some(k => t.includes(k))) return 'strength'
-  return 'other'
-}
-
-// ─── Algorithm helpers ────────────────────────────────────────────────────────
-
-function matchesSport(a: any, sport: SportType): boolean {
-  const s = (a.sport_type ?? '').toLowerCase()
-  if (sport === 'cycling') return s.includes('ride') || s.includes('cycl')
-  if (sport === 'running') return s.includes('run')
-  return false
-}
-
-// Returns average pace in seconds/km for running activities
-function avgPaceSecPerKm(acts: any[]): number {
-  const valid = acts.filter(a => a.average_speed > 0)
-  if (!valid.length) return 360 // default 6:00/km
-  const mps = valid.reduce((s: number, a: any) => s + a.average_speed, 0) / valid.length
-  return 1000 / mps
-}
-
-// Returns average speed in km/h for cycling activities
-function avgSpeedKmh(acts: any[]): number {
-  const valid = acts.filter(a => a.average_speed > 0)
-  if (!valid.length) return 25
-  return valid.reduce((s: number, a: any) => s + a.average_speed, 0) / valid.length * 3.6
-}
-
-// Average weekly km over the last 4 weeks (of matching-sport activities)
-function weeklyAvgKm(acts: any[]): number {
-  const now = Date.now()
-  const weeks = [0, 1, 2, 3].map(w => {
-    const lo = now - (w + 1) * 7 * 86400000
-    const hi = now - w * 7 * 86400000
-    return acts
-      .filter(a => { const d = new Date(a.start_date).getTime(); return d >= lo && d < hi })
-      .reduce((s: number, a: any) => s + (a.distance ?? 0) / 1000, 0)
-  })
-  const nonZero = weeks.filter(w => w > 0)
-  return nonZero.length ? Math.round(nonZero.reduce((s, w) => s + w, 0) / nonZero.length) : 0
-}
-
-// Days since most recent matching-sport activity
-function daysSinceLast(acts: any[]): number {
-  if (!acts.length) return 99
-  return (Date.now() - new Date(acts[0].start_date).getTime()) / 86400000
-}
-
-function determineUserLevel(acts: any[], sport: SportType): UserLevel {
-  if (acts.length < 3) return 'beginner'
-  const recent = acts.slice(0, 8)
-  const avgDistKm = recent.reduce((s: number, a: any) => s + (a.distance ?? 0), 0) / recent.length / 1000
-
-  if (sport === 'running') {
-    const secPerKm = avgPaceSecPerKm(recent)
-    if (avgDistKm >= 12 || secPerKm < 270) return 'advanced'    // >12 km avg or sub-4:30
-    if (avgDistKm >= 6  || secPerKm < 360) return 'intermediate' // >6 km avg or sub-6:00
-    return 'beginner'
-  }
-  if (sport === 'cycling') {
-    const spd = avgSpeedKmh(recent)
-    if (avgDistKm >= 70 || spd >= 32) return 'advanced'
-    if (avgDistKm >= 35 || spd >= 25) return 'intermediate'
-    return 'beginner'
-  }
-  return 'beginner'
-}
-
-function detectTrainingType(title: string, acts: any[]): TrainingType {
-  const t = title.toLowerCase()
-  if (['herstel', 'recovery', 'easy', 'rustig', 'actief herstel'].some(k => t.includes(k))) return 'herstel'
-  if (['interval', 'fartlek', 'herhaling', 'snelheid', 'vo2'].some(k => t.includes(k))) return 'interval'
-  if (['tempo', 'drempel', 'threshold', 'lactaat'].some(k => t.includes(k))) return 'tempo'
-  if (['lange duur', 'long run', 'lsd', '2u', '90min', 'lange rit'].some(k => t.includes(k))) return 'lang'
-  // "duurloop" without "lange" → zone2
-  // Context: trained yesterday → herstel
-  if (daysSinceLast(acts) < 1.5 && acts.length > 0) return 'herstel'
-  return 'zone2'
-}
-
-// Duration table (minutes) by training type × level
-const DURATION: Record<TrainingType, Record<UserLevel, number>> = {
-  herstel:  { beginner: 25, intermediate: 35, advanced: 40  },
-  zone2:    { beginner: 40, intermediate: 60, advanced: 75  },
-  tempo:    { beginner: 30, intermediate: 40, advanced: 50  },
-  interval: { beginner: 35, intermediate: 45, advanced: 55  },
-  lang:     { beginner: 55, intermediate: 80, advanced: 110 },
-}
-
-// Running: seconds/km offset relative to user's avg pace
-const RUN_PACE_OFFSET: Record<TrainingType, number> = {
-  herstel: +90, zone2: +45, tempo: -30, interval: -60, lang: +30,
-}
-
-// Cycling: fraction of user's avg speed
-const CYCLE_SPEED_FACTOR: Record<TrainingType, number> = {
-  herstel: 0.75, zone2: 0.85, tempo: 0.95, interval: 1.0, lang: 0.80,
-}
-
-const ZONE: Record<TrainingType, string> = {
-  herstel: 'Zone 1', zone2: 'Zone 2', tempo: 'Zone 3–4', interval: 'Zone 4–5', lang: 'Zone 2',
-}
-
-const TYPE_LABEL: Record<TrainingType, string> = {
-  herstel: 'Herstel', zone2: 'Zone 2', tempo: 'Tempo', interval: 'Interval', lang: 'Lange duur',
-}
-
-// ─── Core algorithm ───────────────────────────────────────────────────────────
-
-function computeAdvice(sport: SportType, activities: any[], title: string): Advice {
-  const matching = activities.filter(a => matchesSport(a, sport))
-
-  const trainingType = detectTrainingType(title, matching)
-  const userLevel = determineUserLevel(matching, sport)
-  const wkly = weeklyAvgKm(matching)
-
-  // Duration: base from table, tiny boost for high-volume athletes
-  let durationMin = DURATION[trainingType][userLevel]
-  if (wkly > 60 && trainingType !== 'herstel') durationMin = Math.round(durationMin * 1.1)
-  if (wkly > 0 && wkly < 20 && trainingType !== 'herstel') durationMin = Math.round(durationMin * 0.9)
-
-  const zone = ZONE[trainingType]
-  const levelLabel = userLevel === 'beginner' ? 'Beginner' : userLevel === 'intermediate' ? 'Gemiddeld' : 'Gevorderd'
-
-  if (sport === 'running') {
-    const baseSecPerKm = matching.length ? avgPaceSecPerKm(matching) : 360
-    const targetSecPerKm = Math.max(180, baseSecPerKm + RUN_PACE_OFFSET[trainingType])
-    const paceMin = Math.floor(targetSecPerKm / 60)
-    const paceSec = Math.round(targetSecPerKm % 60)
-    const targetPace = `${paceMin}:${paceSec.toString().padStart(2, '0')}`
-    // distance = duration ÷ pace  (both in minutes/km and minutes → km)
-    const targetKm = Math.round((durationMin / (targetSecPerKm / 60)) * 10) / 10
-
-    const parts = [`${TYPE_LABEL[trainingType]} · ${durationMin} min`, `${levelLabel}`]
-    if (wkly) parts.push(`~${wkly} km/week`)
-
-    return { sport, trainingType, userLevel, durationMin, targetKm, targetPace, targetSpeed: null, zone, basis: parts.join(' · ') }
-  }
-
-  if (sport === 'cycling') {
-    const baseSpeedKmh = matching.length ? avgSpeedKmh(matching) : 25
-    const targetSpeed = Math.max(10, Math.round(baseSpeedKmh * CYCLE_SPEED_FACTOR[trainingType]))
-    // distance = duration × speed  (hours × km/h → km)
-    const targetKm = Math.round((durationMin / 60) * targetSpeed * 10) / 10
-
-    const parts = [`${TYPE_LABEL[trainingType]} · ${durationMin} min`, `${levelLabel}`]
-    if (wkly) parts.push(`~${wkly} km/week`)
-
-    return { sport, trainingType, userLevel, durationMin, targetKm, targetPace: null, targetSpeed, zone, basis: parts.join(' · ') }
-  }
-
-  return { sport, trainingType: 'zone2', userLevel: 'beginner', durationMin: 0, targetKm: 0, targetPace: null, targetSpeed: null, zone: '–', basis: '–' }
-}
-
 // ─── UI helpers ───────────────────────────────────────────────────────────────
-
-const TYPE_COLOR: Record<TrainingType, string> = {
-  herstel: 'text-teal-400',
-  zone2: 'text-indigo-400',
-  tempo: 'text-orange-400',
-  interval: 'text-red-400',
-  lang: 'text-cyan-400',
-}
 
 function SportIcon({ sport }: { sport: SportType }) {
   if (sport === 'cycling') return <Bike size={28} className="text-cyan-400" />
@@ -490,7 +308,7 @@ function SessionContent() {
   const title = params.get('title') ?? 'Training'
   const time = params.get('time')
   const sport = detectSport(title)
-  const [advice, setAdvice] = useState<Advice | null>(null)
+  const [result, setResult] = useState<ComputeAdviceResult | null>(null)
 
   const timeLabel = time
     ? new Date(time).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
@@ -508,7 +326,7 @@ function SessionContent() {
         .eq('user_id', user.id)
         .gte('start_date', sixtyDaysAgo)
         .order('start_date', { ascending: false })
-      setAdvice(computeAdvice(sport, activities ?? [], title))
+      setResult(computeAdvice(sport, activities ?? [], title))
     }
     load()
   }, [sport, title])
@@ -533,7 +351,7 @@ function SessionContent() {
       {/* Header */}
       <div className="flex flex-col gap-2 mb-8">
         <div className="flex items-center gap-3">
-          {advice && <SportIcon sport={advice.sport} />}
+          {result && <SportIcon sport={result.advice.sport} />}
           <div>
             <h1 className="text-[34px] font-bold text-white leading-tight">{title}</h1>
             {timeLabel && <p className="text-[15px] text-white/50">Vandaag om {timeLabel}</p>}
@@ -541,7 +359,7 @@ function SessionContent() {
         </div>
       </div>
 
-      {!advice ? (
+      {!result ? (
         <div className="flex flex-col gap-4">
           {[100, 80, 80, 280].map((h, i) => (
             <div key={i} className="animate-pulse rounded-3xl" style={{ height: h, background: 'rgba(255,255,255,0.08)' }} />
@@ -560,20 +378,36 @@ function SessionContent() {
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
+          {/* Sparse-data banner: only running/cycling with < 3 matching activities */}
+          {!result.isPersonalized && (
+            <div
+              className="px-4 py-3 rounded-[14px] flex items-start gap-3"
+              style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.25)' }}
+            >
+              <span className="text-[20px]">📊</span>
+              <div>
+                <p className="text-[14px] font-semibold text-orange-400">Generiek advies</p>
+                <p className="text-[12px] text-white/50 mt-0.5">
+                  Koppel Strava en log minstens 3 activiteiten voor gepersonaliseerd trainingsadvies.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Row 1: training type + duration */}
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Type" value={TYPE_LABEL[advice.trainingType]} unit="" color={TYPE_COLOR[advice.trainingType]} />
-            <MetricCard label="Duur" value={String(advice.durationMin)} unit="min" />
+            <MetricCard label="Type" value={TYPE_LABEL[result.advice.trainingType]} unit="" color={TYPE_COLOR[result.advice.trainingType]} />
+            <MetricCard label="Duur" value={String(result.advice.durationMin)} unit="min" />
           </div>
 
           {/* Row 2: distance + pace/speed */}
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Afstand" value={String(advice.targetKm)} unit="km" />
-            {advice.targetPace !== null && (
-              <MetricCard label="Tempo" value={advice.targetPace} unit="/km" />
+            <MetricCard label="Afstand" value={String(result.advice.targetKm)} unit="km" />
+            {result.advice.targetPace !== null && (
+              <MetricCard label="Tempo" value={result.advice.targetPace} unit="/km" />
             )}
-            {advice.targetSpeed !== null && (
-              <MetricCard label="Snelheid" value={String(advice.targetSpeed)} unit="km/h" />
+            {result.advice.targetSpeed !== null && (
+              <MetricCard label="Snelheid" value={String(result.advice.targetSpeed)} unit="km/h" />
             )}
           </div>
 
@@ -581,15 +415,15 @@ function SessionContent() {
           <Card>
             <div className="flex items-center justify-between">
               <span className="text-[17px] font-semibold text-white">Hart slag zone</span>
-              <span className="text-[17px] font-semibold text-teal-400">{advice.zone}</span>
+              <span className="text-[17px] font-semibold text-teal-400">{result.advice.zone}</span>
             </div>
           </Card>
 
           {/* Route map */}
-          <RouteMapCard advice={advice} title={title} sport={sport} />
+          <RouteMapCard advice={result.advice} title={title} sport={sport} />
 
           {/* Basis */}
-          <p className="text-[13px] text-white/30 text-center">{advice.basis}</p>
+          <p className="text-[13px] text-white/30 text-center">{result.advice.basis}</p>
         </div>
       )}
     </div>
