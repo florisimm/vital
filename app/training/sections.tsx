@@ -1684,13 +1684,6 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
                       {day}
                     </span>
                   </div>
-                  {secondaryTypes.length > 0 && (
-                    <div className="flex gap-[3px]">
-                      {secondaryTypes.map(t => (
-                        <div key={t} className="w-[4px] h-[4px] rounded-full" style={{ background: calTypeColor(t) }} />
-                      ))}
-                    </div>
-                  )}
                 </div>
               )
             })}
