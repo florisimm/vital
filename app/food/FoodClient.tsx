@@ -507,19 +507,6 @@ function EditFoodSheet({ entry, userId, onSaved, onClose }: {
                   style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
               </div>
 
-              {/* Quick-select amounts */}
-              <div className="flex gap-2 flex-wrap">
-                {[25, 50, 75, 100, 150, 200, 250].map(v => (
-                  <button key={v} onClick={() => setGrams(String(v))}
-                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                    style={grams === String(v)
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-                    {v}g
-                  </button>
-                ))}
-              </div>
-
               {/* Macro preview */}
               {preview && (
                 <div className="grid grid-cols-4 gap-2">
