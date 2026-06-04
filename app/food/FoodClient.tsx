@@ -6,43 +6,11 @@ import { Plus, ChevronRight, ChevronLeft, Trash2, X, Search, Camera, Utensils, S
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import { BarcodeScanner } from '@/components/BarcodeScanner'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type FoodLogEntry = {
-  id: string
-  meal_category: string
-  food_name: string
-  amount_g: number | null
-  kcal: number | null
-  protein: number | null
-  carbs: number | null
-  fat: number | null
-  logged_at: string
-}
-
-type Product = {
-  id: string
-  name: string
-  brand: string | null
-  kcal: number | null
-  protein: number | null
-  carbs: number | null
-  fat: number | null
-  servings: { label: string; amount_g: number }[] | null
-}
-
-type Targets = { kcal: number; protein: number; carbs: number; fat: number }
-
-type TemplateFoodItem = {
-  food_name: string; brand: string | null; amount_g: number
-  kcal: number; protein: number; carbs: number; fat: number
-}
-
-type MealTemplate = {
-  id: string; name: string; description: string | null
-  foods: TemplateFoodItem[]
-}
+import type { FoodLogEntry, Product } from '@/lib/types'
+import {
+  fetchFoodData, fetchProducts, fetchMealTemplates, fetchFoodFrequency,
+  type Targets, type MealTemplate, type TemplateFoodItem,
+} from '@/app/food/fetchers'
 
 const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
 
@@ -80,39 +48,7 @@ const MEAL_ICONS: Record<string, string> = {
   supps:         '💊',
 }
 
-// ─── Fetchers ─────────────────────────────────────────────────────────────────
-
-async function fetchFoodData(date: string) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-
-  const [{ data: foodLog }, { data: settings }] = await Promise.all([
-    supabase
-      .from('food_log')
-      .select('id, meal_category, food_name, amount_g, kcal, protein, carbs, fat, logged_at')
-      .eq('user_id', user.id)
-      .eq('date', date)
-      .order('logged_at', { ascending: true }),
-    supabase
-      .from('user_settings')
-      .select('macro_kcal, macro_protein, macro_carbs, macro_fat')
-      .eq('user_id', user.id)
-      .single(),
-  ])
-
-  return {
-    foodLog: (foodLog ?? []) as FoodLogEntry[],
-    targets: {
-      kcal: Number(settings?.macro_kcal ?? 2500),
-      protein: Number(settings?.macro_protein ?? 180),
-      carbs: Number(settings?.macro_carbs ?? 250),
-      fat: Number(settings?.macro_fat ?? 80),
-    } as Targets,
-    userId: user.id,
-    today: date,
-  }
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDayLabel(dateStr: string) {
   const today = new Date().toISOString().split('T')[0]
@@ -122,49 +58,6 @@ function formatDayLabel(dateStr: string) {
   if (dateStr === yesterday) return 'Gisteren'
   if (dateStr === tomorrow) return 'Morgen'
   return new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
-}
-
-async function fetchMealTemplates(): Promise<MealTemplate[]> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  const { data } = await supabase
-    .from('meal_templates').select('id,name,description,foods')
-    .eq('user_id', user.id).order('created_at', { ascending: false })
-  return (data ?? []).map(r => ({
-    id: r.id, name: r.name, description: r.description,
-    foods: Array.isArray(r.foods) ? r.foods : [],
-  }))
-}
-
-async function fetchProducts() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  const { data } = await supabase
-    .from('products')
-    .select('id, name, brand, kcal, protein, carbs, fat, servings')
-    .or(`user_id.eq.${user.id},user_id.is.null`)
-    .order('name')
-  return (data ?? []) as Product[]
-}
-
-async function fetchFoodFrequency(): Promise<Record<string, number>> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return {}
-  const since = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0]
-  const { data } = await supabase
-    .from('food_log')
-    .select('food_name')
-    .eq('user_id', user.id)
-    .gte('date', since)
-  const freq: Record<string, number> = {}
-  for (const row of data ?? []) {
-    const key = (row.food_name ?? '').toLowerCase()
-    freq[key] = (freq[key] ?? 0) + 1
-  }
-  return freq
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -969,6 +862,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
   const [saving, setSaving] = useState(false)
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeLoading, setBarcodeLoading] = useState(false)
+  const [barcodeError, setBarcodeError] = useState<'not_found' | 'invalid' | 'unreachable' | null>(null)
 
   const { data: serverFreq = {} } = useSWR('food-frequency', fetchFoodFrequency, {
     revalidateOnFocus: false, dedupingInterval: 300_000,
@@ -1029,54 +923,23 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
   async function handleBarcodeDetected(barcode: string) {
     setShowBarcodeScanner(false)
     setBarcodeLoading(true)
+    setBarcodeError(null)
     setView('scan')
 
     try {
-      // 1. Look up in local products table first
-      const supabase = createClient()
-      const { data: localProduct } = await supabase
-        .from('products')
-        .select('id,name,brand,kcal,protein,carbs,fat,servings')
-        .eq('barcode', barcode)
-        .maybeSingle()
+      const res = await fetch(`/api/barcode-lookup?barcode=${encodeURIComponent(barcode)}`)
 
-      if (localProduct) {
-        const p = localProduct as Product
-        setSelected(p)
-        setSelectedServing(null); setServingMultiplier('1')
-        setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100')
-        setView('detail')
-        return
-      }
+      if (res.status === 404) { setBarcodeError('not_found'); return }
+      if (res.status === 400) { setBarcodeError('invalid'); return }
+      if (!res.ok)            { setBarcodeError('unreachable'); return }
 
-      // 2. Fall back to Open Food Facts
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
-      const json = await res.json()
-
-      if (json.status === 1 && json.product) {
-        const p = json.product
-        const n = p.nutriments ?? {}
-        const servingQ = p.serving_quantity ? Math.round(Number(p.serving_quantity)) : null
-        const servingLabel = p.serving_size ?? (servingQ ? `${servingQ}g` : null)
-        const servings: { label: string; amount_g: number }[] = []
-        if (servingQ && servingLabel) servings.push({ label: servingLabel, amount_g: servingQ })
-        setSelected({
-          id: 'barcode-' + barcode,
-          name: p.product_name || p.product_name_nl || 'Unknown product',
-          brand: p.brands ?? null,
-          kcal: Math.round(n['energy-kcal_100g'] ?? n['energy-kcal'] ?? 0),
-          protein: Math.round((n.proteins_100g ?? 0) * 10) / 10,
-          carbs: Math.round((n.carbohydrates_100g ?? 0) * 10) / 10,
-          fat: Math.round((n.fat_100g ?? 0) * 10) / 10,
-          servings,
-        })
-        setSelectedServing(servings[0] ?? null)
-        setGrams(servingQ ? String(servingQ) : '100')
-        setView('detail')
-      } else {
-        // Not found
-        setView('search')
-      }
+      const product = await res.json() as Product
+      setSelected(product)
+      setSelectedServing(product.servings?.[0] ?? null)
+      setServingMultiplier('1')
+      setGrams(product.servings?.[0] ? String(product.servings[0].amount_g) : '100')
+      globalMutate('products')
+      setView('detail')
     } finally {
       setBarcodeLoading(false)
     }
@@ -1149,20 +1012,6 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
     if (!selected || !preview) return
     setSaving(true)
     const supabase = createClient()
-
-    // Save barcode-scanned products to the user's own products table
-    if (selected.id.startsWith('barcode-')) {
-      await supabase.from('products').upsert({
-        user_id: userId,
-        name: selected.name,
-        brand: selected.brand ?? '',
-        kcal: selected.kcal,
-        protein: selected.protein,
-        carbs: selected.carbs,
-        fat: selected.fat,
-        servings: selected.servings?.length ? selected.servings : null,
-      }, { onConflict: 'user_id,name', ignoreDuplicates: true })
-    }
 
     const { data, error } = await supabase.from('food_log').insert({
       user_id: userId, date: today, meal_category: meal,
@@ -1253,7 +1102,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
           </div>
         )}
 
-        {/* ── Scan view (loading state) ── */}
+        {/* ── Scan view (loading / error state) ── */}
         {view === 'scan' && (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 pb-10 px-5">
             {barcodeLoading ? (
@@ -1261,12 +1110,53 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
                 <div className="w-16 h-16 rounded-full border-4 border-orange-400 border-t-transparent animate-spin" />
                 <p className="text-white/60 text-[16px]">Product opzoeken…</p>
               </>
-            ) : (
+            ) : barcodeError === 'not_found' ? (
               <>
-                <p className="text-white/40 text-[15px] text-center">Product niet gevonden. Probeer handmatig te zoeken.</p>
-                <button onClick={() => setView('search')} className="text-teal-400 font-semibold text-[15px]">Search</button>
+                <p className="text-[36px]">🔍</p>
+                <p className="text-white font-semibold text-[17px]">Product niet gevonden</p>
+                <p className="text-white/40 text-[14px] text-center px-4">
+                  Dit product staat niet in Open Food Facts.<br />Voer de gegevens handmatig in.
+                </p>
+                <div className="flex flex-col gap-2 w-full mt-2">
+                  <button
+                    onClick={() => setView('custom-food')}
+                    className="h-[48px] rounded-[14px] bg-white text-black font-semibold text-[15px]">
+                    Handmatig invoeren
+                  </button>
+                  <button
+                    onClick={() => { setBarcodeError(null); setShowBarcodeScanner(true) }}
+                    className="h-[48px] rounded-[14px] font-semibold text-[15px] text-teal-400"
+                    style={{ background: 'rgba(45,212,191,0.10)' }}>
+                    Opnieuw scannen
+                  </button>
+                  <button onClick={() => setView('search')} className="text-white/40 font-medium text-[14px] py-2">
+                    Zoek op naam
+                  </button>
+                </div>
               </>
-            )}
+            ) : barcodeError === 'unreachable' || barcodeError === 'invalid' ? (
+              <>
+                <p className="text-[36px]">{barcodeError === 'invalid' ? '📵' : '⚠️'}</p>
+                <p className="text-white font-semibold text-[17px]">
+                  {barcodeError === 'invalid' ? 'Ongeldige barcode' : 'Verbindingsfout'}
+                </p>
+                <p className="text-white/40 text-[14px] text-center px-4">
+                  {barcodeError === 'invalid'
+                    ? 'Scan een geldige productbarcode (EAN-8, EAN-13, UPC).'
+                    : 'Open Food Facts is tijdelijk niet bereikbaar.'}
+                </p>
+                <div className="flex flex-col gap-2 w-full mt-2">
+                  <button
+                    onClick={() => { setBarcodeError(null); setShowBarcodeScanner(true) }}
+                    className="h-[48px] rounded-[14px] bg-white text-black font-semibold text-[15px]">
+                    Opnieuw scannen
+                  </button>
+                  <button onClick={() => setView('custom-food')} className="text-white/40 font-medium text-[14px] py-2">
+                    Handmatig invoeren
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         )}
 

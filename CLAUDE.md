@@ -19,8 +19,7 @@ Copy `.env.local.example` to `.env.local` and fill in:
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-NEXT_PUBLIC_ORS_API_KEY=...      # Required for route generation on /training/session
-ANTHROPIC_API_KEY=...            # Required for /api/scan-food
+ORS_API_KEY=...                  # Required for route generation on /training/session (server-only, never NEXT_PUBLIC)
 ```
 
 ## Architecture
@@ -77,9 +76,9 @@ SWR cache keys: `'food-log'`, `'products'`, `'today'`, `'health-gezondheid'`, `'
 
 `RouteMap` ([app/training/session/RouteMap.tsx](app/training/session/RouteMap.tsx)) wraps `react-leaflet` and **must always be dynamically imported with `ssr: false`** — Leaflet requires a browser DOM.
 
-External API calls in the session page (all client-side, no proxy):
-- `https://api.openrouteservice.org` — route generation using `NEXT_PUBLIC_ORS_API_KEY`
-- `https://nominatim.openstreetmap.org` — geocoding for manual location input
+External API calls in the session page:
+- `/api/route-plan` — server-side proxy to `https://api.openrouteservice.org` using `ORS_API_KEY` (key never exposed to browser)
+- `https://nominatim.openstreetmap.org` — geocoding for manual location input (client-side, no key required)
 
 ### Supabase Edge Functions
 
@@ -103,9 +102,27 @@ Called directly from client components using the Supabase URL:
 
 Dutch keys used in `food_log.meal_category` (in order): `ontbijt`, `snack_ochtend`, `lunch`, `snack_middag`, `avondeten`, `snack_avond`, `supps`.
 
-### AI feature
+### Food scanning
 
-`/api/scan-food` ([app/api/scan-food/route.ts](app/api/scan-food/route.ts)) accepts a base64 image and calls Claude Haiku via the Anthropic SDK to identify the food and return macro estimates as JSON.
+`/api/barcode-lookup` ([app/api/barcode-lookup/route.ts](app/api/barcode-lookup/route.ts)) receives a `?barcode=` query param and:
+1. Checks the `products` table first (user's own rows + `user_id IS NULL` shared rows) — returns immediately on cache hit.
+2. Falls back to the Open Food Facts API (`https://world.openfoodfacts.org/api/v0/product/{barcode}.json`).
+3. Parses the OFN response and saves the product to `products` under the user's `user_id` for future cache hits.
+4. Returns a `Product` object (see `lib/types.ts`).
+
+`/api/scan-food` returns 410 Gone — replaced by `/api/barcode-lookup`. The `@anthropic-ai/sdk` package can be removed from `package.json`.
+
+The `products` table has `barcode TEXT` and `image_url TEXT` columns (in addition to the nutritional fields). Run the migration below if they don't exist yet:
+
+```sql
+ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+CREATE INDEX IF NOT EXISTS products_barcode_idx ON products(barcode) WHERE barcode IS NOT NULL;
+```
+
+### Shared types
+
+`lib/types.ts` exports `FoodLogEntry` and `Product` — import from here rather than redefining locally. `app/food/fetchers.ts` exports all Supabase fetchers for the Food tab (`fetchFoodData`, `fetchProducts`, `fetchMealTemplates`, `fetchFoodFrequency`) plus the local types `Targets`, `MealTemplate`, `TemplateFoodItem`.
 
 ### Auth
 
@@ -114,3 +131,13 @@ Supabase Auth with OAuth callback at `/auth/callback`. The login page is at `/lo
 ### Error logging
 
 `logError(error, component?)` from [lib/logError.ts](lib/logError.ts) writes to the `error_logs` Supabase table and silently no-ops on failure — safe to call anywhere without try/catch.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
