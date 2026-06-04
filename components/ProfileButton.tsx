@@ -20,6 +20,8 @@ export function ProfileButton() {
   const [editingAccount, setEditingAccount] = useState(false)
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editMsg, setEditMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const router = useRouter()
@@ -66,15 +68,24 @@ export function ProfileButton() {
   function openEditAccount() {
     setEditName(email?.split('@')[0] ?? '')
     setEditEmail(email ?? '')
+    setEditPassword('')
+    setEditPasswordConfirm('')
     setEditMsg(null)
     setEditingAccount(true)
   }
 
   async function saveAccount() {
+    if (editPassword && editPassword !== editPasswordConfirm) {
+      setEditMsg({ type: 'err', text: 'Wachtwoorden komen niet overeen' }); return
+    }
+    if (editPassword && editPassword.length < 6) {
+      setEditMsg({ type: 'err', text: 'Wachtwoord moet minimaal 6 tekens zijn' }); return
+    }
     setEditSaving(true); setEditMsg(null)
     const supabase = createClient()
-    const updates: { email?: string; data?: { full_name: string } } = {}
+    const updates: { email?: string; password?: string; data?: { full_name: string } } = {}
     if (editEmail !== email) updates.email = editEmail
+    if (editPassword) updates.password = editPassword
     updates.data = { full_name: editName }
     const { error } = await supabase.auth.updateUser(updates)
     setEditSaving(false)
@@ -82,6 +93,8 @@ export function ProfileButton() {
       setEditMsg({ type: 'err', text: error.message })
     } else {
       if (updates.email) setEmail(updates.email)
+      setEditPassword('')
+      setEditPasswordConfirm('')
       setEditMsg({ type: 'ok', text: updates.email ? 'Bevestigingsmail verstuurd naar nieuw adres.' : 'Opgeslagen.' })
     }
   }
@@ -197,6 +210,26 @@ export function ProfileButton() {
                       value={editEmail}
                       onChange={e => setEditEmail(e.target.value)}
                       placeholder="E-mailadres"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                    />
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="Wachtwoord">
+                  <ProfileRow separator>
+                    <input
+                      type="password"
+                      value={editPassword}
+                      onChange={e => setEditPassword(e.target.value)}
+                      placeholder="Nieuw wachtwoord"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                    />
+                  </ProfileRow>
+                  <ProfileRow>
+                    <input
+                      type="password"
+                      value={editPasswordConfirm}
+                      onChange={e => setEditPasswordConfirm(e.target.value)}
+                      placeholder="Bevestig wachtwoord"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
                     />
                   </ProfileRow>
