@@ -222,10 +222,10 @@ export function extractKeyLifts(hevy: HevyWorkout[]) {
     hevy.forEach(w => {
       if (!w.exercises) return
       w.exercises.forEach(ex => {
-        const title = ex.title.toLowerCase()
+        const title = (ex.title ?? '').toLowerCase()
         if (!keywords.some(k => title.includes(k))) return
         if (!ex.sets?.length) return
-        const max1RM = Math.max(...ex.sets.map(s => epley1RM(s.weight_kg, s.reps)))
+        const max1RM = Math.max(...ex.sets.map(s => epley1RM(s.weight_kg ?? 0, s.reps ?? 0)))
         if (max1RM > 0) history.push({ time: w.start_time, max1RM })
       })
     })
@@ -262,7 +262,7 @@ export function computeMuscleRecovery(hevy: HevyWorkout[]) {
     let lastTrained: string | null = null
     for (const w of sorted) {
       if (!w.exercises) continue
-      if (w.exercises.some(ex => keywords.some(k => ex.title.toLowerCase().includes(k)))) {
+      if (w.exercises.some(ex => keywords.some(k => (ex.title ?? '').toLowerCase().includes(k)))) {
         lastTrained = w.start_time
         break
       }
