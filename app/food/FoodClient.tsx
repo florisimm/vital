@@ -141,7 +141,7 @@ async function fetchProducts() {
   if (!user) return []
   const { data } = await supabase
     .from('products')
-    .select('id, name, brand, kcal, protein, carbs, fat')
+    .select('id, name, brand, kcal, protein, carbs, fat, servings')
     .or(`user_id.eq.${user.id},user_id.is.null`)
     .order('name')
   return (data ?? []) as Product[]
