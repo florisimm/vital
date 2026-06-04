@@ -299,6 +299,91 @@ export function estimateVO2max(activities: Activity[]): number | null {
   return best > 20 ? Math.round(best) : null
 }
 
+function computeRunning7DayTrend(activities: Activity[]) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const runs7 = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo)
+  const runs14to7 = activities.filter(a => isRun(a) && a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo)
+  const vol7 = runs7.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const vol14to7 = runs14to7.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const volPct = vol14to7 > 0 ? Math.round((vol7 - vol14to7) / vol14to7 * 100) : null
+  const speedRuns7 = runs7.filter(a => a.average_speed)
+  const avgSpd7 = speedRuns7.length ? speedRuns7.reduce((s, a) => s + (a.average_speed ?? 0), 0) / speedRuns7.length : 0
+  const speedRuns14to7 = runs14to7.filter(a => a.average_speed)
+  const avgSpd14to7 = speedRuns14to7.length ? speedRuns14to7.reduce((s, a) => s + (a.average_speed ?? 0), 0) / speedRuns14to7.length : 0
+  const avgPace7 = avgSpd7 > 0 ? formatPace(avgSpd7) : null
+  const paceDir = avgSpd7 > 0 && avgSpd14to7 > 0
+    ? (avgSpd7 > avgSpd14to7 * 1.02 ? 'sneller' : avgSpd7 < avgSpd14to7 * 0.98 ? 'langzamer' : 'stabiel')
+    : null
+  return { vol7, volPct, avgPace7, paceDir, runs7: runs7.length, runs14to7: runs14to7.length }
+}
+
+function computeCyclingWeeklyTrend(activities: Activity[]) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const rides7 = activities.filter(a => isRide(a) && a.start_date >= sevenDaysAgo)
+  const rides14to7 = activities.filter(a => isRide(a) && a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo)
+  const km7 = rides7.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const km14to7 = rides14to7.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const kmPct = km14to7 > 0 ? Math.round((km7 - km14to7) / km14to7 * 100) : null
+  const elev7 = rides7.reduce((s, a) => s + (a.total_elevation_gain ?? 0), 0)
+  const dur7 = rides7.reduce((s, a) => s + (a.moving_time ?? 0), 0)
+  return { km7, elev7, dur7, kmPct, rideCount: rides7.length }
+}
+
+function computeStrengthProgress(hevy: HevyWorkout[]) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const hevy7 = hevy.filter(h => h.start_time >= sevenDaysAgo)
+  const hevy14to7 = hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo)
+  const vol7 = hevy7.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
+  const vol14to7 = hevy14to7.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
+  const sets7 = hevy7.reduce((s, h) => s + (h.sets ?? 0), 0)
+  const sets14to7 = hevy14to7.reduce((s, h) => s + (h.sets ?? 0), 0)
+  const sessions7 = hevy7.length
+  const sessions14to7 = hevy14to7.length
+  const pctDelta = (cur: number, prev: number) => prev > 0 ? Math.round((cur - prev) / prev * 100) : null
+  return {
+    vol7, sets7, sessions7,
+    volumePct: pctDelta(vol7, vol14to7),
+    setsPct: pctDelta(sets7, sets14to7),
+    sessionsPct: pctDelta(sessions7, sessions14to7),
+  }
+}
+
+function computeMuscleDistribution(hevy: HevyWorkout[]) {
+  const groups = [
+    { label: 'Benen', keywords: ['squat', 'deadlift', 'leg press', 'lunge', 'rdl', 'hip thrust', 'calf', 'hamstring', 'quad', 'leg curl', 'leg extension'], color: '#4ade80' },
+    { label: 'Borst', keywords: ['bench', 'push', 'fly', 'dip', 'chest'], color: '#60a5fa' },
+    { label: 'Rug', keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'], color: '#2dd4bf' },
+    { label: 'Schouders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'], color: '#facc15' },
+    { label: 'Armen', keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'], color: '#fb923c' },
+  ]
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const recentHevy = hevy.filter(h => h.start_time >= sevenDaysAgo)
+  const setCounts: Record<string, number> = {}
+  let totalSets = 0
+  recentHevy.forEach(w => {
+    if (!w.exercises) return
+    w.exercises.forEach(ex => {
+      const title = (ex.title ?? '').toLowerCase()
+      const sets = ex.sets?.length ?? 0
+      for (const g of groups) {
+        if (g.keywords.some(k => title.includes(k))) {
+          setCounts[g.label] = (setCounts[g.label] ?? 0) + sets
+          totalSets += sets
+          break
+        }
+      }
+    })
+  })
+  if (totalSets === 0) return []
+  return groups
+    .filter(g => setCounts[g.label] > 0)
+    .map(g => ({ label: g.label, pct: Math.round((setCounts[g.label] / totalSets) * 100), color: g.color }))
+    .sort((a, b) => b.pct - a.pct)
+}
+
 // ─── AI Insight builders ──────────────────────────────────────────────────────
 
 function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[]): string {
@@ -315,42 +400,50 @@ function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[]): stri
 
 function buildRunningInsight(activities: Activity[]): string {
   const runs = activities.filter(isRun)
-  if (runs.length === 0) return 'No running data in the last 30 days.'
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
-  const vol7 = runs.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
-  const vol14to7 = runs.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  if (runs.length === 0) return 'Nog geen loopdata beschikbaar. Voeg je eerste run toe om inzichten te zien.'
   const readiness = computeRunningReadiness(activities)
-  if (vol14to7 > 0) {
-    const pct = Math.round((vol7 - vol14to7) / vol14to7 * 100)
-    const dir = pct > 5 ? `up ${pct}%` : pct < -5 ? `down ${Math.abs(pct)}%` : 'similar'
-    return `Running volume ${dir} vs last week (${vol7.toFixed(1)} km). Recovery at ${readiness.pct}% — ${readiness.suggestion.toLowerCase()} recommended today.`
+  const trend = computeRunning7DayTrend(activities)
+  const suggestion = readiness.suggestion === 'Tempo Run' ? 'een tempoloop'
+    : readiness.suggestion === 'Easy Run' ? 'een rustige duurloop'
+    : 'een rustdag'
+  if (trend.volPct !== null && Math.abs(trend.volPct) >= 15) {
+    const dir = trend.volPct > 0 ? `${trend.volPct}% meer km dan vorige week` : `${Math.abs(trend.volPct)}% minder km dan vorige week`
+    return `Je loopt ${dir}. Herstel is ${readiness.pct}% — ${suggestion} aanbevolen vandaag.`
   }
-  return `${vol7.toFixed(1)} km logged this week. Recovery at ${readiness.pct}% — ${readiness.suggestion.toLowerCase()} recommended today.`
+  const kmPart = trend.vol7 > 0 ? `${trend.vol7.toFixed(1)} km deze week` : ''
+  const pacePart = trend.avgPace7 ? ` in gemiddeld ${trend.avgPace7}/km` : ''
+  return `Herstel op ${readiness.pct}%.${kmPart ? ` ${kmPart}${pacePart}.` : ''} Advies vandaag: ${suggestion}.`
 }
 
 function buildCyclingInsight(activities: Activity[]): string {
-  if (!activities.some(isRide)) return 'No cycling data in the last 30 days.'
-  const ftp = computeFTP(activities)
-  const trend = computeCyclingEnduranceTrend(activities)
+  if (!activities.some(isRide)) return 'Nog geen fietsdata beschikbaar. Koppel Strava voor automatische sync.'
   const readiness = computeCyclingReadiness(activities)
-  const parts: string[] = []
-  if (ftp) parts.push(`Estimated FTP ${ftp}W`)
-  if (trend !== null) parts.push(`endurance ${trend > 0 ? `+${trend.toFixed(0)}%` : `${trend.toFixed(0)}%`} over 4 weeks`)
-  parts.push(`${readiness.suggestion.toLowerCase()} recommended today`)
-  return parts.join('. ') + '.'
+  const trend = computeCyclingWeeklyTrend(activities)
+  const ftp = computeFTP(activities)
+  const suggestion = readiness.suggestion === 'Threshold Session' ? 'een drempeltraining'
+    : readiness.suggestion === 'Zone 2' ? 'een zone 2 duurrit'
+    : 'een herstelrit'
+  let text = `Herstel op ${readiness.pct}% — ${suggestion} aanbevolen vandaag.`
+  if (trend.km7 > 0) text = `${trend.km7.toFixed(0)} km gefietst deze week. ` + text
+  if (ftp) text += ` Geschatte FTP: ${ftp}W.`
+  return text
 }
 
 function buildStrengthInsight(hevy: HevyWorkout[]): string {
-  if (hevy.length === 0) return 'No strength data in the last 30 days.'
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const weekSessions = hevy.filter(h => h.start_time >= sevenDaysAgo).length
-  const weekVolume = hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + (h.volume_kg ?? 0), 0)
+  if (hevy.length === 0) return 'Nog geen krachtdata beschikbaar. Koppel Hevy voor automatische sync.'
+  const progress = computeStrengthProgress(hevy)
+  if (progress.sessions7 === 0) return 'Geen krachttraining deze week. Plan een sessie om je voortgang bij te houden.'
   const lifts = extractKeyLifts(hevy)
   const trending = lifts.find(l => l.trend.includes('↑'))
-  let text = `${weekSessions} strength session${weekSessions !== 1 ? 's' : ''} this week.`
-  if (trending) text += ` ${trending.name} progressing (${trending.trend}).`
-  if (weekVolume > 0) text += ` ${Math.round(weekVolume).toLocaleString('nl-NL')} kg total load.`
+  let text = `${progress.sessions7} sessie${progress.sessions7 !== 1 ? 's' : ''} deze week`
+  if (progress.vol7 > 0) text += ` met ${Math.round(progress.vol7).toLocaleString('nl-NL')} kg totaal volume`
+  if (trending) text += `. ${trending.name} is in progressie (${trending.trend})`
+  text += '.'
+  const allRecovery = computeMuscleRecovery(hevy)
+  const stillRecovering = allRecovery.filter(g => g.recovery < 60)
+  if (stillRecovering.length > 0) {
+    text += ` Let op: ${stillRecovering.map(g => g.label.toLowerCase()).join(', ')} nog aan het herstellen.`
+  }
   return text
 }
 
@@ -499,6 +592,220 @@ function MuscleRecoveryBar({ label, recovery }: { label: string; recovery: numbe
         <div className="h-full rounded-full" style={{ width: `${recovery}%`, background: recColor }} />
       </div>
     </div>
+  )
+}
+
+function RunningReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
+  const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
+  const label = readiness.pct >= 85 ? 'Optimaal herstel' : readiness.pct >= 70 ? 'Goed genoeg' : 'Licht vermoeid'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Loopgereedheid</span>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-[40px] font-bold text-white leading-none">{readiness.pct}%</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="w-2 h-2 rounded-full" style={{ background: c }} />
+              <span className="text-[15px] font-semibold" style={{ color: c }}>{label}</span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-0.5 pb-1">
+            <span className="text-[12px] text-white/40">Advies vandaag</span>
+            <span className="text-[15px] font-semibold text-teal-400">{readiness.suggestion}</span>
+          </div>
+        </div>
+        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full" style={{ width: `${readiness.pct}%`, background: c }} />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function LastRunCard({ run }: { run: Activity }) {
+  const pace = run.average_speed ? formatPace(run.average_speed) : null
+  const dist = run.distance ? `${(run.distance / 1000).toFixed(2)} km` : null
+  const dur = run.moving_time ? formatDuration(run.moving_time) : null
+  return (
+    <Card>
+      <div className="flex flex-col gap-2">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Laatste Run</span>
+        <span className="text-[17px] font-semibold text-white leading-snug">{run.name}</span>
+        <span className="text-[12px] text-white/40">{formatDate(run.start_date)}</span>
+        <div className="flex gap-5 mt-1">
+          {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Afstand</span></div>}
+          {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-teal-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">Tempo /km</span></div>}
+          {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duur</span></div>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function RunningTrendCard({ trend }: { trend: ReturnType<typeof computeRunning7DayTrend> }) {
+  const volSign = (trend.volPct ?? 0) > 0 ? '+' : ''
+  const volColor = (trend.volPct ?? 0) > 10 ? '#4ade80' : (trend.volPct ?? 0) < -10 ? '#f87171' : 'rgba(255,255,255,0.5)'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">7 Dagen Overzicht</span>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[22px] font-bold text-white leading-none">{trend.vol7 > 0 ? `${trend.vol7.toFixed(1)}` : '–'}</span>
+            <span className="text-[11px] text-white/40">km</span>
+            {trend.volPct !== null && (
+              <span className="text-[12px] font-semibold" style={{ color: volColor }}>{volSign}{trend.volPct}% vs vorige week</span>
+            )}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[22px] font-bold text-teal-400 leading-none">{trend.avgPace7 ?? '–'}</span>
+            <span className="text-[11px] text-white/40">/km gemiddeld</span>
+            {trend.paceDir && <span className="text-[12px] text-white/40">{trend.paceDir} vs vorige week</span>}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[22px] font-bold text-white leading-none">{trend.runs7}</span>
+            <span className="text-[11px] text-white/40">runs</span>
+            {trend.runs14to7 > 0 && <span className="text-[12px] text-white/40">vs {trend.runs14to7} vorige week</span>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function CyclingReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
+  const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
+  const label = readiness.pct >= 85 ? 'Optimaal herstel' : readiness.pct >= 70 ? 'Goed genoeg' : 'Licht vermoeid'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Fietsgereedheid</span>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-[40px] font-bold text-white leading-none">{readiness.pct}%</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="w-2 h-2 rounded-full" style={{ background: c }} />
+              <span className="text-[15px] font-semibold" style={{ color: c }}>{label}</span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-0.5 pb-1">
+            <span className="text-[12px] text-white/40">Advies vandaag</span>
+            <span className="text-[15px] font-semibold text-cyan-400">{readiness.suggestion}</span>
+          </div>
+        </div>
+        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full" style={{ width: `${readiness.pct}%`, background: c }} />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function LastRideCard({ ride }: { ride: Activity }) {
+  const speed = ride.average_speed ? `${(ride.average_speed * 3.6).toFixed(1)} km/h` : null
+  const dist = ride.distance ? `${(ride.distance / 1000).toFixed(1)} km` : null
+  const dur = ride.moving_time ? formatDuration(ride.moving_time) : null
+  const elev = ride.total_elevation_gain ? `${Math.round(ride.total_elevation_gain)} m` : null
+  return (
+    <Card>
+      <div className="flex flex-col gap-2">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Laatste Rit</span>
+        <span className="text-[17px] font-semibold text-white leading-snug">{ride.name}</span>
+        <span className="text-[12px] text-white/40">{formatDate(ride.start_date)}</span>
+        <div className="flex gap-5 mt-1">
+          {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Afstand</span></div>}
+          {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Snelheid</span></div>}
+          {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duur</span></div>}
+          {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Klimmen</span></div>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function CyclingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeCyclingWeeklyTrend> }) {
+  const kmSign = (trend.kmPct ?? 0) > 0 ? '+' : ''
+  const kmColor = (trend.kmPct ?? 0) > 10 ? '#4ade80' : (trend.kmPct ?? 0) < -10 ? '#f87171' : 'rgba(255,255,255,0.5)'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Week Overzicht</span>
+        <div className="grid grid-cols-4 gap-2">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[20px] font-bold text-white leading-none">{trend.km7 > 0 ? `${trend.km7.toFixed(0)}` : '–'}</span>
+            <span className="text-[11px] text-white/40">km</span>
+            {trend.kmPct !== null && <span className="text-[11px] font-semibold" style={{ color: kmColor }}>{kmSign}{trend.kmPct}%</span>}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[20px] font-bold text-white leading-none">{trend.dur7 > 0 ? formatDuration(trend.dur7) : '–'}</span>
+            <span className="text-[11px] text-white/40">duur</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[20px] font-bold text-orange-400 leading-none">{trend.elev7 > 0 ? `${Math.round(trend.elev7)}` : '–'}</span>
+            <span className="text-[11px] text-white/40">m klim</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[20px] font-bold text-cyan-400 leading-none">{trend.rideCount}</span>
+            <span className="text-[11px] text-white/40">ritten</span>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function StrengthProgressCard({ progress }: { progress: ReturnType<typeof computeStrengthProgress> }) {
+  const delta = (pct: number | null) => {
+    if (pct === null) return ''
+    return pct > 0 ? `↑ +${pct}%` : pct < 0 ? `↓ ${pct}%` : '→ stabiel'
+  }
+  const dColor = (pct: number | null) => {
+    if (pct === null) return 'rgba(255,255,255,0.3)'
+    return pct > 5 ? '#4ade80' : pct < -5 ? '#f87171' : 'rgba(255,255,255,0.5)'
+  }
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Voortgang Deze Week</span>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Volume', value: progress.vol7 > 0 ? `${Math.round(progress.vol7).toLocaleString('nl-NL')}` : '–', unit: 'kg', pct: progress.volumePct },
+            { label: 'Sets', value: `${progress.sets7 || '–'}`, unit: '', pct: progress.setsPct },
+            { label: 'Sessies', value: `${progress.sessions7 || '–'}`, unit: '', pct: progress.sessionsPct },
+          ].map(item => (
+            <div key={item.label} className="flex flex-col gap-0.5">
+              <span className="text-[22px] font-bold text-white leading-none">{item.value}</span>
+              {item.unit && <span className="text-[11px] text-white/40">{item.unit}</span>}
+              <span className="text-[11px] text-white/40">{item.label}</span>
+              <span className="text-[12px] font-semibold" style={{ color: dColor(item.pct) }}>{delta(item.pct)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function MuscleDistributionCard({ distribution }: { distribution: { label: string; pct: number; color: string }[] }) {
+  if (distribution.length === 0) return null
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Spiergroep Verdeling</span>
+        {distribution.map(g => (
+          <div key={g.label} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[14px] text-white">{g.label}</span>
+              <span className="text-[13px] font-semibold" style={{ color: g.color }}>{g.pct}%</span>
+            </div>
+            <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div className="h-full rounded-full" style={{ width: `${g.pct}%`, background: g.color }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   )
 }
 
@@ -895,43 +1202,42 @@ export function OverviewSection({ activities, hevy, calendarEvents, onRefresh, r
 // ─── Running ──────────────────────────────────────────────────────────────────
 
 export function RunningSection({ activities }: { activities: Activity[] }) {
+  const readiness = computeRunningReadiness(activities)
+  const trend = computeRunning7DayTrend(activities)
+  const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const lastRun = allRuns[0] ?? null
+
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const weekRuns = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo)
-  const weekKm = weekRuns.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
-  const speedRuns = weekRuns.filter(a => a.average_speed)
-  const avgSpeed = speedRuns.length ? speedRuns.reduce((s, a) => s + (a.average_speed ?? 0), 0) / speedRuns.length : 0
   const cadenceRuns = weekRuns.filter(a => a.average_cadence)
-  const avgCadence = cadenceRuns.length ? Math.round(cadenceRuns.reduce((s, a) => s + (a.average_cadence ?? 0), 0) / cadenceRuns.length * 2) : 0
-
-  const [sheet, setSheet] = useState<'distance' | 'pace' | null>(null)
-
-  const projections = computeRaceProjections(activities)
+  const avgCadence = cadenceRuns.length
+    ? Math.round(cadenceRuns.reduce((s, a) => s + (a.average_cadence ?? 0), 0) / cadenceRuns.length * 2)
+    : 0
   const efficiencyTrend = computeRunningEfficiencyTrend(activities)
 
-  const allRuns = activities.filter(isRun)
-  const distanceRows: DetailRow[] = allRuns.map(a => ({ label: a.name, sub: formatDate(a.start_date), value: a.distance ? `${(a.distance / 1000).toFixed(2)} km` : '–' }))
-  const paceRows: DetailRow[] = allRuns.filter(a => a.average_speed).map(a => ({ label: a.name, sub: formatDate(a.start_date), value: `${formatPace(a.average_speed!)} /km` }))
+  const bestRunDist = allRuns.length > 0 ? Math.max(...allRuns.map(a => a.distance ?? 0)) : 0
+  const showProjections = allRuns.length >= 3 && bestRunDist >= 3000
+  const projections = showProjections ? computeRaceProjections(activities) : null
 
   return (
     <div className="flex flex-col gap-6">
       <AiInsight text={buildRunningInsight(activities)} />
 
-      {/* Daily training metrics first */}
-      <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Weekly Distance" value={weekKm > 0 ? weekKm.toFixed(1) : '–'} unit="km" detail="Running" Icon={PersonStanding} tint="text-teal-400" onClick={() => setSheet('distance')} />
-        <SmallCard title="Avg Pace" value={avgSpeed > 0 ? formatPace(avgSpeed) : '–'} unit="/km" detail="This week" Icon={TrendingUp} tint="text-blue-400" onClick={() => setSheet('pace')} />
-      </div>
+      <RunningReadinessCard readiness={readiness} />
 
-      {/* Running Metrics only when cadence data exists */}
+      {lastRun && <LastRunCard run={lastRun} />}
+
+      <RunningTrendCard trend={trend} />
+
       {avgCadence > 0 && (
         <Card>
           <div className="flex flex-col gap-4">
-            <span className="text-[15px] font-semibold text-white/50">Running Metrics</span>
+            <span className="text-[15px] font-semibold text-white/50">Loopmetrics</span>
             <div className="grid grid-cols-4 gap-2">
               {[
                 { label: 'Cadence', value: `${avgCadence}`, unit: 'spm', color: '#60a5fa' },
                 { label: 'Stride', value: '–', unit: 'm', color: '#2dd4bf' },
-                { label: 'Oscillation', value: '–', unit: 'cm', color: '#fb923c' },
+                { label: 'Oscillatie', value: '–', unit: 'cm', color: '#fb923c' },
                 { label: 'GCT', value: '–', unit: 'ms', color: '#a78bfa' },
               ].map(m => (
                 <div key={m.label} className="flex flex-col items-center gap-1">
@@ -948,34 +1254,30 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
         </Card>
       )}
 
-      {/* Race Projections at bottom — aspirational, not daily info */}
       {projections && (
         <Card>
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <span className="text-[15px] font-semibold text-white/50">Race Projections</span>
-              <span className="text-[12px] text-teal-400">Riegel formula</span>
+              <span className="text-[15px] font-semibold text-white/50">Wedstrijdprojecties</span>
+              <span className="text-[12px] text-teal-400">Riegel formule</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {[
+              {([
                 { dist: '5K', time: projections['5K'] },
                 { dist: '10K', time: projections['10K'] },
-                { dist: 'Half', time: projections['Half'] },
-                { dist: 'Marathon', time: projections['Marathon'] },
-              ].map(pr => (
+                ...(bestRunDist >= 5000 ? [{ dist: 'Half', time: projections['Half'] }] : []),
+                ...(bestRunDist >= 10000 ? [{ dist: 'Marathon', time: projections['Marathon'] }] : []),
+              ] as { dist: string; time: string }[]).map(pr => (
                 <div key={pr.dist} className="flex flex-col items-center gap-1">
                   <span className="text-[15px] font-bold text-white leading-tight text-center">{pr.time}</span>
                   <span className="text-[11px] text-white/40">{pr.dist}</span>
-                  <span className="text-[11px] font-medium text-teal-400">Projected</span>
+                  <span className="text-[11px] font-medium text-teal-400">Projectie</span>
                 </div>
               ))}
             </div>
           </div>
         </Card>
       )}
-
-      {sheet === 'distance' && <ActivityDetailSheet title="Distance per run" rows={distanceRows} onClose={() => setSheet(null)} />}
-      {sheet === 'pace' && <ActivityDetailSheet title="Pace per run" rows={paceRows} onClose={() => setSheet(null)} />}
     </div>
   )
 }
@@ -983,72 +1285,52 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
 // ─── Cycling ──────────────────────────────────────────────────────────────────
 
 export function CyclingSection({ activities }: { activities: Activity[] }) {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const weekRides = activities.filter(a => isRide(a) && a.start_date >= sevenDaysAgo)
-  const weekKm = weekRides.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
-  const weekElev = weekRides.reduce((s, a) => s + (a.total_elevation_gain ?? 0), 0)
-  const weekSecs = weekRides.reduce((s, a) => s + (a.moving_time ?? 0), 0)
-  const speedRides = weekRides.filter(a => a.average_speed)
-  const avgSpeedMs = speedRides.length ? speedRides.reduce((s, a) => s + (a.average_speed ?? 0), 0) / speedRides.length : 0
-
+  const readiness = computeCyclingReadiness(activities)
+  const trend = computeCyclingWeeklyTrend(activities)
+  const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const lastRide = allRides[0] ?? null
   const ftp = computeFTP(activities)
   const enduranceTrend = computeCyclingEnduranceTrend(activities)
-
-  const [sheet, setSheet] = useState<'duration' | 'elevation' | 'speed' | null>(null)
-
-  const allRides = activities.filter(isRide)
-  const durationRows: DetailRow[] = allRides.map(a => ({ label: a.name, sub: formatDate(a.start_date), value: a.moving_time ? formatDuration(a.moving_time) : '–' }))
-  const elevationRows: DetailRow[] = allRides.map(a => ({ label: a.name, sub: formatDate(a.start_date), value: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)} m` : '–' }))
-  const speedRows: DetailRow[] = allRides.filter(a => a.average_speed).map(a => ({ label: a.name, sub: formatDate(a.start_date), value: `${(a.average_speed! * 3.6).toFixed(1)} km/h` }))
 
   return (
     <div className="flex flex-col gap-6">
       <AiInsight text={buildCyclingInsight(activities)} />
 
-      <div>
-        <Bike size={22} className="text-cyan-400 mb-3" />
-        <div className="flex items-baseline gap-2">
-          <span className="text-[56px] font-bold text-white leading-none">{weekKm > 0 ? weekKm.toFixed(0) : '–'}</span>
-          <span className="text-[20px] font-semibold text-white/50">km this week</span>
-        </div>
-        <span className="text-[15px] font-medium text-cyan-400">
-          {weekKm > 0 ? `${weekRides.length} ride${weekRides.length > 1 ? 's' : ''}` : '–'}
-        </span>
-      </div>
+      <CyclingReadinessCard readiness={readiness} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Duration" value={weekSecs > 0 ? formatDuration(weekSecs) : '–'} detail="This week" Icon={Timer} tint="text-blue-400" onClick={() => setSheet('duration')} />
-        <SmallCard title="Elevation" value={weekElev > 0 ? `${Math.round(weekElev).toLocaleString('nl-NL')}` : '–'} unit="m" detail="Climbing" Icon={TrendingUp} tint="text-orange-400" onClick={() => setSheet('elevation')} />
-      </div>
+      {lastRide && <LastRideCard ride={lastRide} />}
 
-      {/* Show speed + FTP together when FTP exists, speed alone when it doesn't */}
-      <div className={ftp ? 'grid grid-cols-2 gap-3' : ''}>
-        <SmallCard title="Avg Speed" value={avgSpeedMs > 0 ? (avgSpeedMs * 3.6).toFixed(1) : '–'} unit="km/h" detail="This week" Icon={TrendingUp} tint="text-yellow-400" onClick={() => setSheet('speed')} />
-        {ftp && (
-          <SmallCard title="Est. FTP" value={`${ftp}`} unit="W" detail="kJ-based estimate" Icon={Bike} tint="text-purple-400" />
-        )}
-      </div>
+      <CyclingWeeklyTrendCard trend={trend} />
 
       {enduranceTrend !== null && (
         <Card>
           <div className="flex flex-col gap-2">
-            <span className="text-[15px] font-semibold text-white/50">Endurance Trend</span>
+            <span className="text-[15px] font-semibold text-white/50">Duuruithoudingsvermogen</span>
             <div className="flex items-baseline gap-2">
               <span className={`text-[28px] font-bold ${enduranceTrend >= 0 ? 'text-teal-400' : 'text-red-400'}`}>
                 {enduranceTrend > 0 ? '+' : ''}{enduranceTrend.toFixed(1)}%
               </span>
-              <span className="text-[15px] text-white/50">avg speed over 4 weeks</span>
+              <span className="text-[15px] text-white/50">gem. snelheid over 4 weken</span>
             </div>
             <span className="text-[13px] text-white/40">
-              {enduranceTrend >= 0 ? 'Fitness improving' : 'Fitness declining'} vs first half of 30-day window
+              {enduranceTrend >= 0 ? 'Fitness verbetert' : 'Fitness daalt'} vs eerste helft van 30-daags venster
             </span>
           </div>
         </Card>
       )}
 
-      {sheet === 'duration' && <ActivityDetailSheet title="Duration per ride" rows={durationRows} onClose={() => setSheet(null)} />}
-      {sheet === 'elevation' && <ActivityDetailSheet title="Elevation per ride" rows={elevationRows} onClose={() => setSheet(null)} />}
-      {sheet === 'speed' && <ActivityDetailSheet title="Avg speed per ride" rows={speedRows} onClose={() => setSheet(null)} />}
+      {ftp && (
+        <Card>
+          <div className="flex flex-col gap-2">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Geschatte FTP</span>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[40px] font-bold text-purple-400 leading-none">{ftp}</span>
+              <span className="text-[17px] font-semibold text-white/50">W</span>
+            </div>
+            <span className="text-[13px] text-white/40">Berekend uit kJ/tijd op ritten langer dan 45 min</span>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
@@ -1056,43 +1338,26 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
 // ─── Strength ─────────────────────────────────────────────────────────────────
 
 export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const weekHevy = hevy.filter(h => h.start_time >= sevenDaysAgo)
-  const totalSets = weekHevy.reduce((s, h) => s + (h.sets ?? 0), 0)
-  const totalVolume = weekHevy.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
-
+  const progress = computeStrengthProgress(hevy)
+  const distribution = computeMuscleDistribution(hevy)
   const keyLifts = extractKeyLifts(hevy)
   const allMuscleRecovery = computeMuscleRecovery(hevy)
-  // Only show groups that are still recovering — hide when all fully recovered
   const recoveringGroups = allMuscleRecovery.filter(g => g.recovery < 95)
 
   return (
     <div className="flex flex-col gap-6">
       <AiInsight text={buildStrengthInsight(hevy)} />
 
-      <div>
-        <Dumbbell size={22} className="text-orange-400 mb-3" />
-        <div className="flex items-baseline gap-2">
-          <span className="text-[56px] font-bold text-white leading-none">{totalSets || '–'}</span>
-          <span className="text-[20px] font-semibold text-white/50">sets this week</span>
-        </div>
-        <span className="text-[15px] font-medium text-orange-400">
-          {totalVolume > 0 ? `${Math.round(totalVolume).toLocaleString('nl-NL')} kg volume` : '–'}
-        </span>
-      </div>
+      <StrengthProgressCard progress={progress} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Volume Load" value={totalVolume > 0 ? Math.round(totalVolume).toLocaleString('nl-NL') : '–'} unit="kg" detail="Total lifted" Icon={TrendingUp} tint="text-orange-400" />
-        <SmallCard title="Sessions" value={weekHevy.length > 0 ? `${weekHevy.length}` : '–'} detail={weekHevy.length > 0 ? 'of 4 planned' : '–'} Icon={Timer} tint="text-blue-400" />
-      </div>
+      <MuscleDistributionCard distribution={distribution} />
 
-      {/* Muscle Recovery: only show when there are active recovery differences */}
       {recoveringGroups.length > 0 && (
         <Card>
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <span className="text-[15px] font-semibold text-white/50">Muscle Recovery</span>
-              <span className="text-[12px] text-white/30">{recoveringGroups.length} group{recoveringGroups.length > 1 ? 's' : ''} recovering</span>
+              <span className="text-[15px] font-semibold text-white/50">Spiergroep Herstel</span>
+              <span className="text-[12px] text-white/30">{recoveringGroups.length} groep{recoveringGroups.length > 1 ? 'en' : ''} herstelt nog</span>
             </div>
             {recoveringGroups.map(g => (
               <MuscleRecoveryBar key={g.label} label={g.label} recovery={g.recovery} />
@@ -1101,23 +1366,23 @@ export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
         </Card>
       )}
 
-      <Card>
-        <div className="flex flex-col gap-3">
-          <span className="text-[15px] font-semibold text-white/50">Key Lifts · Est. 1RM</span>
-          {keyLifts.length > 0 ? keyLifts.map(l => (
-            <div key={l.name} className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: 'rgba(255,255,255,0.2)' }} />
-              <div className="flex-1">
-                <p className="text-[15px] font-medium text-white">{l.name}</p>
-                <p className="text-[12px] text-white/40">{l.current1RM} kg estimated 1RM</p>
+      {keyLifts.length > 0 && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <span className="text-[15px] font-semibold text-white/50">Geschatte 1RM</span>
+            {keyLifts.map(l => (
+              <div key={l.name} className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: 'rgba(255,255,255,0.2)' }} />
+                <div className="flex-1">
+                  <p className="text-[15px] font-medium text-white">{l.name}</p>
+                  <p className="text-[12px] text-white/40">{l.current1RM} kg geschatte 1RM</p>
+                </div>
+                <span className={`text-[13px] font-semibold ${l.color}`}>{l.trend}</span>
               </div>
-              <span className={`text-[13px] font-semibold ${l.color}`}>{l.trend}</span>
-            </div>
-          )) : (
-            <p className="text-white/30 text-[15px]">No matching exercises in Hevy data</p>
-          )}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
