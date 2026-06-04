@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User } from 'lucide-react'
+import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -17,6 +17,11 @@ export function ProfileButton() {
   const [notifStatus, setNotifStatus] = useState<NotifStatus>('default')
   const [userId, setUserId] = useState<string | null>(null)
   const [confirmDisconnect, setConfirmDisconnect] = useState<'strava' | 'google' | null>(null)
+  const [editingAccount, setEditingAccount] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editMsg, setEditMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -57,6 +62,29 @@ export function ProfileButton() {
         .then(({ data }) => { if (data?.units) setUnits(data.units as Units) })
     })
   }, [open])
+
+  function openEditAccount() {
+    setEditName(email?.split('@')[0] ?? '')
+    setEditEmail(email ?? '')
+    setEditMsg(null)
+    setEditingAccount(true)
+  }
+
+  async function saveAccount() {
+    setEditSaving(true); setEditMsg(null)
+    const supabase = createClient()
+    const updates: { email?: string; data?: { full_name: string } } = {}
+    if (editEmail !== email) updates.email = editEmail
+    updates.data = { full_name: editName }
+    const { error } = await supabase.auth.updateUser(updates)
+    setEditSaving(false)
+    if (error) {
+      setEditMsg({ type: 'err', text: error.message })
+    } else {
+      if (updates.email) setEmail(updates.email)
+      setEditMsg({ type: 'ok', text: updates.email ? 'Bevestigingsmail verstuurd naar nieuw adres.' : 'Opgeslagen.' })
+    }
+  }
 
   async function handleSignOut() {
     await createClient().auth.signOut()
@@ -135,24 +163,72 @@ export function ProfileButton() {
             </button>
           </div>
 
+          {/* Edit account overlay */}
+          {editingAccount && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingAccount(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Terug
+                </button>
+                <span className="text-[17px] font-semibold text-white">Account</span>
+                <button onClick={saveAccount} disabled={editSaving}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
+                  {editSaving ? '…' : 'Opslaan'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
+                <ProfileSection title="Naam">
+                  <ProfileRow>
+                    <input
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      placeholder="Naam"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                    />
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="E-mailadres">
+                  <ProfileRow>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={e => setEditEmail(e.target.value)}
+                      placeholder="E-mailadres"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                    />
+                  </ProfileRow>
+                </ProfileSection>
+                {editMsg && (
+                  <p className={`text-[14px] text-center ${editMsg.type === 'ok' ? 'text-teal-400' : 'text-red-400'}`}>
+                    {editMsg.text}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6">
 
             {/* Profile */}
             <ProfileSection>
               <ProfileRow>
-                <div className="flex items-center gap-4 py-1">
+                <button className="flex items-center gap-4 py-1 w-full text-left active:opacity-70" onClick={openEditAccount}>
                   <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center shrink-0"
                     style={{ background: 'rgba(255,255,255,0.12)' }}>
                     <User size={26} className="text-white/50" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <p className="text-[17px] font-semibold text-white">
                       {email?.split('@')[0] ?? '—'}
                     </p>
                     <p className="text-[14px] text-white/40">{email ?? '—'}</p>
                   </div>
-                </div>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
+                </button>
               </ProfileRow>
             </ProfileSection>
 

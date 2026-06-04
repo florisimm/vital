@@ -147,6 +147,24 @@ async function fetchProducts() {
   return (data ?? []) as Product[]
 }
 
+async function fetchFoodFrequency(): Promise<Record<string, number>> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return {}
+  const since = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0]
+  const { data } = await supabase
+    .from('food_log')
+    .select('food_name')
+    .eq('user_id', user.id)
+    .gte('date', since)
+  const freq: Record<string, number> = {}
+  for (const row of data ?? []) {
+    const key = (row.food_name ?? '').toLowerCase()
+    freq[key] = (freq[key] ?? 0) + 1
+  }
+  return freq
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function FoodClient() {
@@ -605,7 +623,7 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
     const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
     return [...list]
       .sort((a, b) => {
-        const diff = (freqMap[b.id] ?? 0) - (freqMap[a.id] ?? 0)
+        const diff = (freqMap[b.name.toLowerCase()] ?? 0) - (freqMap[a.name.toLowerCase()] ?? 0)
         return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
       })
       .slice(0, 40)
@@ -808,17 +826,23 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeLoading, setBarcodeLoading] = useState(false)
 
-  const [freqMap, setFreqMap] = useState<Record<string, number>>(() => {
-    try { return JSON.parse(localStorage.getItem('food-freq') ?? '{}') } catch { return {} }
+  const { data: serverFreq = {} } = useSWR('food-frequency', fetchFoodFrequency, {
+    revalidateOnFocus: false, dedupingInterval: 300_000,
   })
+  const [localFreq, setLocalFreq] = useState<Record<string, number>>({})
 
-  function incrementFrequency(productId: string) {
-    setFreqMap(prev => {
-      const next = { ...prev, [productId]: (prev[productId] ?? 0) + 1 }
-      try { localStorage.setItem('food-freq', JSON.stringify(next)) } catch {}
-      return next
-    })
+  function incrementFrequency(productName: string) {
+    const key = productName.toLowerCase()
+    setLocalFreq(prev => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }))
   }
+
+  const freqMap = useMemo(() => {
+    const merged: Record<string, number> = { ...serverFreq }
+    for (const [k, v] of Object.entries(localFreq)) {
+      merged[k] = (merged[k] ?? 0) + v
+    }
+    return merged
+  }, [serverFreq, localFreq])
 
   // Meals state
   const { data: templates = [], mutate: mutateTemplates } = useSWR('meal-templates', fetchMealTemplates, { revalidateOnFocus: false })
@@ -834,7 +858,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
     return [...list]
       .sort((a, b) => {
-        const diff = (freqMap[b.id] ?? 0) - (freqMap[a.id] ?? 0)
+        const diff = (freqMap[b.name.toLowerCase()] ?? 0) - (freqMap[a.name.toLowerCase()] ?? 0)
         return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
       })
       .slice(0, 40)
@@ -987,7 +1011,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
     }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
     setSaving(false)
     if (!error && data) {
-      if (selected.id && !selected.id.startsWith('barcode-')) incrementFrequency(selected.id)
+      incrementFrequency(selected.name)
       onAdded(data as FoodLogEntry)
     }
   }
