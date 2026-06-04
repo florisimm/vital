@@ -171,15 +171,16 @@ export function FoodClient() {
   const [editEntry, setEditEntry] = useState<FoodLogEntry | null>(null)
 
   useEffect(() => {
-    document.body.style.overflow = showAddSheet ? 'hidden' : ''
+    const open = showAddSheet || !!editEntry
+    document.body.style.overflow = open ? 'hidden' : ''
     const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
-    if (nav) nav.style.display = showAddSheet ? 'none' : ''
+    if (nav) nav.style.display = open ? 'none' : ''
     return () => {
       document.body.style.overflow = ''
       const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
       if (nav) nav.style.display = ''
     }
-  }, [showAddSheet])
+  }, [showAddSheet, editEntry])
 
   function navigate(dir: 'left' | 'right') {
     setSlideDir(dir)
@@ -464,7 +465,7 @@ function EditFoodSheet({ entry, userId, onSaved, onClose }: {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
           <span className="text-[17px] font-bold text-white flex-1 mr-4 truncate">{entry.food_name}</span>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full shrink-0"
+          <button onClick={handleSave} className="w-8 h-8 flex items-center justify-center rounded-full shrink-0"
             style={{ background: 'rgba(255,255,255,0.08)' }}>
             <X size={16} className="text-white/70" />
           </button>
@@ -487,19 +488,6 @@ function EditFoodSheet({ entry, userId, onSaved, onClose }: {
                 <button onClick={() => setGrams(v => String(Number(v) + 25))}
                   className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[24px] text-white"
                   style={{ background: 'rgba(255,255,255,0.08)' }}>+</button>
-              </div>
-
-              {/* Quick-select amounts */}
-              <div className="flex gap-2 flex-wrap">
-                {[25, 50, 75, 100, 150, 200, 250].map(v => (
-                  <button key={v} onClick={() => setGrams(String(v))}
-                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                    style={grams === String(v)
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-                    {v}g
-                  </button>
-                ))}
               </div>
 
               {/* Macro preview */}
