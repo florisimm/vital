@@ -174,6 +174,7 @@ export function FoodClient() {
   const [selectedDate, setSelectedDate] = useState(todayStr)
   const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null)
   const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
 
   const { data, mutate, error, isLoading } = useSWR(
     `food-log-${selectedDate}`,
@@ -216,13 +217,19 @@ export function FoodClient() {
 
   function handleTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
   }
 
   function handleTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return
-    const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) navigate(diff > 0 ? 'left' : 'right')
+    if (touchStartX.current === null || touchStartY.current === null) return
+    const diffX = touchStartX.current - e.changedTouches[0].clientX
+    const diffY = touchStartY.current - e.changedTouches[0].clientY
+    // Only navigate if swipe is more horizontal than vertical
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+      navigate(diffX > 0 ? 'left' : 'right')
+    }
     touchStartX.current = null
+    touchStartY.current = null
   }
 
   const log = data?.foodLog ?? []
@@ -673,7 +680,10 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
         kcal: preview.kcal, protein: preview.protein, carbs: preview.carbs, fat: preview.fat,
         sugars: 0, brand: form.brand || '',
       }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
-      if (!error && data) onAdded(data as FoodLogEntry)
+      if (!error && data) {
+        globalMutate('products') // refresh search results
+        onAdded(data as FoodLogEntry)
+      }
     } finally {
       setSaving(false)
     }
@@ -1515,150 +1525,164 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
           const isPersonalized = runs.length > 0 || rides.length > 0
 
           return (
-            <div className="overflow-y-auto pb-8 flex flex-col gap-4" style={{ overscrollBehavior: 'contain' }}>
+            <div className="flex flex-col flex-1 min-h-0">
 
-              {/* Product header */}
-              <div className="px-5 pt-1">
-                <p className="text-[26px] font-bold text-white leading-tight">{cap(selected.name)}</p>
-                <p className="text-[13px] text-white/40 mt-0.5">
-                  {[selected.brand, `${Number(selected.kcal ?? 0)} kcal / 100g`].filter(Boolean).join(' · ')}
-                </p>
-              </div>
+              {/* ── Scrollable middle ── */}
+              <div className="flex-1 overflow-y-auto flex flex-col gap-4 pt-1 pb-4" style={{ overscrollBehavior: 'contain' }}>
 
-              {/* Quantity stepper with hold-to-repeat */}
-              <div className="px-5">
-                <div className="flex items-center justify-between px-3 py-2 rounded-[18px]"
-                  style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <button
-                    onPointerDown={() => startRepeat(-1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
-                    className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[30px] font-light text-white select-none"
-                    style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
-                  <div className="flex flex-col items-center">
-                    <div className="flex items-baseline gap-1">
-                      <input type="number" inputMode="decimal" value={grams}
-                        onChange={e => { setGrams(e.target.value); setServingMultiplier(String(Math.round(Number(e.target.value) / active.amount_g))) }}
-                        className="text-[52px] font-bold text-white bg-transparent text-center outline-none w-32" />
-                      <span className="text-[18px] text-white/50">g</span>
-                    </div>
-                    {active.amount_g > 1 && g > 0 && (
-                      <span className="text-[12px] text-white/30 -mt-1">{(g / active.amount_g).toFixed(1)} × {active.label}</span>
-                    )}
-                  </div>
-                  <button
-                    onPointerDown={() => startRepeat(1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
-                    className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[30px] font-light text-white select-none"
-                    style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+                {/* Product header */}
+                <div className="px-5">
+                  <p className="text-[26px] font-bold text-white leading-tight">{cap(selected.name)}</p>
+                  <p className="text-[13px] text-white/40 mt-0.5">
+                    {[selected.brand, `${Number(selected.kcal ?? 0)} kcal / 100g`].filter(Boolean).join(' · ')}
+                  </p>
                 </div>
-              </div>
 
-              {/* Serving pills */}
-              <div className="flex gap-2 overflow-x-auto px-5" style={{ scrollbarWidth: 'none' }}>
-                {servingPills.map((s, i) => (
-                  <button key={i} onClick={() => pickPill(s)}
-                    className="shrink-0 px-3 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap"
-                    style={active.label === s.label
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Daily impact card */}
-              {preview && (
-                <div className="mx-5 rounded-[20px] p-4 flex flex-col gap-3"
-                  style={{ background: 'rgba(255,255,255,0.07)' }}>
-
-                  {/* Kcal: before → after */}
-                  <div className="flex items-end justify-between">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[40px] font-bold text-white leading-none">{Math.round(afterKcal)}</span>
-                      <span className="text-[15px] text-white/45">kcal</span>
+                {/* Quantity stepper with hold-to-repeat */}
+                <div className="px-5">
+                  <div className="flex items-center justify-between px-3 py-2 rounded-[18px]"
+                    style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <button
+                      onPointerDown={() => startRepeat(-1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
+                      className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[30px] font-light text-white select-none"
+                      style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-baseline gap-1">
+                        <input type="number" inputMode="decimal" value={grams}
+                          onChange={e => { setGrams(e.target.value); setServingMultiplier(String(Math.round(Number(e.target.value) / active.amount_g))) }}
+                          className="text-[52px] font-bold text-white bg-transparent text-center outline-none w-32" />
+                        <span className="text-[18px] text-white/50">g</span>
+                      </div>
+                      {active.amount_g > 1 && g > 0 && (
+                        <span className="text-[12px] text-white/30 -mt-1">{(g / active.amount_g).toFixed(1)} × {active.label}</span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1.5 pb-1">
-                      <span className="text-[13px] text-white/30">{Math.round(totals.kcal)} →</span>
-                      <span className="text-[13px] font-semibold text-orange-400">+{Math.round(preview.kcal)}</span>
-                      <span className="text-[13px] text-white/30">· {kcalPct}%</span>
-                    </div>
+                    <button
+                      onPointerDown={() => startRepeat(1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
+                      className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[30px] font-light text-white select-none"
+                      style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
                   </div>
-                  <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div className="h-full rounded-full transition-all duration-150 bg-orange-400"
-                      style={{ width: `${Math.min(afterKcal / targets.kcal * 100, 100)}%` }} />
-                  </div>
+                </div>
 
-                  {/* Macro rows: label | bar | +delta | pct | remaining */}
-                  {([
-                    { label: 'Protein', after: afterProtein, delta: preview.protein, target: targets.protein, color: '#2dd4bf' },
-                    { label: 'Carbs',   after: afterCarbs,   delta: preview.carbs,   target: targets.carbs,   color: '#facc15' },
-                    { label: 'Fat',     after: afterFat,     delta: preview.fat,     target: targets.fat,     color: '#818cf8' },
-                  ] as const).map(({ label, after, delta, target, color }) => {
-                    const pct = Math.round(Math.min(after / target * 100, 999))
-                    const rem = Math.max(0, Math.round(target - after))
-                    return (
-                      <div key={label} className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[12px] font-semibold text-white/45 uppercase tracking-wide">{label}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-bold" style={{ color }}>+{delta.toFixed(1)}g</span>
-                            <span className="text-[12px] text-white/30">{pct}% · {rem > 0 ? `${rem}g left` : 'done ✓'}</span>
+                {/* Serving pills */}
+                <div className="flex gap-2 overflow-x-auto px-5" style={{ scrollbarWidth: 'none' }}>
+                  {servingPills.map((s, i) => (
+                    <button key={i} onClick={() => pickPill(s)}
+                      className="shrink-0 px-3 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap"
+                      style={active.label === s.label
+                        ? { background: 'white', color: 'black' }
+                        : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Daily impact card */}
+                {preview && (
+                  <div className="mx-5 rounded-[20px] p-4 flex flex-col gap-3"
+                    style={{ background: 'rgba(255,255,255,0.07)' }}>
+                    <div className="flex items-end justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[40px] font-bold text-white leading-none">{Math.round(afterKcal)}</span>
+                        <span className="text-[15px] text-white/45">kcal</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 pb-1">
+                        <span className="text-[13px] text-white/30">{Math.round(totals.kcal)} →</span>
+                        <span className="text-[13px] font-semibold text-orange-400">+{Math.round(preview.kcal)}</span>
+                        <span className="text-[13px] text-white/30">· {kcalPct}%</span>
+                      </div>
+                    </div>
+                    <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div className="h-full rounded-full transition-all duration-150 bg-orange-400"
+                        style={{ width: `${Math.min(afterKcal / targets.kcal * 100, 100)}%` }} />
+                    </div>
+                    {([
+                      { label: 'Protein', after: afterProtein, delta: preview.protein, target: targets.protein, color: '#2dd4bf' },
+                      { label: 'Carbs',   after: afterCarbs,   delta: preview.carbs,   target: targets.carbs,   color: '#facc15' },
+                      { label: 'Fat',     after: afterFat,     delta: preview.fat,     target: targets.fat,     color: '#818cf8' },
+                    ] as const).map(({ label, after, delta, target, color }) => {
+                      const pct = Math.round(Math.min(after / target * 100, 999))
+                      const rem = Math.max(0, Math.round(target - after))
+                      return (
+                        <div key={label} className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[12px] font-semibold text-white/45 uppercase tracking-wide">{label}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13px] font-bold" style={{ color }}>+{delta.toFixed(1)}g</span>
+                              <span className="text-[12px] text-white/30">{pct}% · {rem > 0 ? `${rem}g left` : 'done ✓'}</span>
+                            </div>
+                          </div>
+                          <div className="h-[4px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                            <div className="h-full rounded-full transition-all duration-150"
+                              style={{ width: `${Math.min(after / target * 100, 100)}%`, background: color }} />
                           </div>
                         </div>
-                        <div className="h-[4px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                          <div className="h-full rounded-full transition-all duration-150"
-                            style={{ width: `${Math.min(after / target * 100, 100)}%`, background: color }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                      )
+                    })}
+                  </div>
+                )}
 
-              {/* Meal pills */}
-              <div className="flex gap-2 overflow-x-auto px-5 pb-0.5" style={{ scrollbarWidth: 'none' }}>
-                {MEAL_ORDER.map(m => (
-                  <button key={m} onClick={() => setMeal(m)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap"
-                    style={meal === m
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
-                    <span>{MEAL_ICONS[m]}</span>
-                    <span>{MEAL_LABELS_SHORT[m]}</span>
-                  </button>
-                ))}
+                {/* Activity equivalent */}
+                {actItems.length > 0 && (
+                  <div className="mx-5 rounded-[20px] px-5 py-4 flex flex-col items-center gap-3"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.12em]">🔥 Activity Equivalent</span>
+                    <div className="flex items-center justify-center gap-5">
+                      {actItems.map((a: any, i: number) => (
+                        <span key={i} className="flex items-center gap-5">
+                          <span className="flex flex-col items-center gap-1">
+                            <span className="text-[22px] leading-none">{a.emoji}</span>
+                            <span className="text-[16px] font-bold text-white leading-none">{a.min} min</span>
+                            <span className="text-[11px] text-white/35 leading-none">{a.label}</span>
+                          </span>
+                          {i < actItems.length - 1 && <span className="text-white/15 text-[18px] font-light">·</span>}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-white/25 text-center leading-relaxed">
+                      {isPersonalized ? 'Based on your weight & activity profile' : 'General estimate · connect Strava to personalise'}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Save */}
-              <div className="px-5">
+              {/* ── Always-visible bottom: serving pills + meal pills + save ── */}
+              <div className="shrink-0 flex flex-col gap-3 px-5 pt-3 pb-6"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+
+                {/* Serving pills */}
+                <div className="flex gap-2 overflow-x-auto -mx-0" style={{ scrollbarWidth: 'none' }}>
+                  {servingPills.map((s, i) => (
+                    <button key={i} onClick={() => pickPill(s)}
+                      className="shrink-0 px-3 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap"
+                      style={active.label === s.label
+                        ? { background: 'white', color: 'black' }
+                        : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Meal pills */}
+                <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                  {MEAL_ORDER.map(m => (
+                    <button key={m} onClick={() => setMeal(m)}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap"
+                      style={meal === m
+                        ? { background: 'white', color: 'black' }
+                        : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
+                      <span>{MEAL_ICONS[m]}</span>
+                      <span>{MEAL_LABELS_SHORT[m]}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Save */}
                 <button onClick={handleSave} disabled={saving || !preview}
-                  className="w-full h-[58px] rounded-[18px] bg-white text-black font-bold text-[17px] disabled:opacity-40">
+                  className="w-full h-[56px] rounded-[18px] bg-white text-black font-bold text-[17px] disabled:opacity-40">
                   {saving ? '…' : `Log · ${MEAL_LABELS_SHORT[meal] ?? meal}`}
                 </button>
               </div>
-
-              {/* Activity equivalent */}
-              {actItems.length > 0 && (
-                <div className="mx-5 rounded-[20px] px-5 py-4 flex flex-col items-center gap-3"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.12em]">🔥 Activity Equivalent</span>
-                  <div className="flex items-center justify-center gap-5">
-                    {actItems.map((a: any, i: number) => (
-                      <span key={i} className="flex items-center gap-5">
-                        <span className="flex flex-col items-center gap-1">
-                          <span className="text-[22px] leading-none">{a.emoji}</span>
-                          <span className="text-[16px] font-bold text-white leading-none">{a.min} min</span>
-                          <span className="text-[11px] text-white/35 leading-none">{a.label}</span>
-                        </span>
-                        {i < actItems.length - 1 && (
-                          <span className="text-white/15 text-[18px] font-light">·</span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-white/25 text-center leading-relaxed">
-                    {isPersonalized ? 'Based on your weight & activity profile' : 'General estimate · connect Strava to personalise'}
-                  </p>
-                </div>
-              )}
             </div>
           )
         })()}
