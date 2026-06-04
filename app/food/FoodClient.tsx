@@ -1448,9 +1448,27 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
             setServingMultiplier('1')
           }
 
+          function applyStep(dir: 1 | -1) {
+            setGrams(prev => {
+              const n = Math.max(stepAmt, (Number(prev) || 0) + dir * stepAmt)
+              setServingMultiplier(String(Math.round(n / active.amount_g)))
+              return String(n)
+            })
+          }
+
+          // Hold-to-repeat for +/−
+          const repeatRef = { current: null as ReturnType<typeof setInterval> | null }
+          function startRepeat(dir: 1 | -1) {
+            applyStep(dir)
+            repeatRef.current = setInterval(() => applyStep(dir), 110)
+          }
+          function stopRepeat() {
+            if (repeatRef.current) { clearInterval(repeatRef.current); repeatRef.current = null }
+          }
+
           const servingPills = [
             ...servings,
-            ...[50, 100, 150, 200, 300]
+            ...[50, 100, 150, 200]
               .filter(v => !servings.some(s => s.amount_g === v))
               .map(v => ({ label: `${v}g`, amount_g: v })),
             GRAM_SERVING,
@@ -1460,6 +1478,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
           const afterProtein = totals.protein + (preview?.protein ?? 0)
           const afterCarbs   = totals.carbs   + (preview?.carbs   ?? 0)
           const afterFat     = totals.fat     + (preview?.fat     ?? 0)
+          const kcalPct      = Math.round(Math.min(afterKcal / targets.kcal * 100, 999))
 
           return (
             <div className="overflow-y-auto pb-8 flex flex-col gap-4" style={{ overscrollBehavior: 'contain' }}>
@@ -1472,13 +1491,13 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
                 </p>
               </div>
 
-              {/* Quantity stepper */}
+              {/* Quantity stepper with hold-to-repeat */}
               <div className="px-5">
                 <div className="flex items-center justify-between px-3 py-2 rounded-[18px]"
                   style={{ background: 'rgba(255,255,255,0.08)' }}>
                   <button
-                    onClick={() => { const n = Math.max(stepAmt, g - stepAmt); setGrams(String(n)); setServingMultiplier(String(Math.round(n / active.amount_g))) }}
-                    className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[28px] font-light text-white"
+                    onPointerDown={() => startRepeat(-1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
+                    className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[30px] font-light text-white select-none"
                     style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
                   <div className="flex flex-col items-center">
                     <div className="flex items-baseline gap-1">
@@ -1492,8 +1511,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
                     )}
                   </div>
                   <button
-                    onClick={() => { const n = g + stepAmt; setGrams(String(n)); setServingMultiplier(String(Math.round(n / active.amount_g))) }}
-                    className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-[28px] font-light text-white"
+                    onPointerDown={() => startRepeat(1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
+                    className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[30px] font-light text-white select-none"
                     style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
                 </div>
               </div>
@@ -1515,34 +1534,48 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
               {preview && (
                 <div className="mx-5 rounded-[20px] p-4 flex flex-col gap-3"
                   style={{ background: 'rgba(255,255,255,0.07)' }}>
-                  {/* Kcal headline */}
+
+                  {/* Kcal: before → after */}
                   <div className="flex items-end justify-between">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-[44px] font-bold text-white leading-none">+{Math.round(preview.kcal)}</span>
-                      <span className="text-[16px] text-white/50">kcal</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[40px] font-bold text-white leading-none">{Math.round(afterKcal)}</span>
+                      <span className="text-[15px] text-white/45">kcal</span>
                     </div>
-                    <span className="text-[13px] text-white/35 pb-1">{Math.round(afterKcal)} / {targets.kcal}</span>
+                    <div className="flex items-center gap-1.5 pb-1">
+                      <span className="text-[13px] text-white/30">{Math.round(totals.kcal)} →</span>
+                      <span className="text-[13px] font-semibold text-orange-400">+{Math.round(preview.kcal)}</span>
+                      <span className="text-[13px] text-white/30">· {kcalPct}%</span>
+                    </div>
                   </div>
                   <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div className="h-full rounded-full transition-all duration-200 bg-orange-400"
+                    <div className="h-full rounded-full transition-all duration-150 bg-orange-400"
                       style={{ width: `${Math.min(afterKcal / targets.kcal * 100, 100)}%` }} />
                   </div>
 
-                  {/* Macro rows */}
+                  {/* Macro rows: label | bar | +delta | pct | remaining */}
                   {([
                     { label: 'Protein', after: afterProtein, delta: preview.protein, target: targets.protein, color: '#2dd4bf' },
                     { label: 'Carbs',   after: afterCarbs,   delta: preview.carbs,   target: targets.carbs,   color: '#facc15' },
                     { label: 'Fat',     after: afterFat,     delta: preview.fat,     target: targets.fat,     color: '#818cf8' },
-                  ] as const).map(({ label, after, delta, target, color }) => (
-                    <div key={label} className="flex items-center gap-3">
-                      <span className="text-[13px] text-white/45 w-12">{label}</span>
-                      <div className="flex-1 h-[4px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                        <div className="h-full rounded-full transition-all duration-200"
-                          style={{ width: `${Math.min(after / target * 100, 100)}%`, background: color }} />
+                  ] as const).map(({ label, after, delta, target, color }) => {
+                    const pct = Math.round(Math.min(after / target * 100, 999))
+                    const rem = Math.max(0, Math.round(target - after))
+                    return (
+                      <div key={label} className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[12px] font-semibold text-white/45 uppercase tracking-wide">{label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold" style={{ color }}>+{delta.toFixed(1)}g</span>
+                            <span className="text-[12px] text-white/30">{pct}% · {rem > 0 ? `${rem}g left` : 'done ✓'}</span>
+                          </div>
+                        </div>
+                        <div className="h-[4px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          <div className="h-full rounded-full transition-all duration-150"
+                            style={{ width: `${Math.min(after / target * 100, 100)}%`, background: color }} />
+                        </div>
                       </div>
-                      <span className="text-[13px] font-semibold text-white/60 w-[52px] text-right">+{delta.toFixed(1)}g</span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -1564,7 +1597,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, totals, target
               <div className="px-5">
                 <button onClick={handleSave} disabled={saving || !preview}
                   className="w-full h-[58px] rounded-[18px] bg-white text-black font-bold text-[17px] disabled:opacity-40">
-                  {saving ? '…' : `Add to ${MEAL_LABELS[meal] ?? meal}`}
+                  {saving ? '…' : `Log · ${MEAL_LABELS_SHORT[meal] ?? meal}`}
                 </button>
               </div>
             </div>
