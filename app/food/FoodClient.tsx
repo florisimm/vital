@@ -584,12 +584,13 @@ function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
 
 // ─── Create meal view ────────────────────────────────────────────────────────
 
-function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, products, savingTemplate, onSave }: {
+function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, products, freqMap, savingTemplate, onSave }: {
   newMealName: string
   setNewMealName: (v: string) => void
   templateItems: TemplateFoodItem[]
   setTemplateItems: React.Dispatch<React.SetStateAction<TemplateFoodItem[]>>
   products: Product[]
+  freqMap: Record<string, number>
   savingTemplate: boolean
   onSave: () => void
 }) {
@@ -600,9 +601,15 @@ function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplat
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
   const filtered = useMemo(() => {
-    if (!pickerSearch.trim()) return products.slice(0, 40)
-    return products.filter(p => p.name.toLowerCase().includes(pickerSearch.toLowerCase())).slice(0, 40)
-  }, [pickerSearch, products])
+    const query = pickerSearch.trim().toLowerCase()
+    const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
+    return [...list]
+      .sort((a, b) => {
+        const diff = (freqMap[b.id] ?? 0) - (freqMap[a.id] ?? 0)
+        return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
+      })
+      .slice(0, 40)
+  }, [pickerSearch, products, freqMap])
 
   function addToMeal() {
     if (!pickerProduct) return
@@ -801,6 +808,18 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeLoading, setBarcodeLoading] = useState(false)
 
+  const [freqMap, setFreqMap] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('food-freq') ?? '{}') } catch { return {} }
+  })
+
+  function incrementFrequency(productId: string) {
+    setFreqMap(prev => {
+      const next = { ...prev, [productId]: (prev[productId] ?? 0) + 1 }
+      try { localStorage.setItem('food-freq', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
   // Meals state
   const { data: templates = [], mutate: mutateTemplates } = useSWR('meal-templates', fetchMealTemplates, { revalidateOnFocus: false })
   const [newMealName, setNewMealName] = useState('')
@@ -811,9 +830,15 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
   const [confirmTemplate, setConfirmTemplate] = useState<MealTemplate | null>(null)
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return products.slice(0, 40)
-    return products.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 40)
-  }, [search, products])
+    const query = search.trim().toLowerCase()
+    const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
+    return [...list]
+      .sort((a, b) => {
+        const diff = (freqMap[b.id] ?? 0) - (freqMap[a.id] ?? 0)
+        return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
+      })
+      .slice(0, 40)
+  }, [search, products, freqMap])
 
   const preview = selected && Number(grams) > 0 ? {
     kcal:    (Number(selected.kcal    ?? 0) * Number(grams)) / 100,
@@ -961,7 +986,10 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
       sugars: 0, brand: selected.brand ?? '',
     }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
     setSaving(false)
-    if (!error && data) onAdded(data as FoodLogEntry)
+    if (!error && data) {
+      if (selected.id && !selected.id.startsWith('barcode-')) incrementFrequency(selected.id)
+      onAdded(data as FoodLogEntry)
+    }
   }
 
   const sheetTitle = view === 'options' ? 'Add Food'
@@ -1179,6 +1207,7 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
             templateItems={templateItems}
             setTemplateItems={setTemplateItems}
             products={products}
+            freqMap={freqMap}
             savingTemplate={savingTemplate}
             onSave={saveTemplate}
           />
