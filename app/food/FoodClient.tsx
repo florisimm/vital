@@ -1438,7 +1438,8 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                       <input type="number" inputMode="decimal" value={servingMultiplier}
                         onChange={e => {
                           setServingMultiplier(e.target.value)
-                          if (selectedServing) setGrams(String(Math.round(Number(e.target.value) * selectedServing.amount_g)))
+                          const serving = selectedServing ?? servings[0]
+                          if (serving) setGrams(String(Math.round(Number(e.target.value) * serving.amount_g)))
                         }}
                         className="text-[22px] font-bold text-white bg-transparent text-center outline-none w-12" />
                       <span className="text-[15px] text-white/50">x</span>
