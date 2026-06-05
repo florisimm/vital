@@ -1,3 +1,5 @@
+'use client'
+
 import { createClient } from '@/lib/supabase'
 import type { FoodLogEntry, Product } from '@/lib/types'
 
