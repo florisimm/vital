@@ -88,7 +88,8 @@ export function FoodClient() {
   async function deleteEntry(id: string) {
     mutate(prev => prev ? { ...prev, foodLog: prev.foodLog.filter(f => f.id !== id) } : prev, false)
     const supabase = createClient()
-    await supabase.from('food_log').delete().eq('id', id)
+    const { error } = await supabase.from('food_log').delete().eq('id', id)
+    if (error) mutate()
   }
 
   function onAdded(entry: FoodLogEntry) {

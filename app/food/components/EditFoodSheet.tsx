@@ -59,7 +59,7 @@ export function EditFoodSheet({ entry, userId, onSaved, onClose }: {
 
         <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
           <span className="text-[17px] font-bold text-white flex-1 mr-4 truncate">{cap(entry.food_name)}</span>
-          <button onClick={handleSave} className="w-8 h-8 flex items-center justify-center rounded-full shrink-0"
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full shrink-0"
             style={{ background: 'rgba(255,255,255,0.08)' }}>
             <X size={16} className="text-white/70" />
           </button>
