@@ -378,32 +378,75 @@ export function FoodClient() {
 // ─── Macro drill-down sheet ───────────────────────────────────────────────────
 
 type MacroKey = 'kcal' | 'protein' | 'carbs' | 'fat'
-const MACRO_LABEL: Record<MacroKey, string> = { kcal: 'Calorieën', protein: 'Eiwit', carbs: 'Koolhydraten', fat: 'Vet' }
+const MACRO_LABEL: Record<MacroKey, string> = { kcal: 'Calories', protein: 'Protein', carbs: 'Carbs', fat: 'Fat' }
 const MACRO_UNIT: Record<MacroKey, string>  = { kcal: 'kcal', protein: 'g', carbs: 'g', fat: 'g' }
+const MACRO_COLOR: Record<MacroKey, string> = { kcal: '#fb923c', protein: '#2dd4bf', carbs: '#facc15', fat: '#818cf8' }
 
 function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log: FoodLogEntry[]; onClose: () => void }) {
-  const sorted = [...log].sort((a, b) => Number(b[macro] ?? 0) - Number(a[macro] ?? 0))
+  const total = log.reduce((s, f) => s + Number(f[macro] ?? 0), 0)
+  const unit = MACRO_UNIT[macro]
+  const color = MACRO_COLOR[macro]
+
+  const mealGroups = MEAL_ORDER
+    .map(meal => ({
+      meal,
+      items: log
+        .filter(f => f.meal_category === meal)
+        .sort((a, b) => Number(b[macro] ?? 0) - Number(a[macro] ?? 0)),
+    }))
+    .filter(g => g.items.length > 0)
+
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="flex items-center justify-between px-5 py-4 shrink-0">
         <div className="w-16" />
         <span className="text-[17px] font-semibold text-white">{MACRO_LABEL[macro]}</span>
-        <button onClick={onClose} className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold">Klaar</button>
+        <button onClick={onClose} className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold">Done</button>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-2">
-        {sorted.length === 0 ? (
-          <p className="text-white/40 text-[15px] text-center mt-10">Nog niets gelogd vandaag</p>
-        ) : sorted.map((item, i) => (
-          <div key={item.id ?? i} className="flex items-center justify-between px-4 py-3.5 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.07)' }}>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[16px] font-semibold text-white">{item.food_name}</span>
-              <span className="text-[13px] text-white/40">{MEAL_LABELS[item.meal_category] ?? item.meal_category} · {item.amount_g}g</span>
+
+      {/* Total */}
+      <div className="px-5 pb-4 shrink-0">
+        <span className="text-[36px] font-bold" style={{ color }}>{Math.round(total)}</span>
+        <span className="text-[18px] text-white/50 ml-1.5">{unit}</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5">
+        {mealGroups.length === 0 ? (
+          <p className="text-white/40 text-[15px] text-center mt-10">Nothing logged today</p>
+        ) : mealGroups.map(({ meal, items }) => {
+          const mealTotal = items.reduce((s, f) => s + Number(f[macro] ?? 0), 0)
+          return (
+            <div key={meal} className="flex flex-col gap-2">
+              {/* Meal header */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[13px] font-semibold text-white/50 uppercase tracking-[0.07em]">
+                  {MEAL_ICONS[meal]} {MEAL_LABELS[meal] ?? meal}
+                </span>
+                <span className="text-[13px] font-semibold" style={{ color }}>
+                  {Math.round(mealTotal)} {unit}
+                </span>
+              </div>
+              {/* Items */}
+              <div className="flex flex-col rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                {items.map((item, i) => (
+                  <div key={item.id ?? i}
+                    className="flex items-center justify-between px-4 py-3.5"
+                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[15px] font-semibold text-white">{item.food_name}</span>
+                      {item.amount_g != null && (
+                        <span className="text-[12px] text-white/35">{item.amount_g}g</span>
+                      )}
+                    </div>
+                    <span className="text-[16px] font-bold text-white shrink-0 ml-3">
+                      {Math.round(Number(item[macro] ?? 0))}<span className="text-[12px] text-white/50 font-medium ml-0.5">{unit}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <span className="text-[17px] font-bold text-white shrink-0 ml-3">
-              {Math.round(Number(item[macro] ?? 0))}<span className="text-[13px] text-white/50 font-medium ml-0.5">{MACRO_UNIT[macro]}</span>
-            </span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
