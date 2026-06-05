@@ -11,7 +11,7 @@ interface BarcodeScannerProps {
 export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [status, setStatus] = useState('Initialiseren...')
+  const [status, setStatus] = useState('Starting camera...')
   const detectedRef = useRef(false)
 
   useEffect(() => {
@@ -25,26 +25,13 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
 
         reader = new BrowserMultiFormatReader()
 
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices()
-        // Prefer rear camera on mobile
-        const device = devices.find(d =>
-          d.label.toLowerCase().includes('back') ||
-          d.label.toLowerCase().includes('rear') ||
-          d.label.toLowerCase().includes('environment')
-        ) ?? devices[devices.length - 1]
-
-        if (!device) {
-          setError('Geen camera gevonden')
-          return
-        }
-
         if (!videoRef.current || cancelled) return
-        setStatus('Richt op barcode...')
+        setStatus('Aim at barcode...')
 
-        await reader.decodeFromVideoDevice(
-          device.deviceId,
+        await reader.decodeFromConstraints(
+          { video: { facingMode: { ideal: 'environment' } } },
           videoRef.current,
-          (result: any, err: any) => {
+          (result: any) => {
             if (result && !detectedRef.current) {
               detectedRef.current = true
               onDetected(result.getText())
@@ -54,9 +41,9 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
       } catch (e: any) {
         if (!cancelled) {
           if (e?.name === 'NotAllowedError') {
-            setError('Camera toegang geweigerd. Geef toestemming in je browserinstellingen.')
+            setError('Camera access denied. Allow camera in your browser settings.')
           } else {
-            setError('Camera kon niet worden gestart.')
+            setError('Could not start camera.')
           }
         }
       }
@@ -88,7 +75,7 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
       {error ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
           <p className="text-white/60 text-[15px] text-center">{error}</p>
-          <button onClick={onClose} className="text-teal-400 font-semibold text-[15px]">Sluiten</button>
+          <button onClick={onClose} className="text-teal-400 font-semibold text-[15px]">Close</button>
         </div>
       ) : (
         <div className="flex-1 relative overflow-hidden">

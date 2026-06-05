@@ -141,7 +141,7 @@ async function fetchProducts() {
   if (!user) return []
   const { data } = await supabase
     .from('products')
-    .select('id, name, brand, kcal, protein, carbs, fat')
+    .select('id, name, brand, kcal, protein, carbs, fat, servings')
     .or(`user_id.eq.${user.id},user_id.is.null`)
     .order('name')
   return (data ?? []) as Product[]
@@ -1378,26 +1378,41 @@ function AddFoodSheet({ products, preselectedMeal, userId, today, onAdded, onClo
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[16px] outline-none" />
             </div>
-            <div className="overflow-y-auto flex flex-col rounded-[16px] overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {filtered.map((p, i) => (
-                <button key={p.id}
-                  onClick={() => { setSelected(p); setSelectedServing(null); setServingMultiplier('1'); setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100'); setView('detail') }}
-                  className="flex items-center justify-between px-4 py-3.5 text-left"
-                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                  <div>
-                    <p className="text-[16px] font-semibold text-white">{p.name}</p>
-                    {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
-                    <span className="text-[14px] font-semibold text-orange-400">
-                      {Math.round(Number(p.kcal ?? 0))} kcal
-                    </span>
-                    <ChevronRight size={14} className="text-white/20" />
-                  </div>
-                </button>
-              ))}
-            </div>
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-10 px-4 text-center">
+                <p className="text-[15px] text-white/40">
+                  {search.trim() ? `No results for "${search.trim()}"` : 'No products yet'}
+                </p>
+                {!search.trim() && (
+                  <button
+                    onClick={() => setView('custom-food')}
+                    className="text-teal-400 font-semibold text-[15px]">
+                    Add a custom food
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-y-auto flex flex-col rounded-[16px] overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.06)' }}>
+                {filtered.map((p, i) => (
+                  <button key={p.id}
+                    onClick={() => { setSelected(p); setSelectedServing(null); setServingMultiplier('1'); setGrams(p.servings?.[0] ? String(p.servings[0].amount_g) : '100'); setView('detail') }}
+                    className="flex items-center justify-between px-4 py-3.5 text-left"
+                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                    <div>
+                      <p className="text-[16px] font-semibold text-white">{p.name}</p>
+                      {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[14px] font-semibold text-orange-400">
+                        {Math.round(Number(p.kcal ?? 0))} kcal
+                      </span>
+                      <ChevronRight size={14} className="text-white/20" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
