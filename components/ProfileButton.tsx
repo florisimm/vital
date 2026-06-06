@@ -30,6 +30,9 @@ export function ProfileButton() {
   const [benchRef, setBenchRef] = useState(100)
   const [deadliftRef, setDeadliftRef] = useState(180)
   const [targetsSaving, setTargetsSaving] = useState(false)
+  const [editingPages, setEditingPages] = useState(false)
+  const [hiddenPages, setHiddenPages] = useState<string[]>([])
+  const [pagesSaving, setPagesSaving] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -67,7 +70,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -75,6 +78,7 @@ export function ProfileButton() {
           if (data?.strength_squat_ref) setSquatRef(data.strength_squat_ref)
           if (data?.strength_bench_ref) setBenchRef(data.strength_bench_ref)
           if (data?.strength_deadlift_ref) setDeadliftRef(data.strength_deadlift_ref)
+          setHiddenPages(Array.isArray(data?.hidden_pages) ? data.hidden_pages : [])
         })
     })
   }, [open])
@@ -157,6 +161,21 @@ export function ProfileButton() {
       .eq('user_id', userId)
     setTargetsSaving(false)
     setEditingTargets(false)
+  }
+
+  async function savePages() {
+    if (!userId) return
+    setPagesSaving(true)
+    await createClient()
+      .from('user_settings')
+      .update({ hidden_pages: hiddenPages })
+      .eq('user_id', userId)
+    setPagesSaving(false)
+    setEditingPages(false)
+  }
+
+  function togglePage(href: string) {
+    setHiddenPages(prev => prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href])
   }
 
   async function requestNotifications() {
@@ -325,6 +344,68 @@ export function ProfileButton() {
             </div>
           )}
 
+          {/* Pages overlay */}
+          {editingPages && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingPages(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Terug
+                </button>
+                <span className="text-[17px] font-semibold text-white">Pagina's</span>
+                <button onClick={savePages} disabled={pagesSaving}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
+                  {pagesSaving ? '…' : 'Opslaan'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
+                <ProfileSection title="Training">
+                  {[
+                    { label: 'Running', href: '/training/running' },
+                    { label: 'Cycling', href: '/training/cycling' },
+                    { label: 'Swimming', href: '/training/swimming' },
+                    { label: 'Strength', href: '/training/strength' },
+                    { label: 'History', href: '/training/history' },
+                    { label: 'Performance', href: '/training/performance' },
+                  ].map(({ label, href }, i, arr) => (
+                    <ProfileRow key={href} separator={i < arr.length - 1}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[17px] text-white">{label}</span>
+                        <button onClick={() => togglePage(href)} className="shrink-0">
+                          <div className={`w-[44px] h-[26px] rounded-full relative transition-colors duration-200 ${!hiddenPages.includes(href) ? 'bg-teal-400' : 'bg-white/20'}`}>
+                            <div className={`absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all duration-200 ${!hiddenPages.includes(href) ? 'left-[21px]' : 'left-[3px]'}`} />
+                          </div>
+                        </button>
+                      </div>
+                    </ProfileRow>
+                  ))}
+                </ProfileSection>
+                <ProfileSection title="Health">
+                  {[
+                    { label: 'Sleep', href: '/health/sleep' },
+                    { label: 'Recovery', href: '/health/recovery' },
+                    { label: 'Heart', href: '/health/heart' },
+                    { label: 'Weight', href: '/health/weight' },
+                    { label: 'Activity', href: '/health/activity' },
+                  ].map(({ label, href }, i, arr) => (
+                    <ProfileRow key={href} separator={i < arr.length - 1}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[17px] text-white">{label}</span>
+                        <button onClick={() => togglePage(href)} className="shrink-0">
+                          <div className={`w-[44px] h-[26px] rounded-full relative transition-colors duration-200 ${!hiddenPages.includes(href) ? 'bg-teal-400' : 'bg-white/20'}`}>
+                            <div className={`absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all duration-200 ${!hiddenPages.includes(href) ? 'left-[21px]' : 'left-[3px]'}`} />
+                          </div>
+                        </button>
+                      </div>
+                    </ProfileRow>
+                  ))}
+                </ProfileSection>
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6">
 
@@ -370,6 +451,12 @@ export function ProfileButton() {
               <ProfileRow separator>
                 <button className="flex items-center justify-between w-full" onClick={() => setEditingTargets(true)}>
                   <span className="text-[17px] text-white">Targets & Standards</span>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
+                </button>
+              </ProfileRow>
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full" onClick={() => setEditingPages(true)}>
+                  <span className="text-[17px] text-white">Pagina's</span>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
               </ProfileRow>

@@ -4,14 +4,24 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
+import useSWR from 'swr'
+import { createClient } from '@/lib/supabase'
 
-const CATEGORIES = [
+const ALL_CATEGORIES = [
   { label: 'Sleep',    href: '/health/sleep'    },
   { label: 'Recovery', href: '/health/recovery' },
   { label: 'Heart',    href: '/health/heart'    },
   { label: 'Weight',   href: '/health/weight'   },
   { label: 'Activity', href: '/health/activity' },
 ]
+
+async function fetchHiddenPages(): Promise<string[]> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  const { data } = await supabase.from('user_settings').select('hidden_pages').eq('user_id', user.id).single()
+  return Array.isArray(data?.hidden_pages) ? data.hidden_pages : []
+}
 
 export function HealthDetailScreen({
   title,
@@ -23,6 +33,8 @@ export function HealthDetailScreen({
   children: ReactNode
 }) {
   const router = useRouter()
+  const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, { revalidateOnFocus: false, dedupingInterval: 300_000 })
+  const CATEGORIES = ALL_CATEGORIES.filter(c => !hiddenPages.includes(c.href))
 
   return (
     <div
