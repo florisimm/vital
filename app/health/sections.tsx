@@ -343,7 +343,7 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
 
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
-export function ActivitySection({ rows }: { rows: GezondheidsRow[] }) {
+export function ActivitySection({ rows, stepGoal = 10000 }: { rows: GezondheidsRow[]; stepGoal?: number }) {
   const stepRows = rows.filter(r => r.stappen != null).slice(0, 7).reverse()
   const steps = stepRows.map(r => Number(r.stappen))
   const todaySteps = steps[steps.length - 1] ?? 0
@@ -357,7 +357,7 @@ export function ActivitySection({ rows }: { rows: GezondheidsRow[] }) {
         <div className="flex flex-col gap-4">
           <span className="text-[15px] font-semibold text-white/50">Today's Rings</span>
           <div className="flex justify-around">
-            <RingChart progress={todaySteps / 10000} color="#f97316" label="Steps"    value={`${todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} / 10K`} />
+            <RingChart progress={todaySteps / stepGoal} color="#f97316" label="Steps"    value={`${todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} / ${stepGoal >= 1000 ? `${stepGoal / 1000}K` : stepGoal}`} />
             <RingChart progress={0}                  color="#4ade80" label="Move"     value="– / – kcal" />
             <RingChart progress={0}                  color="#60a5fa" label="Stand"    value="– / – hrs" />
           </div>

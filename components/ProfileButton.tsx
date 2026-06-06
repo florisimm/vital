@@ -24,6 +24,12 @@ export function ProfileButton() {
   const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editMsg, setEditMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [editingTargets, setEditingTargets] = useState(false)
+  const [stepGoal, setStepGoal] = useState(10000)
+  const [squatRef, setSquatRef] = useState(140)
+  const [benchRef, setBenchRef] = useState(100)
+  const [deadliftRef, setDeadliftRef] = useState(180)
+  const [targetsSaving, setTargetsSaving] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -60,8 +66,16 @@ export function ProfileButton() {
         })
       })
 
-      supabase.from('user_settings').select('units').eq('user_id', uid).single()
-        .then(({ data }) => { if (data?.units) setUnits(data.units as Units) })
+      supabase.from('user_settings')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref')
+        .eq('user_id', uid).single()
+        .then(({ data }) => {
+          if (data?.units) setUnits(data.units as Units)
+          if (data?.step_goal) setStepGoal(data.step_goal)
+          if (data?.strength_squat_ref) setSquatRef(data.strength_squat_ref)
+          if (data?.strength_bench_ref) setBenchRef(data.strength_bench_ref)
+          if (data?.strength_deadlift_ref) setDeadliftRef(data.strength_deadlift_ref)
+        })
     })
   }, [open])
 
@@ -132,6 +146,17 @@ export function ProfileButton() {
       .from('user_settings')
       .update({ units: next })
       .eq('user_id', userId)
+  }
+
+  async function saveTargets() {
+    if (!userId) return
+    setTargetsSaving(true)
+    await createClient()
+      .from('user_settings')
+      .update({ step_goal: stepGoal, strength_squat_ref: squatRef, strength_bench_ref: benchRef, strength_deadlift_ref: deadliftRef })
+      .eq('user_id', userId)
+    setTargetsSaving(false)
+    setEditingTargets(false)
   }
 
   async function requestNotifications() {
@@ -243,6 +268,63 @@ export function ProfileButton() {
             </div>
           )}
 
+          {/* Targets editing overlay */}
+          {editingTargets && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingTargets(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Terug
+                </button>
+                <span className="text-[17px] font-semibold text-white">Targets</span>
+                <button onClick={saveTargets} disabled={targetsSaving}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
+                  {targetsSaving ? '…' : 'Opslaan'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
+                <ProfileSection title="Activiteit">
+                  <ProfileRow>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[17px] text-white">Stappendoel</span>
+                      <input
+                        type="number"
+                        value={stepGoal}
+                        onChange={e => setStepGoal(Number(e.target.value))}
+                        className="w-24 bg-transparent text-white text-[17px] text-right outline-none"
+                      />
+                    </div>
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="Kracht-standaarden (kg)">
+                  <ProfileRow separator>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[17px] text-white">Squat</span>
+                      <input type="number" value={squatRef} onChange={e => setSquatRef(Number(e.target.value))}
+                        className="w-20 bg-transparent text-white text-[17px] text-right outline-none" />
+                    </div>
+                  </ProfileRow>
+                  <ProfileRow separator>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[17px] text-white">Bench Press</span>
+                      <input type="number" value={benchRef} onChange={e => setBenchRef(Number(e.target.value))}
+                        className="w-20 bg-transparent text-white text-[17px] text-right outline-none" />
+                    </div>
+                  </ProfileRow>
+                  <ProfileRow>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[17px] text-white">Deadlift</span>
+                      <input type="number" value={deadliftRef} onChange={e => setDeadliftRef(Number(e.target.value))}
+                        className="w-20 bg-transparent text-white text-[17px] text-right outline-none" />
+                    </div>
+                  </ProfileRow>
+                </ProfileSection>
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6">
 
@@ -285,6 +367,12 @@ export function ProfileButton() {
 
             {/* Preferences */}
             <ProfileSection title="Preferences">
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full" onClick={() => setEditingTargets(true)}>
+                  <span className="text-[17px] text-white">Targets & Standards</span>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
+                </button>
+              </ProfileRow>
               <ProfileRow separator>
                 <button className="flex items-center justify-between w-full" onClick={toggleUnits}>
                   <span className="text-[17px] text-white">Units</span>

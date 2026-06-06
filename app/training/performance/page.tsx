@@ -4,6 +4,7 @@ import useSWR from 'swr'
 import { TrainingDetailScreen } from '@/components/TrainingDetailScreen'
 import { trainingFetcher } from '../fetcher'
 import { Card } from '@/components/ui'
+import { createClient } from '@/lib/supabase'
 import {
   computePerformanceScore, computeFTP, estimateVO2max, extractKeyLifts,
   computeRaceProjections, startOfWeek, formatDuration,
@@ -13,12 +14,28 @@ import {
 function isRun(a: Activity) { return a.sport_type?.toLowerCase().includes('run') ?? false }
 function isRide(a: Activity) { const t = a.sport_type?.toLowerCase() ?? ''; return t.includes('ride') || t.includes('cycl') }
 
-function computeStrengthScore(hevy: HevyWorkout[]): number | null {
+async function fetchStrengthSettings() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { squat: 140, bench: 100, deadlift: 180 }
+  const { data } = await supabase
+    .from('user_settings')
+    .select('strength_squat_ref,strength_bench_ref,strength_deadlift_ref')
+    .eq('user_id', user.id)
+    .single()
+  return {
+    squat:    Number(data?.strength_squat_ref    ?? 140),
+    bench:    Number(data?.strength_bench_ref    ?? 100),
+    deadlift: Number(data?.strength_deadlift_ref ?? 180),
+  }
+}
+
+function computeStrengthScore(hevy: HevyWorkout[], refs: { squat: number; bench: number; deadlift: number }): number | null {
   const lifts = extractKeyLifts(hevy)
-  const refs: Record<string, number> = { 'Squat': 140, 'Bench Press': 100, 'Deadlift': 180 }
+  const refMap: Record<string, number> = { 'Squat': refs.squat, 'Bench Press': refs.bench, 'Deadlift': refs.deadlift }
   let total = 0, count = 0
   for (const lift of lifts) {
-    const ref = refs[lift.name]
+    const ref = refMap[lift.name]
     if (ref) { total += Math.min(lift.current1RM / ref, 1.5); count++ }
   }
   return count > 0 ? Math.round((total / count) * 100) : null
@@ -43,6 +60,7 @@ function StatCard({ label, value, unit, sub, color = 'text-white' }: {
 
 export default function PerformancePage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data: strengthRefs = { squat: 140, bench: 100, deadlift: 180 } } = useSWR('user-settings-strength', fetchStrengthSettings, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const activities: Activity[] = data?.activities ?? []
   const hevy: HevyWorkout[] = data?.hevy ?? []
 
@@ -51,7 +69,7 @@ export default function PerformancePage() {
   const ftp = computeFTP(activities)
   const projections = computeRaceProjections(activities)
   const lifts = extractKeyLifts(hevy)
-  const strScore = computeStrengthScore(hevy)
+  const strScore = computeStrengthScore(hevy, strengthRefs)
 
   // Recovery
   const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()

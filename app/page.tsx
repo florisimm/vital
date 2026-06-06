@@ -35,7 +35,7 @@ async function fetchTodayData() {
     supabase.from('weather_cache').select('*').eq('id', 'current').single(),
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
-    supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat').eq('user_id', user.id).maybeSingle(),
+    supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal').eq('user_id', user.id).maybeSingle(),
     supabase.from('calendar_events').select('id,title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
   ])
 
@@ -173,7 +173,7 @@ function activityInsight(today: any): Insight | null {
   const stappen = today?.latestGezondheid?.stappen
   if (!stappen || stappen === 0) return null
 
-  const stepGoal = 10000
+  const stepGoal = Number(today?.settings?.step_goal ?? 10000)
   const pct = stappen / stepGoal
   const hour = new Date().getHours()
   const hoursElapsed = Math.max(1, hour - 6)
