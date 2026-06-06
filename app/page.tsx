@@ -31,22 +31,26 @@ async function fetchTodayData() {
   const now = new Date()
   const today = now.toISOString().split('T')[0]
 
-  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }, { data: calendarEvents }] = await Promise.all([
+  const todayIso = `${today}T00:00:00`
+  const [{ data: weather }, { data: gezondheid }, { data: foodLog }, { data: settings }, { data: calendarEvents }, { data: todayHevy }, { data: todayActivities }] = await Promise.all([
     supabase.from('weather_cache').select('*').eq('id', 'current').single(),
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
     supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal').eq('user_id', user.id).maybeSingle(),
     supabase.from('calendar_events').select('id,title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
+    supabase.from('hevy_workouts').select('id,title,start_time').eq('user_id', user.id).gte('start_time', todayIso),
+    supabase.from('strava_activities').select('id,name,sport_type,start_date').eq('user_id', user.id).gte('start_date', today),
   ])
 
+  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
   const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit', 'yoga', 'padel', 'hockey', 'basketbal', 'wielrennen']
   const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
     const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
-    if (t < now) return false
+    if (t < startOfToday) return false
     return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
   })
 
-  return { weather, latestGezondheid: gezondheid, foodLog: foodLog ?? [], settings, calendarEvents: upcomingCalendar }
+  return { weather, latestGezondheid: gezondheid, foodLog: foodLog ?? [], settings, calendarEvents: upcomingCalendar, todayHevy: todayHevy ?? [], todayActivities: todayActivities ?? [] }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -273,49 +277,82 @@ function weatherInsight(weather: any): Insight | null {
   }
 }
 
-function calendarInsight(calendarEvents: any[]): Insight | null {
+function calendarInsight(calendarEvents: any[], todayHevy: any[], todayActivities: any[]): Insight | null {
   if (!calendarEvents?.length) return null
 
-  const next = calendarEvents[0]
   const now = new Date()
-  const eventDate = next.start_datetime ? new Date(next.start_datetime) : new Date(next.start_date)
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
   const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(todayStart.getDate() + 1)
   const dayAfterStart = new Date(tomorrowStart); dayAfterStart.setDate(tomorrowStart.getDate() + 1)
 
-  const isToday = eventDate >= todayStart && eventDate < tomorrowStart
-  const isTomorrow = eventDate >= tomorrowStart && eventDate < dayAfterStart
-  if (!isToday && !isTomorrow) return null
+  const strengthKw = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower']
+  const cardioKw = ['run', 'loop', 'fietsen', 'zwemmen', 'swim', 'ride', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval']
 
+  function hasWorkedOut(title: string): boolean {
+    const t = title.toLowerCase()
+    const isStrength = strengthKw.some(kw => t.includes(kw))
+    const isCardio = cardioKw.some(kw => t.includes(kw))
+    if (isStrength && !isCardio) return todayHevy.length > 0
+    if (isCardio && !isStrength) return todayActivities.length > 0
+    return todayHevy.length > 0 || todayActivities.length > 0
+  }
+
+  const todayEvents = calendarEvents.filter(e => {
+    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    return d >= todayStart && d < tomorrowStart
+  })
+  const tomorrowEvents = calendarEvents.filter(e => {
+    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    return d >= tomorrowStart && d < dayAfterStart
+  })
+
+  // Prioriteer: vandaag niet gedaan → vandaag gedaan → morgen
+  const uncompletedToday = todayEvents.filter(e => !hasWorkedOut(e.title))
+  const next = uncompletedToday[0] ?? todayEvents[0] ?? tomorrowEvents[0]
+  if (!next) return null
+
+  const eventDate = next.start_datetime ? new Date(next.start_datetime) : new Date(next.start_date)
+  const isToday = eventDate >= todayStart && eventDate < tomorrowStart
+  const workedOut = isToday && hasWorkedOut(next.title)
   const time = next.start_datetime
     ? new Date(next.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
     : null
 
-  // Countdown for today's events
   let trend: string
-  if (isToday && next.start_datetime) {
+  let status: InsightStatus
+  let explanation: string
+
+  if (workedOut) {
+    status = 'good'
+    trend = 'Completed today ✓'
+    explanation = time ? `Trained — was scheduled at ${time}` : 'Completed today'
+  } else if (isToday && next.start_datetime && eventDate > now) {
+    status = 'neutral'
     const msUntil = eventDate.getTime() - now.getTime()
-    if (msUntil <= 0) {
-      trend = 'In progress'
-    } else {
-      const h = Math.floor(msUntil / 3600000)
-      const m = Math.floor((msUntil % 3600000) / 60000)
-      trend = h > 0 ? `In ${h}h ${m}m` : `In ${m}m`
-    }
+    const h = Math.floor(msUntil / 3600000)
+    const m = Math.floor((msUntil % 3600000) / 60000)
+    trend = h > 0 ? `In ${h}h ${m}m` : `In ${m}m`
+    explanation = `Scheduled at ${time}`
+  } else if (isToday) {
+    status = 'warning'
+    trend = 'Still to do'
+    explanation = time ? `Was planned at ${time}` : 'Planned for today'
   } else {
+    status = 'neutral'
     trend = 'Planned tomorrow'
+    explanation = time ? `Scheduled at ${time}` : 'Tomorrow'
   }
 
   return {
     id: 'calendar',
-    title: 'Next Training',
+    title: 'Training',
     value: next.title,
     unit: '',
-    status: 'neutral',
-    explanation: time ? `Scheduled at ${time}` : (isToday ? 'Today' : 'Tomorrow'),
+    status,
+    explanation,
     trend,
     href: `/training/session?title=${encodeURIComponent(next.title)}&time=${encodeURIComponent(next.start_datetime ?? '')}`,
-    priority: isToday ? 100 : 65,
+    priority: isToday && !workedOut ? 100 : isToday && workedOut ? 70 : 65,
   }
 }
 
@@ -326,7 +363,7 @@ function computeInsights(today: any, gezondheid: any[] | undefined, training: an
     activityInsight(today),
     weightInsight(gezondheid ?? []),
     weatherInsight(today?.weather),
-    calendarInsight(today?.calendarEvents),
+    calendarInsight(today?.calendarEvents ?? [], today?.todayHevy ?? [], today?.todayActivities ?? []),
   ]
     .filter((c): c is Insight => c !== null)
     .sort((a, b) => b.priority - a.priority)
