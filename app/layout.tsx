@@ -4,9 +4,26 @@ import { BottomNav } from '@/components/BottomNav'
 import { DataProvider } from '@/components/DataProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vital.app'
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'Vital',
-  description: 'AI fitness & health coaching',
+  description: 'AI fitness & health coaching. Track training, nutrition and recovery — all in one place.',
+  openGraph: {
+    title: 'Vital — AI Fitness & Health Coaching',
+    description: 'Track training, nutrition and recovery — all in one place.',
+    url: siteUrl,
+    siteName: 'Vital',
+    images: [{ url: '/og', width: 1200, height: 630, alt: 'Vital' }],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Vital — AI Fitness & Health Coaching',
+    description: 'Track training, nutrition and recovery — all in one place.',
+    images: ['/og'],
+  },
 }
 
 export const viewport: Viewport = {
