@@ -45,7 +45,8 @@ async function fetchTodayData() {
   const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
   const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit', 'yoga', 'padel', 'hockey', 'basketbal', 'wielrennen']
   const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
-    const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    // Date-only strings (no time) must be parsed as local midnight, not UTC midnight
+    const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
     if (t < startOfToday) return false
     return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
   })
@@ -297,12 +298,14 @@ function calendarInsight(calendarEvents: any[], todayHevy: any[], todayActivitie
     return todayHevy.length > 0 || todayActivities.length > 0
   }
 
+  const parseEventDate = (e: any) => e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
+
   const todayEvents = calendarEvents.filter(e => {
-    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    const d = parseEventDate(e)
     return d >= todayStart && d < tomorrowStart
   })
   const tomorrowEvents = calendarEvents.filter(e => {
-    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+    const d = parseEventDate(e)
     return d >= tomorrowStart && d < dayAfterStart
   })
 
@@ -311,7 +314,7 @@ function calendarInsight(calendarEvents: any[], todayHevy: any[], todayActivitie
   const next = uncompletedToday[0] ?? todayEvents[0] ?? tomorrowEvents[0]
   if (!next) return null
 
-  const eventDate = next.start_datetime ? new Date(next.start_datetime) : new Date(next.start_date)
+  const eventDate = parseEventDate(next)
   const isToday = eventDate >= todayStart && eventDate < tomorrowStart
   const workedOut = isToday && hasWorkedOut(next.title)
   const time = next.start_datetime
