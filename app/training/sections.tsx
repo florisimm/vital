@@ -70,6 +70,17 @@ function isRun(a: Activity) {
   return a.sport_type?.toLowerCase().includes('run')
 }
 
+function isSwim(a: Activity) {
+  return a.sport_type?.toLowerCase().includes('swim')
+}
+
+function formatPace100m(speedMs: number): string {
+  const secs = 100 / speedMs
+  const m = Math.floor(secs / 60)
+  const s = Math.round(secs % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 // ─── Computation ──────────────────────────────────────────────────────────────
 
 export function computePerformanceScore(activities: Activity[], hevy: HevyWorkout[]) {
@@ -213,6 +224,49 @@ function computeCyclingReadiness(activities: Activity[]) {
   const base = hoursSince < 12 ? 55 : hoursSince < 24 ? 70 : hoursSince < 48 ? 82 : 92
   const suggestion = base >= 85 ? 'Threshold Session' : base >= 70 ? 'Zone 2' : 'Recovery Ride'
   return { pct: base, suggestion }
+}
+
+function computeSwimmingReadiness(activities: Activity[]) {
+  const swims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  if (swims.length === 0) return { pct: 90, suggestion: 'Endurance Swim' }
+  const hoursSince = (Date.now() - new Date(swims[0].start_date).getTime()) / 3600000
+  const base = hoursSince < 12 ? 55 : hoursSince < 24 ? 70 : hoursSince < 48 ? 82 : 92
+  const suggestion = base >= 85 ? 'Sprint Set' : base >= 70 ? 'Endurance Swim' : 'Recovery Swim'
+  return { pct: base, suggestion }
+}
+
+function computeSwimmingWeeklyTrend(activities: Activity[]) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const swims7 = activities.filter(a => isSwim(a) && a.start_date >= sevenDaysAgo)
+  const swims14to7 = activities.filter(a => isSwim(a) && a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo)
+  const meters7 = swims7.reduce((s, a) => s + (a.distance ?? 0), 0)
+  const meters14to7 = swims14to7.reduce((s, a) => s + (a.distance ?? 0), 0)
+  const metersPct = meters14to7 > 0 ? Math.round((meters7 - meters14to7) / meters14to7 * 100) : null
+  const validPace = swims7.filter(a => a.average_speed && a.average_speed > 0)
+  const avgPace7 = validPace.length
+    ? formatPace100m(validPace.reduce((s, a) => s + (a.average_speed ?? 0), 0) / validPace.length)
+    : null
+  return { sessions7: swims7.length, meters7, metersPct, avgPace7 }
+}
+
+function buildSwimmingInsight(activities: Activity[]): string {
+  if (!activities.some(isSwim)) return 'No swimming data yet. Log your first swim in Strava to see insights here.'
+  const readiness = computeSwimmingReadiness(activities)
+  const trend = computeSwimmingWeeklyTrend(activities)
+  const suggestion = readiness.suggestion === 'Sprint Set' ? 'a sprint set'
+    : readiness.suggestion === 'Endurance Swim' ? 'an endurance swim'
+    : 'a recovery swim'
+  let text = `Recovery at ${readiness.pct}% — ${suggestion} recommended today.`
+  if (trend.meters7 > 0) {
+    const km = (trend.meters7 / 1000).toFixed(1)
+    text = `${km} km in the water this week. ` + text
+  }
+  if (trend.metersPct !== null && Math.abs(trend.metersPct) >= 15) {
+    const dir = trend.metersPct > 0 ? `up ${trend.metersPct}%` : `down ${Math.abs(trend.metersPct)}%`
+    text += ` Volume ${dir} vs last week.`
+  }
+  return text
 }
 
 export function extractKeyLifts(hevy: HevyWorkout[]) {
@@ -1719,4 +1773,126 @@ function relativeDay(iso: string): string {
   if (workout === today) return 'Today'
   if (workout === yesterday) return 'Yesterday'
   return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+// ─── Swimming ─────────────────────────────────────────────────────────────────
+
+function SwimmingReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
+  const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
+  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Good to go' : 'Slightly tired'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Swimming Readiness</span>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-[40px] font-bold text-white leading-none">{readiness.pct}%</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="w-2 h-2 rounded-full" style={{ background: c }} />
+              <span className="text-[15px] font-semibold" style={{ color: c }}>{label}</span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-0.5 pb-1">
+            <span className="text-[12px] text-white/40">Recommended today</span>
+            <span className="text-[15px] font-semibold text-blue-400">{readiness.suggestion}</span>
+          </div>
+        </div>
+        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full" style={{ width: `${readiness.pct}%`, background: c }} />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function LastSwimCard({ swim }: { swim: Activity }) {
+  const pace = swim.average_speed ? formatPace100m(swim.average_speed) : null
+  const dist = swim.distance ? `${(swim.distance / 1000).toFixed(2)} km` : null
+  const dur = swim.moving_time ? formatDuration(swim.moving_time) : null
+  const openWater = swim.sport_type?.toLowerCase().includes('open')
+  return (
+    <Card>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Swim</span>
+          {openWater && <span className="text-[11px] font-semibold text-cyan-400 px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,211,238,0.12)' }}>Open Water</span>}
+        </div>
+        <span className="text-[17px] font-semibold text-white leading-snug">{swim.name}</span>
+        <span className="text-[12px] text-white/40">{formatDate(swim.start_date)}</span>
+        <div className="flex gap-5 mt-1">
+          {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
+          {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-blue-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">/100m</span></div>}
+          {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
+        </div>
+        {swim.average_heartrate && (
+          <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
+            <span className="text-[13px] text-white/40">Avg HR</span>
+            <span className="text-[13px] font-semibold text-red-400">{Math.round(swim.average_heartrate)} bpm</span>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function SwimmingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeSwimmingWeeklyTrend> }) {
+  const pctColor = (trend.metersPct ?? 0) > 10 ? '#4ade80' : (trend.metersPct ?? 0) < -10 ? '#f87171' : 'rgba(255,255,255,0.5)'
+  const distLabel = trend.meters7 >= 1000
+    ? `${(trend.meters7 / 1000).toFixed(1)} km`
+    : `${trend.meters7} m`
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">7-Day Overview</span>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[22px] font-bold text-white leading-none">{trend.meters7 > 0 ? distLabel : '–'}</span>
+            <span className="text-[11px] text-white/40">distance</span>
+            {trend.metersPct !== null && (
+              <span className="text-[12px] font-semibold" style={{ color: pctColor }}>
+                {trend.metersPct > 0 ? '+' : ''}{trend.metersPct}% vs last week
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[22px] font-bold text-blue-400 leading-none">{trend.avgPace7 ?? '–'}</span>
+            <span className="text-[11px] text-white/40">avg /100m</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[22px] font-bold text-white leading-none">{trend.sessions7}</span>
+            <span className="text-[11px] text-white/40">sessions</span>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+export function SwimmingSection({ activities }: { activities: Activity[] }) {
+  const readiness = computeSwimmingReadiness(activities)
+  const trend = computeSwimmingWeeklyTrend(activities)
+  const allSwims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const lastSwim = allSwims[0] ?? null
+
+  if (allSwims.length === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <AiInsight text="No swimming data yet. Log your first swim in Strava to see insights here." />
+        <Card>
+          <p className="text-[15px] text-white/40 text-center py-6">
+            Connect Strava and log a swim to start tracking your progress.
+          </p>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <AiInsight text={buildSwimmingInsight(activities)} />
+      <SwimmingReadinessCard readiness={readiness} />
+      {lastSwim && <LastSwimCard swim={lastSwim} />}
+      <SwimmingWeeklyTrendCard trend={trend} />
+    </div>
+  )
 }

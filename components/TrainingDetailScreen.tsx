@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 const CATEGORIES = [
   { label: 'Running',     href: '/training/running'     },
   { label: 'Cycling',     href: '/training/cycling'     },
+  { label: 'Swimming',    href: '/training/swimming'    },
   { label: 'Strength',    href: '/training/strength'    },
   { label: 'History',     href: '/training/history'     },
   { label: 'Performance', href: '/training/performance' },
