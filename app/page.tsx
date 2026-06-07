@@ -511,17 +511,18 @@ function DailyBriefingCard({ text }: { text: string }) {
 
 const STRAVA_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
 
-function HeroActionCard({ nextWorkout, tomorrowWorkout, showTrainingLink, proteinLeft }: {
-  nextWorkout: { title: string; start_datetime: string | null } | null
+function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, proteinLeft }: {
+  todayWorkout: { title: string; start_datetime: string | null } | null
+  todayWorkoutDone: boolean
   tomorrowWorkout: { title: string } | null
-  showTrainingLink: boolean
   proteinLeft: number
 }) {
-  const workoutLabel = nextWorkout
+  const workoutLabel = todayWorkout
     ? (() => {
-        const t = nextWorkout.start_datetime ? new Date(nextWorkout.start_datetime) : null
+        const t = todayWorkout.start_datetime ? new Date(todayWorkout.start_datetime) : null
         const time = t ? t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null
-        return time ? `${nextWorkout.title} at ${time}` : nextWorkout.title
+        const base = time ? `${todayWorkout.title} at ${time}` : todayWorkout.title
+        return todayWorkoutDone ? `${base} ✓` : base
       })()
     : 'No workout planned today'
 
@@ -529,11 +530,17 @@ function HeroActionCard({ nextWorkout, tomorrowWorkout, showTrainingLink, protei
     ? `Sleep before 23:00 to be ready for ${tomorrowWorkout.title}`
     : 'Sleep before 23:00 to optimize recovery'
 
+  const showTomorrow = tomorrowWorkout && (todayWorkoutDone || !todayWorkout)
+
   const actions = [
-    workoutLabel,
-    proteinLeft > 10 ? `Eat ${Math.round(proteinLeft)}g protein to support recovery` : 'Protein goal reached ✓',
-    sleepAction,
+    { label: workoutLabel, done: todayWorkoutDone && !!todayWorkout, isWorkout: true },
+    ...(showTomorrow ? [{ label: `Tomorrow: ${tomorrowWorkout!.title}`, done: false, isWorkout: false }] : []),
+    { label: proteinLeft > 10 ? `Eat ${Math.round(proteinLeft)}g protein to support recovery` : 'Protein goal reached ✓', done: false, isWorkout: false },
+    { label: sleepAction, done: false, isWorkout: false },
   ]
+
+  const showTrainingLink = todayWorkout !== null && !todayWorkoutDone &&
+    STRAVA_KEYWORDS.some(k => todayWorkout.title.toLowerCase().includes(k))
 
   return (
     <div
@@ -549,12 +556,12 @@ function HeroActionCard({ nextWorkout, tomorrowWorkout, showTrainingLink, protei
         {actions.map((a, i) => (
           <div key={i} className="flex flex-col gap-1">
             <div className="flex items-center gap-3.5">
-              <div className="w-[7px] h-[7px] rounded-full bg-white shrink-0" />
-              <span className="text-[20px] font-semibold text-white">{a}</span>
+              <div className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.done ? 'bg-teal-400' : 'bg-white'}`} />
+              <span className={`text-[20px] font-semibold ${a.done ? 'text-white/50' : 'text-white'}`}>{a.label}</span>
             </div>
             {i === 0 && showTrainingLink && (
               <a
-                href={`/training/session?title=${encodeURIComponent(nextWorkout!.title)}&time=${encodeURIComponent(nextWorkout!.start_datetime ?? '')}`}
+                href={`/training/session?title=${encodeURIComponent(todayWorkout!.title)}&time=${encodeURIComponent(todayWorkout!.start_datetime ?? '')}`}
                 className="ml-[23px] text-[14px] font-semibold text-teal-400"
               >
                 View training →
@@ -586,15 +593,30 @@ export default function TodayPage() {
   const { data: training } = useSWR<any>('training', null)
 
   const calendarEvents = data?.calendarEvents ?? []
-  const nextWorkout = calendarEvents[0] ?? null
+  const now = new Date()
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+  const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(todayStart.getDate() + 1)
 
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowStr = tomorrow.toISOString().split('T')[0]
-  const tomorrowWorkout = calendarEvents.find((e: any) => e.start_date === tomorrowStr) ?? null
+  const parseDate = (e: any) => e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
+  const todayEvents = calendarEvents.filter((e: any) => { const d = parseDate(e); return d >= todayStart && d < tomorrowStart })
+  const tomorrowEvents = calendarEvents.filter((e: any) => parseDate(e) >= tomorrowStart)
 
-  const isStravaType = nextWorkout !== null &&
-    STRAVA_KEYWORDS.some(k => nextWorkout.title.toLowerCase().includes(k))
+  const todayWorkout = todayEvents[0] ?? null
+  const tomorrowWorkout = tomorrowEvents[0] ?? null
+
+  // Check if today's workout is done (same logic as calendarInsight)
+  const strengthKw = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower']
+  const cardioKw = ['run', 'loop', 'fietsen', 'zwemmen', 'swim', 'ride', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval']
+  const todayWorkoutDone = todayWorkout ? (() => {
+    const t = todayWorkout.title.toLowerCase()
+    const isStrength = strengthKw.some(kw => t.includes(kw))
+    const isCardio = cardioKw.some(kw => t.includes(kw))
+    const hevy = data?.todayHevy ?? []
+    const acts = data?.todayActivities ?? []
+    if (isStrength && !isCardio) return hevy.length > 0
+    if (isCardio && !isStrength) return acts.length > 0
+    return hevy.length > 0 || acts.length > 0
+  })() : false
 
   const totalProtein = (data?.foodLog ?? []).reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
   const targetProtein = Number(data?.settings?.macro_protein ?? 180)
@@ -607,9 +629,9 @@ export default function TodayPage() {
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
 
       <HeroActionCard
-        nextWorkout={nextWorkout}
+        todayWorkout={todayWorkout}
+        todayWorkoutDone={todayWorkoutDone}
         tomorrowWorkout={tomorrowWorkout}
-        showTrainingLink={isStravaType}
         proteinLeft={proteinLeft}
       />
 
