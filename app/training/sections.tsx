@@ -867,29 +867,74 @@ function RunningReadinessCard({ readiness }: { readiness: { pct: number; suggest
   )
 }
 
-function LastRunCard({ run }: { run: Activity }) {
+function RunListItem({ a, isLast }: { a: Activity; isLast: boolean }) {
+  const pace = a.average_speed ? formatPace(a.average_speed) : null
+  const dist = a.distance ? `${(a.distance / 1000).toFixed(2)} km` : null
+  const dur = a.moving_time ? formatDuration(a.moving_time) : null
+  return (
+    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
+        <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+      </div>
+      <div className="flex gap-4 flex-wrap">
+        {dist && <span className="text-[13px] text-white/70">{dist}</span>}
+        {pace && <span className="text-[13px] font-semibold text-teal-400">{pace} /km</span>}
+        {dur && <span className="text-[13px] text-white/60">{dur}</span>}
+        {a.average_heartrate && <span className="text-[13px] font-semibold text-red-400">{Math.round(a.average_heartrate)} bpm</span>}
+      </div>
+    </div>
+  )
+}
+
+function LastRunCard({ run, allRuns }: { run: Activity; allRuns: Activity[] }) {
+  const [showAll, setShowAll] = useState(false)
   const pace = run.average_speed ? formatPace(run.average_speed) : null
   const dist = run.distance ? `${(run.distance / 1000).toFixed(2)} km` : null
   const dur = run.moving_time ? formatDuration(run.moving_time) : null
   return (
-    <Card>
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Run</span>
-        <span className="text-[17px] font-semibold text-white leading-snug">{run.name}</span>
-        <span className="text-[12px] text-white/40">{formatDate(run.start_date)}</span>
-        <div className="flex gap-5 mt-1">
-          {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
-          {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-teal-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">Pace /km</span></div>}
-          {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
-        </div>
-        {run.average_heartrate && (
-          <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
-            <span className="text-[13px] text-white/40">Avg HR</span>
-            <span className="text-[13px] font-semibold text-red-400">{Math.round(run.average_heartrate)} bpm</span>
+    <>
+      {showAll && (
+        <div className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
+            <button onClick={() => setShowAll(false)}
+              className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+              style={{ background: 'rgba(255,255,255,0.10)' }}>
+              Terug
+            </button>
+            <span className="text-[17px] font-semibold text-white">Runs</span>
+            <div className="w-[70px]" />
           </div>
-        )}
-      </div>
-    </Card>
+          <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+            {allRuns.map((a, i) => <RunListItem key={a.id} a={a} isLast={i === allRuns.length - 1} />)}
+          </div>
+        </div>
+      )}
+      <button className="w-full text-left" onClick={() => setShowAll(true)}>
+        <Card>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Run</span>
+              <span className="text-[12px] text-white/30">Tap to see all →</span>
+            </div>
+            <span className="text-[17px] font-semibold text-white leading-snug">{run.name}</span>
+            <span className="text-[12px] text-white/40">{formatDate(run.start_date)}</span>
+            <div className="flex gap-5 mt-1">
+              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
+              {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-teal-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">Pace /km</span></div>}
+              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
+            </div>
+            {run.average_heartrate && (
+              <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
+                <span className="text-[13px] text-white/40">Avg HR</span>
+                <span className="text-[13px] font-semibold text-red-400">{Math.round(run.average_heartrate)} bpm</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      </button>
+    </>
   )
 }
 
@@ -952,31 +997,78 @@ function CyclingReadinessCard({ readiness }: { readiness: { pct: number; suggest
   )
 }
 
-function LastRideCard({ ride }: { ride: Activity }) {
+function RideListItem({ a, isLast }: { a: Activity; isLast: boolean }) {
+  const speed = a.average_speed ? `${(a.average_speed * 3.6).toFixed(1)} km/h` : null
+  const dist = a.distance ? `${(a.distance / 1000).toFixed(1)} km` : null
+  const dur = a.moving_time ? formatDuration(a.moving_time) : null
+  const elev = a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)} m ↑` : null
+  return (
+    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
+        <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+      </div>
+      <div className="flex gap-4 flex-wrap">
+        {dist && <span className="text-[13px] text-white/70">{dist}</span>}
+        {speed && <span className="text-[13px] font-semibold text-cyan-400">{speed}</span>}
+        {dur && <span className="text-[13px] text-white/60">{dur}</span>}
+        {elev && <span className="text-[13px] text-white/50">{elev}</span>}
+        {a.average_heartrate && <span className="text-[13px] font-semibold text-red-400">{Math.round(a.average_heartrate)} bpm</span>}
+      </div>
+    </div>
+  )
+}
+
+function LastRideCard({ ride, allRides }: { ride: Activity; allRides: Activity[] }) {
+  const [showAll, setShowAll] = useState(false)
   const speed = ride.average_speed ? `${(ride.average_speed * 3.6).toFixed(1)} km/h` : null
   const dist = ride.distance ? `${(ride.distance / 1000).toFixed(1)} km` : null
   const dur = ride.moving_time ? formatDuration(ride.moving_time) : null
   const elev = ride.total_elevation_gain ? `${Math.round(ride.total_elevation_gain)} m` : null
   return (
-    <Card>
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Ride</span>
-        <span className="text-[17px] font-semibold text-white leading-snug">{ride.name}</span>
-        <span className="text-[12px] text-white/40">{formatDate(ride.start_date)}</span>
-        <div className="flex gap-5 mt-1">
-          {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
-          {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Speed</span></div>}
-          {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
-          {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Elevation</span></div>}
-        </div>
-        {ride.average_heartrate && (
-          <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
-            <span className="text-[13px] text-white/40">Avg HR</span>
-            <span className="text-[13px] font-semibold text-red-400">{Math.round(ride.average_heartrate)} bpm</span>
+    <>
+      {showAll && (
+        <div className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
+            <button onClick={() => setShowAll(false)}
+              className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+              style={{ background: 'rgba(255,255,255,0.10)' }}>
+              Terug
+            </button>
+            <span className="text-[17px] font-semibold text-white">Rides</span>
+            <div className="w-[70px]" />
           </div>
-        )}
-      </div>
-    </Card>
+          <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+            {allRides.map((a, i) => <RideListItem key={a.id} a={a} isLast={i === allRides.length - 1} />)}
+          </div>
+        </div>
+      )}
+      <button className="w-full text-left" onClick={() => setShowAll(true)}>
+        <Card>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Ride</span>
+              <span className="text-[12px] text-white/30">Tap to see all →</span>
+            </div>
+            <span className="text-[17px] font-semibold text-white leading-snug">{ride.name}</span>
+            <span className="text-[12px] text-white/40">{formatDate(ride.start_date)}</span>
+            <div className="flex gap-5 mt-1">
+              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
+              {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Speed</span></div>}
+              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
+              {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Elevation</span></div>}
+            </div>
+            {ride.average_heartrate && (
+              <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
+                <span className="text-[13px] text-white/40">Avg HR</span>
+                <span className="text-[13px] font-semibold text-red-400">{Math.round(ride.average_heartrate)} bpm</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      </button>
+    </>
   )
 }
 
@@ -1892,7 +1984,7 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
 
       <RunningReadinessCard readiness={readiness} />
 
-      {lastRun && <LastRunCard run={lastRun} />}
+      {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
 
       <RunningTrendCard trend={trend} />
 
@@ -1971,7 +2063,7 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
 
       <CyclingReadinessCard readiness={readiness} />
 
-      {lastRide && <LastRideCard ride={lastRide} />}
+      {lastRide && <LastRideCard ride={lastRide} allRides={allRides} />}
 
       <CyclingWeeklyTrendCard trend={trend} />
 
