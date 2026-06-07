@@ -265,25 +265,22 @@ export function SleepSection() {
   const qualityColor = quality === 'Excellent' ? '#4ade80'
     : quality === 'Good' ? '#34d399' : quality === 'Fair' ? '#fbbf24' : '#f87171'
 
-  const insightLines: string[] = []
-  if (totalMin !== null && avg30Min !== null) {
-    const diff = totalMin - avg30Min
-    insightLines.push(
-      `Sleep duration ${diff >= 0 ? 'exceeded' : 'was below'} your 30-day average by ${fmtMin(Math.abs(diff))}.`
-    )
-  }
-  if (deepPct !== null)
-    insightLines.push(`Deep sleep at ${deepPct}% — ${deepPct >= 20 ? 'within' : 'below'} the healthy 20–25% range.`)
-  if (efficiency !== null)
-    insightLines.push(`Sleep efficiency ${efficiency}%.`)
+  const noData = !totalMin
 
-  if (!totalMin) {
-    return (
-      <div className="flex flex-col gap-4">
-        <AiInsight text="Connect Fitbit and sync to see your sleep quality data." />
-      </div>
-    )
-  }
+  const insightText = noData
+    ? 'Sync Fitbit to see your sleep quality data.'
+    : (() => {
+        const lines: string[] = []
+        if (totalMin !== null && avg30Min !== null) {
+          const diff = totalMin - avg30Min
+          lines.push(`Sleep duration ${diff >= 0 ? 'exceeded' : 'was below'} your 30-day average by ${fmtMin(Math.abs(diff))}.`)
+        }
+        if (deepPct !== null)
+          lines.push(`Deep sleep at ${deepPct}% — ${deepPct >= 20 ? 'within' : 'below'} the healthy 20–25% range.`)
+        if (efficiency !== null)
+          lines.push(`Sleep efficiency ${efficiency}%.`)
+        return lines.join(' ') || 'Sleep data loaded.'
+      })()
 
   return (
     <div className="flex flex-col gap-5">
@@ -321,22 +318,20 @@ export function SleepSection() {
       </div>
 
       {/* AI Insight */}
-      {quality && (
-        <Card>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-orange-400 text-[14px]">✦</span>
-              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Insight</span>
+      <Card>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-orange-400 text-[14px]">✦</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Insight</span>
+            {quality && (
               <span className="ml-auto text-[12px] font-bold" style={{ color: qualityColor }}>
                 Sleep Quality: {quality}
               </span>
-            </div>
-            {insightLines.map((line, i) => (
-              <p key={i} className="text-[15px] text-white/75 leading-relaxed">{line}</p>
-            ))}
+            )}
           </div>
-        </Card>
-      )}
+          <p className="text-[15px] text-white/75 leading-relaxed">{insightText}</p>
+        </div>
+      </Card>
 
       {/* Sleep Stages */}
       <Card>
@@ -398,16 +393,14 @@ export function SleepSection() {
       )}
 
       {/* Secondary: SpO₂ / Resp / Awake */}
-      {(spo2 !== null || resp !== null || wake !== null) && (
-        <div className="flex flex-col gap-3">
-          <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also last night</span>
-          <div className="grid grid-cols-3 gap-2">
-            {spo2 !== null && <MiniCard title="SpO₂"      value={`${spo2}%`}    tint="text-teal-400"  />}
-            {resp !== null && <MiniCard title="Resp rate" value={`${resp}/min`}  tint="text-cyan-400"  />}
-            {wake !== null && <MiniCard title="Awake"     value={fmtMin(wake)}   tint="text-white/50"  />}
-          </div>
+      <div className="flex flex-col gap-3">
+        <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also last night</span>
+        <div className="grid grid-cols-3 gap-2">
+          <MiniCard title="SpO₂"      value={spo2 !== null ? `${spo2}%` : '–'}   tint="text-teal-400" />
+          <MiniCard title="Resp rate" value={resp !== null ? `${resp}/min` : '–'} tint="text-cyan-400" />
+          <MiniCard title="Awake"     value={fmtMin(wake)}                         tint="text-white/50" />
         </div>
-      )}
+      </div>
 
     </div>
   )
