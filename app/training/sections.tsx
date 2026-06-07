@@ -492,30 +492,30 @@ function computeCyclingWeeklyTrend(activities: Activity[]) {
 }
 
 function computeStrengthProgress(hevy: HevyWorkout[]) {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
-  const hevy7 = hevy.filter(h => h.start_time >= sevenDaysAgo)
-  const hevy14to7 = hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo)
-  const vol7 = hevy7.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
-  const vol14to7 = hevy14to7.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
-  const sets7 = hevy7.reduce((s, h) => s + (h.sets ?? 0), 0)
-  const sets14to7 = hevy14to7.reduce((s, h) => s + (h.sets ?? 0), 0)
-  const sessions7 = hevy7.length
-  const sessions14to7 = hevy14to7.length
+  const thisWeekStart = startOfWeek()
+  const lastWeekStart = new Date(new Date(thisWeekStart).getTime() - 7 * 86400000).toISOString()
+  const hevyThis = hevy.filter(h => h.start_time >= thisWeekStart)
+  const hevyLast = hevy.filter(h => h.start_time >= lastWeekStart && h.start_time < thisWeekStart)
+  const vol7 = hevyThis.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
+  const volLast = hevyLast.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
+  const sets7 = hevyThis.reduce((s, h) => s + (h.sets ?? 0), 0)
+  const setsLast = hevyLast.reduce((s, h) => s + (h.sets ?? 0), 0)
+  const sessions7 = hevyThis.length
+  const sessionsLast = hevyLast.length
   const pctDelta = (cur: number, prev: number) => prev > 0 ? Math.round((cur - prev) / prev * 100) : null
-  // 6-week peak for context badge
+  // 6-week peak using calendar weeks
   const weeklyVols = Array.from({ length: 6 }, (_, w) => {
-    const start = new Date(Date.now() - (w + 1) * 7 * 86400000).toISOString()
-    const end = new Date(Date.now() - w * 7 * 86400000).toISOString()
+    const end = new Date(new Date(thisWeekStart).getTime() - w * 7 * 86400000).toISOString()
+    const start = new Date(new Date(thisWeekStart).getTime() - (w + 1) * 7 * 86400000).toISOString()
     return hevy.filter(h => h.start_time >= start && h.start_time < end).reduce((s, h) => s + (h.volume_kg ?? 0), 0)
   })
   const maxWeeklyVol = weeklyVols.length > 0 ? Math.max(...weeklyVols) : 0
   const isHighestIn6Weeks = vol7 > 0 && maxWeeklyVol > 0 && vol7 >= maxWeeklyVol * 0.98
   return {
     vol7, sets7, sessions7,
-    volumePct: pctDelta(vol7, vol14to7),
-    setsPct: pctDelta(sets7, sets14to7),
-    sessionsPct: pctDelta(sessions7, sessions14to7),
+    volumePct: pctDelta(vol7, volLast),
+    setsPct: pctDelta(sets7, setsLast),
+    sessionsPct: pctDelta(sessions7, sessionsLast),
     isHighestIn6Weeks,
   }
 }
