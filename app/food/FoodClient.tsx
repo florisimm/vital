@@ -94,6 +94,7 @@ export function FoodClient() {
 
   function onAdded(entry: FoodLogEntry) {
     mutate(prev => prev ? { ...prev, foodLog: [...prev.foodLog, entry] } : prev, false)
+    mutate()
     setShowAddSheet(false)
   }
 
