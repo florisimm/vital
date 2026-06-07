@@ -6,7 +6,7 @@ import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
-type Services = { strava: boolean; hevy: boolean; google: boolean }
+type Services = { strava: boolean; hevy: boolean; google: boolean; fitbit: boolean }
 type Units = 'metric' | 'imperial'
 type NotifStatus = 'default' | 'granted' | 'denied' | 'unsupported'
 
@@ -36,7 +36,8 @@ export function ProfileButton() {
   const [units, setUnits] = useState<Units>('metric')
   const [notifStatus, setNotifStatus] = useState<NotifStatus>('default')
   const [userId, setUserId] = useState<string | null>(null)
-  const [confirmDisconnect, setConfirmDisconnect] = useState<'strava' | 'google' | null>(null)
+  const [confirmDisconnect, setConfirmDisconnect] = useState<'strava' | 'google' | 'fitbit' | null>(null)
+  const [fitbitSyncing, setFitbitSyncing] = useState(false)
   const [editingAccount, setEditingAccount] = useState(false)
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
@@ -81,11 +82,13 @@ export function ProfileButton() {
         supabase.from('strava_tokens').select('id').eq('user_id', uid).limit(1),
         supabase.from('hevy_workouts').select('id').eq('user_id', uid).limit(1),
         supabase.from('google_tokens').select('user_id').eq('user_id', uid).limit(1),
-      ]).then(([strava, hevy, google]) => {
+        supabase.from('fitbit_tokens').select('user_id').eq('user_id', uid).limit(1),
+      ]).then(([strava, hevy, google, fitbit]) => {
         setServices({
-          strava: (strava.data?.length ?? 0) > 0,
-          hevy:   (hevy.data?.length   ?? 0) > 0,
-          google: (google.data?.length ?? 0) > 0,
+          strava:  (strava.data?.length  ?? 0) > 0,
+          hevy:    (hevy.data?.length    ?? 0) > 0,
+          google:  (google.data?.length  ?? 0) > 0,
+          fitbit:  (fitbit.data?.length  ?? 0) > 0,
         })
       })
 
@@ -149,6 +152,18 @@ export function ProfileButton() {
       `https://pzuhodpxqofgzdawoydq.supabase.co/functions/v1/google-calendar-auth?user_id=${userId}`
   }
 
+  function connectFitbit() {
+    if (!userId) return
+    window.location.href = `/api/fitbit/connect?user_id=${userId}`
+  }
+
+  async function syncFitbit() {
+    setFitbitSyncing(true)
+    await fetch('/api/fitbit/sync', { method: 'POST' })
+    setFitbitSyncing(false)
+    mutate('health-gezondheid')
+  }
+
   async function handleDisconnect() {
     if (!userId || !confirmDisconnect) return
     const supabase = createClient()
@@ -158,6 +173,9 @@ export function ProfileButton() {
     } else if (confirmDisconnect === 'strava') {
       await supabase.from('strava_tokens').delete().eq('user_id', userId)
       setServices(s => s ? { ...s, strava: false } : s)
+    } else if (confirmDisconnect === 'fitbit') {
+      await supabase.from('fitbit_tokens').delete().eq('user_id', userId)
+      setServices(s => s ? { ...s, fitbit: false } : s)
     }
     setConfirmDisconnect(null)
   }
@@ -211,7 +229,7 @@ export function ProfileButton() {
     : notifStatus === 'unsupported' ? 'N/A'
     : 'Ask'
 
-  const disconnectLabel = confirmDisconnect === 'strava' ? 'Strava' : 'Google Calendar'
+  const disconnectLabel = confirmDisconnect === 'strava' ? 'Strava' : confirmDisconnect === 'fitbit' ? 'Fitbit' : 'Google Calendar'
 
   return (
     <>
@@ -512,11 +530,35 @@ export function ProfileButton() {
                   connected={services?.strava}
                   onDisconnect={services?.strava === true ? () => setConfirmDisconnect('strava') : undefined} />
               </ProfileRow>
-              <ProfileRow>
+              <ProfileRow separator>
                 <ServiceRow icon="📅" label="Google Calendar"
                   connected={services?.google}
                   onConnect={services?.google === false ? connectGoogleCalendar : undefined}
                   onDisconnect={services?.google === true ? () => setConfirmDisconnect('google') : undefined} />
+              </ProfileRow>
+              <ProfileRow>
+                <div className="flex items-center gap-3">
+                  <span className="text-[18px] w-6 text-center">⌚</span>
+                  <span className="flex-1 text-[17px] text-white">Fitbit</span>
+                  {services?.fitbit === false && (
+                    <button onClick={connectFitbit} className="text-[15px] font-semibold text-teal-400 active:opacity-60">
+                      Connect
+                    </button>
+                  )}
+                  {services?.fitbit === true && (
+                    <div className="flex items-center gap-3">
+                      <button onClick={syncFitbit} disabled={fitbitSyncing} className="text-[15px] font-semibold text-teal-400 active:opacity-60 disabled:opacity-40">
+                        {fitbitSyncing ? 'Syncing…' : 'Sync'}
+                      </button>
+                      <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[15px] font-semibold text-green-400 active:opacity-60">
+                        Connected
+                      </button>
+                    </div>
+                  )}
+                  {services?.fitbit === undefined && (
+                    <span className="text-[15px] text-white/30">…</span>
+                  )}
+                </div>
               </ProfileRow>
             </ProfileSection>
 

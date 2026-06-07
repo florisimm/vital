@@ -1,7 +1,9 @@
 'use client'
 
+import { Suspense, useEffect } from 'react'
 import Link from 'next/link'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { BedDouble, Activity, Heart, Scale, Footprints } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card, MetricTile, MetricRow } from '@/components/ui'
@@ -13,7 +15,8 @@ async function fetchHealth() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('unauthenticated')
   const { data } = await supabase
-    .from('gezondheid').select('datum,stappen,gewicht')
+    .from('gezondheid')
+    .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem')
     .eq('user_id', user.id).order('datum', { ascending: false }).limit(30)
   return (data ?? []) as GezondheidsRow[]
 }
@@ -27,6 +30,20 @@ const CATEGORIES = [
   { label: 'Activity', href: '/health/activity' },
 ]
 
+function FitbitConnectHandler() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  useEffect(() => {
+    const param = searchParams.get('fitbit')
+    if (param === 'connected') {
+      fetch('/api/fitbit/sync', { method: 'POST' })
+        .then(() => mutate('health-gezondheid'))
+      router.replace('/health')
+    }
+  }, [searchParams, router])
+  return null
+}
+
 export default function HealthPage() {
   const { data: rows = [] } = useSWR('health-gezondheid', fetchHealth, {
     revalidateOnFocus: false, dedupingInterval: 60_000,
@@ -35,8 +52,10 @@ export default function HealthPage() {
   const latest = rows[0]
   const steps = latest?.stappen ?? null
   const weight = latest?.gewicht ? Number(latest.gewicht).toFixed(1) : null
+  const restingHR = latest?.hartslag_rust ?? null
+  const hrv = latest?.hrv_rmssd ?? null
+  const sleepScore = latest?.slaap_score ?? null
 
-  // Weight trend: compare latest vs 7 days ago
   const weightRows = rows.filter(r => r.gewicht != null)
   const latestWeight = weightRows[0] ? Number(weightRows[0].gewicht) : null
   const oldWeight = weightRows[6] ? Number(weightRows[6].gewicht) : null
@@ -45,15 +64,18 @@ export default function HealthPage() {
     ? `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg vs 7 dagen`
     : '–'
 
-  // Steps: 7-day average
   const stepRows = rows.filter(r => r.stappen != null).slice(0, 7)
   const avgSteps = stepRows.length
     ? Math.round(stepRows.reduce((s, r) => s + Number(r.stappen), 0) / stepRows.length)
     : null
-  const stepsDetail = avgSteps ? `gem. ${avgSteps.toLocaleString('nl-NL')} / dag` : '–'
+  const stepsDetail = avgSteps ? `avg ${avgSteps.toLocaleString('nl-NL')} / day` : '–'
 
   return (
     <PremiumScreen title="Health" subtitle="Recovery foundation" contentGap={18}>
+
+      <Suspense>
+        <FitbitConnectHandler />
+      </Suspense>
 
       {/* Category strip */}
       <div className="flex gap-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
@@ -74,16 +96,20 @@ export default function HealthPage() {
         )}
       </div>
 
-      {/* Overview tiles — always visible on main Health page */}
+      {/* Overview tiles */}
       <div className="grid grid-cols-2 gap-3">
-        <MetricTile title="Sleep score" value="–" unit="" note="–"
+        <MetricTile title="Sleep score" value={sleepScore ? String(sleepScore) : '–'} unit={sleepScore ? '%' : ''} note="Last night"
           Icon={BedDouble} tint="text-blue-400" />
-        <MetricTile title="HRV" value="–" unit="" note="–"
+        <MetricTile title="HRV" value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note="Daily RMSSD"
           Icon={Activity} tint="text-green-400" />
       </div>
 
       {/* Metric rows */}
-      <MetricRow title="Resting heart rate" value="–" detail="–" />
+      <MetricRow
+        title="Resting heart rate"
+        value={restingHR ? `${restingHR} bpm` : '–'}
+        detail={restingHR ? (restingHR <= 60 ? 'Excellent' : restingHR <= 70 ? 'Good' : 'Elevated') : '–'}
+      />
       <MetricRow
         title="Weight trend"
         value={weight ? `${weight} kg` : '–'}

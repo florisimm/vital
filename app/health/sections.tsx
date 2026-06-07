@@ -1,10 +1,25 @@
 'use client'
 
 import { useState } from 'react'
+import useSWR from 'swr'
 import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight } from 'lucide-react'
 import { Card, SectionHeader, MetricTile } from '@/components/ui'
+import { healthFetcher } from './fetcher'
 
-export type GezondheidsRow = { datum: string; stappen: number | null; gewicht: number | null }
+export type GezondheidsRow = {
+  datum: string
+  stappen: number | null
+  gewicht: number | null
+  hartslag_rust: number | null
+  hrv_rmssd: number | null
+  slaap_minuten: number | null
+  slaap_score: number | null
+  slaap_diep: number | null
+  slaap_licht: number | null
+  slaap_rem: number | null
+}
+
+const SWR_OPTS = { revalidateOnFocus: false, dedupingInterval: 60_000 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -103,39 +118,70 @@ function RingChart({ progress, color, label, value }: { progress: number; color:
 
 // ─── Sleep ────────────────────────────────────────────────────────────────────
 
+function fmtMin(min: number | null) {
+  if (!min) return '–'
+  const h = Math.floor(min / 60), m = min % 60
+  return `${h}h ${m}m`
+}
+
 export function SleepSection() {
-  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-  const heights = [0.6, 0.75, 0.55, 0.9, 0.7, 0.85, 0.95]
+  const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
+
+  const sleepRows = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
+  const latest = sleepRows[0]
+  const totalMin = latest?.slaap_minuten ?? null
+  const score = latest?.slaap_score ?? null
+  const deep = latest?.slaap_diep ?? null
+  const light = latest?.slaap_licht ?? null
+  const rem = latest?.slaap_rem ?? null
+  const wake = totalMin && deep && light && rem ? Math.max(0, totalMin - deep - light - rem) : null
+  const total = totalMin ?? 1
+
+  const avgMin = sleepRows.length
+    ? Math.round(sleepRows.reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / sleepRows.length)
+    : null
+
+  const trendHeights = sleepRows.map(r => r.slaap_minuten ?? 0)
+  const maxH = trendHeights.length ? Math.max(...trendHeights, 1) : 1
+
+  const days = sleepRows.map(r => {
+    const d = new Date(r.datum)
+    return ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][d.getDay()]
+  }).reverse()
+  const trendRev = [...trendHeights].reverse()
+
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text="–" />
-      <HeroMetric value="–" label="Sleep Score" note="–" Icon={BedDouble} tint="text-indigo-400" />
+      <AiInsight text={totalMin ? `Last night: ${fmtMin(totalMin)} sleep, score ${score ?? '–'}.` : 'Connect Fitbit to see sleep data.'} />
+      <HeroMetric value={score ? String(score) : '–'} label="Sleep Score" note={totalMin ? fmtMin(totalMin) : '–'} Icon={BedDouble} tint="text-indigo-400" />
       <Card>
         <div className="flex flex-col gap-4">
           <span className="text-[15px] font-semibold text-white/50">Sleep Stages</span>
-          <StageBar label="Deep"  duration="–" percent={0} tint="text-indigo-400" />
-          <StageBar label="REM"   duration="–" percent={0} tint="text-purple-400" />
-          <StageBar label="Light" duration="–" percent={0} tint="text-blue-400"   />
-          <StageBar label="Awake" duration="–" percent={0} tint="text-white/40"   />
+          <StageBar label="Deep"  duration={fmtMin(deep)}  percent={deep  ? deep  / total : 0} tint="text-indigo-400" />
+          <StageBar label="REM"   duration={fmtMin(rem)}   percent={rem   ? rem   / total : 0} tint="text-purple-400" />
+          <StageBar label="Light" duration={fmtMin(light)} percent={light ? light / total : 0} tint="text-blue-400"   />
+          <StageBar label="Awake" duration={fmtMin(wake)}  percent={wake  ? wake  / total : 0} tint="text-white/40"   />
         </div>
       </Card>
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Duration"    value="–" detail="–" Icon={Timer}    tint="text-blue-400"   />
-        <SmallCard title="Bedtime"     value="–" detail="–" Icon={Moon}     tint="text-orange-400" />
-        <SmallCard title="Wake"        value="–" detail="–" Icon={Activity} tint="text-yellow-400" />
-        <SmallCard title="Consistency" value="–" detail="–" Icon={Zap}      tint="text-teal-400"   />
+        <SmallCard title="Duration"  value={totalMin ? `${Math.floor(total / 60)}h` : '–'} unit={totalMin ? `${total % 60}m` : ''} detail="Last night" Icon={Timer} tint="text-blue-400" />
+        <SmallCard title="Deep"      value={deep ? `${deep}` : '–'} unit="min" detail="Deep sleep" Icon={Moon}     tint="text-indigo-400" />
+        <SmallCard title="REM"       value={rem ? `${rem}` : '–'} unit="min" detail="REM sleep"  Icon={Activity} tint="text-purple-400" />
+        <SmallCard title="7-day avg" value={avgMin ? `${Math.floor(avgMin / 60)}h` : '–'} unit={avgMin ? `${avgMin % 60}m` : ''} detail="Average" Icon={Zap} tint="text-teal-400" />
       </div>
-      <Card>
-        <SectionHeader title="7-Day Trend" detail="↑ 16m avg" />
-        <div className="flex items-end gap-2 h-20 mt-4">
-          {heights.map((h, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-              <div className="w-full rounded-[4px]" style={{ height: `${h * 64}px`, background: i === 6 ? '#818cf8' : 'rgba(255,255,255,0.15)' }} />
-              <span className="text-[10px] text-white/40">{days[i]}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {trendRev.length > 1 && (
+        <Card>
+          <SectionHeader title="7-Day Trend" detail={avgMin ? `avg ${fmtMin(avgMin)}` : ''} />
+          <div className="flex items-end gap-2 h-20 mt-4">
+            {trendRev.map((h, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                <div className="w-full rounded-[4px]" style={{ height: `${(h / maxH) * 64}px`, background: i === trendRev.length - 1 ? '#818cf8' : 'rgba(255,255,255,0.15)' }} />
+                <span className="text-[10px] text-white/40">{days[i]}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
@@ -143,22 +189,44 @@ export function SleepSection() {
 // ─── Recovery ─────────────────────────────────────────────────────────────────
 
 export function RecoverySection() {
+  const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
+
+  const latest = rows[0]
+  const hrv = latest?.hrv_rmssd ?? null
+  const restingHR = latest?.hartslag_rust ?? null
+  const sleepScore = latest?.slaap_score ?? null
+  const sleepMin = latest?.slaap_minuten ?? null
+
+  // Simple readiness score: HRV 40% + resting HR 30% + sleep 30%
+  let recoveryScore: number | null = null
+  if (hrv || restingHR || sleepScore) {
+    let score = 0, weight = 0
+    if (hrv) { score += Math.min(hrv / 80, 1) * 40; weight += 40 }
+    if (restingHR) { score += Math.max(0, (100 - restingHR) / 50) * 30; weight += 30 }
+    if (sleepScore) { score += (sleepScore / 100) * 30; weight += 30 }
+    recoveryScore = weight > 0 ? Math.round((score / weight) * 100) : null
+  }
+
+  const hrvOk = hrv ? hrv >= 35 : null
+  const hrOk = restingHR ? restingHR <= 65 : null
+  const sleepOk = sleepMin ? sleepMin >= 420 : null
+
   const factors = [
-    { label: 'HRV baseline',          status: '–',        ok: null  },
-    { label: 'Resting heart rate',    status: '–',        ok: null  },
-    { label: 'Sleep quality',         status: '–',        ok: null  },
-    { label: 'Previous day strain',   status: '–',        ok: null  },
-    { label: 'Temperature deviation', status: '–',        ok: null  },
+    { label: 'HRV',             status: hrv ? `${Math.round(hrv)} ms` : '–',            ok: hrvOk  },
+    { label: 'Resting HR',      status: restingHR ? `${restingHR} bpm` : '–',           ok: hrOk   },
+    { label: 'Sleep quality',   status: sleepScore ? `${sleepScore}%` : '–',            ok: sleepOk },
+    { label: 'Sleep duration',  status: sleepMin ? fmtMin(sleepMin) : '–',              ok: sleepOk },
   ]
+
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text="–" />
-      <HeroMetric value="–" label="Recovery Score" note="–" Icon={Heart} tint="text-teal-400" />
+      <AiInsight text={recoveryScore ? `Recovery score ${recoveryScore} — based on HRV, resting HR, and sleep quality.` : 'Connect Fitbit to see recovery data.'} />
+      <HeroMetric value={recoveryScore ? String(recoveryScore) : '–'} label="Recovery Score" note={recoveryScore ? (recoveryScore >= 70 ? 'Good to train' : recoveryScore >= 50 ? 'Moderate' : 'Rest recommended') : '–'} Icon={Heart} tint="text-teal-400" />
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="HRV"          value="–" unit=""  detail="–" Icon={Activity} tint="text-green-400"  />
-        <SmallCard title="Resting HR"   value="–" unit="" detail="–" Icon={Heart}    tint="text-pink-400"   />
-        <SmallCard title="Sleep"        value="–"         detail="–" Icon={Moon}     tint="text-indigo-400" />
-        <SmallCard title="Strain"       value="–"         detail="–" Icon={Flame}    tint="text-orange-400" />
+        <SmallCard title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'}       unit={hrv ? 'ms' : ''} detail="Daily RMSSD"  Icon={Activity} tint="text-green-400"  />
+        <SmallCard title="Resting HR" value={restingHR ? String(restingHR) : '–'}          unit={restingHR ? 'bpm' : ''} detail="Last night" Icon={Heart}    tint="text-pink-400"   />
+        <SmallCard title="Sleep"      value={sleepMin ? fmtMin(sleepMin) : '–'}            detail="Duration"      Icon={Moon}     tint="text-indigo-400" />
+        <SmallCard title="Score"      value={sleepScore ? String(sleepScore) : '–'}        unit={sleepScore ? '%' : ''} detail="Sleep efficiency" Icon={Flame} tint="text-orange-400" />
       </div>
       <Card>
         <div className="flex flex-col gap-3">
@@ -166,10 +234,12 @@ export function RecoverySection() {
           {factors.map(f => (
             <div key={f.label} className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <span className={f.ok ? 'text-green-400' : 'text-yellow-400'}>{f.ok ? '✓' : '−'}</span>
+                <span className={f.ok === null ? 'text-white/30' : f.ok ? 'text-green-400' : 'text-yellow-400'}>
+                  {f.ok === null ? '○' : f.ok ? '✓' : '−'}
+                </span>
                 <span className="text-[15px] text-white">{f.label}</span>
               </div>
-              <span className={`text-[14px] font-medium ${f.ok ? 'text-green-400' : 'text-yellow-400'}`}>{f.status}</span>
+              <span className={`text-[14px] font-medium ${f.ok === null ? 'text-white/30' : f.ok ? 'text-green-400' : 'text-yellow-400'}`}>{f.status}</span>
             </div>
           ))}
         </div>
@@ -181,44 +251,48 @@ export function RecoverySection() {
 // ─── Heart ────────────────────────────────────────────────────────────────────
 
 export function HeartSection() {
-  const zones = [
-    { label: 'Zone 5 · Max',              percent: 0.02, color: '#f87171' },
-    { label: 'Zone 4 · Threshold',        percent: 0.08, color: '#fb923c' },
-    { label: 'Zone 3 · Aerobic',          percent: 0.35, color: '#facc15' },
-    { label: 'Zone 2 · Endurance',        percent: 0.42, color: '#4ade80' },
-    { label: 'Zone 1 · Recovery',         percent: 0.13, color: '#60a5fa' },
-  ]
+  const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
+
+  const hrRows = rows.filter(r => r.hartslag_rust != null).slice(0, 7)
+  const latest = hrRows[0]
+  const restingHR = latest?.hartslag_rust ?? null
+  const hrv = latest?.hrv_rmssd ?? null
+
+  const avgHR = hrRows.length
+    ? Math.round(hrRows.reduce((s, r) => s + (r.hartslag_rust ?? 0), 0) / hrRows.length)
+    : null
+  const minHR = hrRows.length ? Math.min(...hrRows.map(r => r.hartslag_rust ?? 999)) : null
+  const trend = restingHR && avgHR ? restingHR - avgHR : null
+
+  const maxBarH = hrRows.length ? Math.max(...hrRows.map(r => r.hartslag_rust ?? 0), 1) : 1
+  const hrDays = [...hrRows].reverse().map(r => {
+    const d = new Date(r.datum)
+    return { day: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][d.getDay()], val: r.hartslag_rust ?? 0 }
+  })
+
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text="–" />
+      <AiInsight text={restingHR ? `Resting HR ${restingHR} bpm${hrv ? `, HRV ${Math.round(hrv)} ms` : ''}.${trend !== null ? ` ${trend > 0 ? '+' : ''}${trend} vs 7-day avg.` : ''}` : 'Connect Fitbit to see heart data.'} />
       <div className="grid grid-cols-2 gap-3">
-        <MetricTile title="Resting HR" value="–" unit="" note="–" Icon={Heart}    tint="text-pink-400"  />
-        <MetricTile title="HRV"        value="–" unit=""  note="–"  Icon={Activity} tint="text-green-400" />
+        <MetricTile title="Resting HR" value={restingHR ? String(restingHR) : '–'} unit={restingHR ? 'bpm' : ''} note={trend !== null ? `${trend > 0 ? '+' : ''}${trend} vs avg` : '–'} Icon={Heart}    tint="text-pink-400"  />
+        <MetricTile title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note="Daily RMSSD" Icon={Activity} tint="text-green-400" />
       </div>
-      <Card>
-        <div className="flex flex-col gap-2">
-          <span className="text-[15px] font-semibold text-white/50">Cardio Fitness</span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[42px] font-bold text-white leading-none">–</span>
-            <span className="text-[17px] font-semibold text-white/50">VO₂ max</span>
+      {hrDays.length > 1 && (
+        <Card>
+          <SectionHeader title="7-Day Resting HR" detail={avgHR ? `avg ${avgHR} bpm` : ''} />
+          <div className="flex items-end gap-2 h-20 mt-4">
+            {hrDays.map(({ day, val }, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                <div className="w-full rounded-[4px]" style={{ height: `${(val / maxBarH) * 64}px`, background: i === hrDays.length - 1 ? '#f472b6' : 'rgba(255,255,255,0.15)' }} />
+                <span className="text-[10px] text-white/40">{day}</span>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="flex items-center gap-1 text-[14px] font-medium text-teal-400">
-              <ArrowUpRight size={14} /> –
-            </span>
-            <span className="text-[14px] text-white/40">–</span>
-          </div>
-        </div>
-      </Card>
-      <Card>
-        <div className="flex flex-col gap-3">
-          <span className="text-[15px] font-semibold text-white/50">Heart Rate Zones</span>
-          {zones.map(z => <ZoneBar key={z.label} label={z.label} percent={z.percent} color={z.color} />)}
-        </div>
-      </Card>
+        </Card>
+      )}
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Blood Pressure" value="–" detail="–" Icon={Heart} tint="text-blue-400" />
-        <SmallCard title="Max HR" value="–" unit="" detail="–" Icon={Zap}   tint="text-red-400"  />
+        <SmallCard title="7-day avg HR" value={avgHR ? String(avgHR) : '–'} unit={avgHR ? 'bpm' : ''} detail="Resting average" Icon={Heart} tint="text-pink-400" />
+        <SmallCard title="Best HR"      value={minHR && minHR < 999 ? String(minHR) : '–'} unit={minHR && minHR < 999 ? 'bpm' : ''} detail="7-day low" Icon={Zap} tint="text-red-400" />
       </div>
     </div>
   )
