@@ -75,6 +75,10 @@ function isSwim(a: Activity) {
   return a.sport_type?.toLowerCase().includes('swim')
 }
 
+function isWeightTraining(a: Activity) {
+  return a.sport_type?.toLowerCase() === 'weighttraining'
+}
+
 function formatPace100m(speedMs: number): string {
   const secs = 100 / speedMs
   const m = Math.floor(secs / 60)
@@ -1555,7 +1559,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
     .reduce((s, a) => s + (a.kilojoules ?? 0), 0)
   const loadTrend = earlyKj > 0 ? Math.round((lateKj - earlyKj) / earlyKj * 100) : 0
 
-  const weekActivities = activities.filter(a => a.start_date >= weekStart)
+  const weekActivities = activities.filter(a => a.start_date >= weekStart && !isWeightTraining(a))
   const weekHevy = hevy.filter(h => h.start_time >= weekStart)
   const weekCompleted = weekActivities.length + weekHevy.length
   const weekEnd = new Date(new Date(weekStart).getTime() + 7 * 86400000).toISOString()
@@ -2109,9 +2113,9 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
     return d.getFullYear() === displayMonth.getFullYear() && d.getMonth() === displayMonth.getMonth()
   }
 
-  // Track which sport types happened on each calendar day (skip <60s artefacts)
+  // Track which sport types happened on each calendar day (skip <60s artefacts and WeightTraining — covered by hevy)
   const workoutDays = new Map<number, Set<'run' | 'ride' | 'strength'>>()
-  activities.filter(a => (a.moving_time ?? 0) >= 60).forEach(a => {
+  activities.filter(a => (a.moving_time ?? 0) >= 60 && !isWeightTraining(a)).forEach(a => {
     if (!inMonth(a.start_date)) return
     const day = new Date(a.start_date).getDate()
     if (!workoutDays.has(day)) workoutDays.set(day, new Set())
@@ -2125,7 +2129,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
   })
 
   const allRecent = [
-    ...activities.filter(a => (a.moving_time ?? 0) >= 60).map(a => ({ date: a.start_date, label: a.name, duration: formatDuration(a.moving_time!), type: sportIcon(a.sport_type) as 'run' | 'ride' | 'strength', relDate: relativeDay(a.start_date) })),
+    ...activities.filter(a => (a.moving_time ?? 0) >= 60 && !isWeightTraining(a)).map(a => ({ date: a.start_date, label: a.name, duration: formatDuration(a.moving_time!), type: sportIcon(a.sport_type) as 'run' | 'ride' | 'strength', relDate: relativeDay(a.start_date) })),
     ...hevy.filter(h => (h.duration ?? 0) >= 60).map(h => ({ date: h.start_time, label: h.title ?? 'Strength', duration: formatDuration(h.duration!), type: 'strength' as const, relDate: relativeDay(h.start_time) })),
   ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
 
