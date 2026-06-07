@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { OverviewSection } from './sections'
@@ -19,22 +19,25 @@ const CATEGORIES = [
 
 export default function TrainingPage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
-  const [syncing, setSyncing] = useState(false)
 
-  async function syncCalendar() {
-    if (syncing) return
-    setSyncing(true)
-    try {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-calendar-sync`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) } }
-      )
-    } catch { /* ignore */ }
-    await mutate('training')
-    setSyncing(false)
-  }
+  useEffect(() => {
+    async function backgroundSync() {
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
+        const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+        await Promise.allSettled([
+          fetch(`${base}/functions/v1/google-calendar-sync`, { method: 'POST', headers }),
+          fetch(`${base}/functions/v1/strava-sync`, { method: 'POST', headers }),
+        ])
+        await fetch(`${base}/functions/v1/strava-reconcile`, { method: 'POST', headers })
+      } catch { /* ignore */ }
+      mutate('training')
+    }
+    backgroundSync()
+  }, [])
 
   return (
     <PremiumScreen title="Training" subtitle="Performance signal" contentGap={18}>
@@ -57,7 +60,7 @@ export default function TrainingPage() {
         )}
       </div>
 
-      <OverviewSection activities={data?.activities ?? []} hevy={data?.hevy ?? []} calendarEvents={data?.calendarEvents ?? []} onRefresh={syncCalendar} refreshing={syncing} />
+      <OverviewSection activities={data?.activities ?? []} hevy={data?.hevy ?? []} calendarEvents={data?.calendarEvents ?? []} />
     </PremiumScreen>
   )
 }

@@ -30,6 +30,7 @@ export function startOfWeek() {
 
 export function formatDuration(secs: number) {
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60)
+  if (h === 0 && m === 0) return '–'
   return h > 0 ? `${h}u ${m}m` : `${m}m`
 }
 
@@ -269,6 +270,107 @@ function buildSwimmingInsight(activities: Activity[]): string {
   return text
 }
 
+function computeRunningVolumeHistory(activities: Activity[]) {
+  return Array.from({ length: 4 }, (_, i) => {
+    const weeksBack = 3 - i
+    const start = new Date(Date.now() - (weeksBack + 1) * 7 * 86400000).toISOString()
+    const end   = new Date(Date.now() -  weeksBack      * 7 * 86400000).toISOString()
+    const week  = activities.filter(a => isRun(a) && a.start_date >= start && a.start_date < end)
+    return {
+      label: weeksBack === 0 ? 'This' : weeksBack === 1 ? 'Last' : `${weeksBack}w`,
+      km: week.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000,
+      runs: week.length,
+    }
+  })
+}
+
+function computeRunningHRTrend(activities: Activity[]) {
+  const now = Date.now()
+  const thirtyAgo = new Date(now - 30 * 86400000).toISOString()
+  const fifteenAgo = new Date(now - 15 * 86400000).toISOString()
+  const early = activities.filter(a => isRun(a) && a.average_heartrate && a.start_date >= thirtyAgo && a.start_date < fifteenAgo)
+  const late  = activities.filter(a => isRun(a) && a.average_heartrate && a.start_date >= fifteenAgo)
+  const avg = (arr: Activity[]) => arr.length
+    ? Math.round(arr.reduce((s, a) => s + (a.average_heartrate ?? 0), 0) / arr.length)
+    : null
+  const earlyHR = avg(early), lateHR = avg(late)
+  const avgHR30 = avg([...early, ...late])
+  let trend = ''
+  if (earlyHR && lateHR) {
+    const diff = lateHR - earlyHR
+    if (diff < -3) trend = `↓ ${Math.abs(diff)} bpm lower — aerobic efficiency improving`
+    else if (diff > 3) trend = `↑ ${diff} bpm higher — higher effort or fatigue`
+    else trend = 'Heart rate stable over last 30 days'
+  }
+  return { earlyHR, lateHR, avgHR30, trend }
+}
+
+function computeCyclingVolumeHistory(activities: Activity[]) {
+  return Array.from({ length: 4 }, (_, i) => {
+    const weeksBack = 3 - i
+    const start = new Date(Date.now() - (weeksBack + 1) * 7 * 86400000).toISOString()
+    const end   = new Date(Date.now() -  weeksBack      * 7 * 86400000).toISOString()
+    const week  = activities.filter(a => isRide(a) && a.start_date >= start && a.start_date < end)
+    return {
+      label: weeksBack === 0 ? 'This' : weeksBack === 1 ? 'Last' : `${weeksBack}w`,
+      km: week.reduce((s, a) => s + (a.distance ?? 0), 0) / 1000,
+      rides: week.length,
+    }
+  })
+}
+
+function computeCyclingHRTrend(activities: Activity[]) {
+  const now = Date.now()
+  const thirtyAgo = new Date(now - 30 * 86400000).toISOString()
+  const fifteenAgo = new Date(now - 15 * 86400000).toISOString()
+  const early = activities.filter(a => isRide(a) && a.average_heartrate && a.start_date >= thirtyAgo && a.start_date < fifteenAgo)
+  const late  = activities.filter(a => isRide(a) && a.average_heartrate && a.start_date >= fifteenAgo)
+  const avg = (arr: Activity[]) => arr.length
+    ? Math.round(arr.reduce((s, a) => s + (a.average_heartrate ?? 0), 0) / arr.length)
+    : null
+  const earlyHR = avg(early), lateHR = avg(late)
+  const avgHR30 = avg([...early, ...late])
+  let trend = ''
+  if (earlyHR && lateHR) {
+    const diff = lateHR - earlyHR
+    if (diff < -3) trend = `↓ ${Math.abs(diff)} bpm lower — cardiac efficiency improving`
+    else if (diff > 3) trend = `↑ ${diff} bpm higher — higher effort or fatigue`
+    else trend = 'Heart rate stable over last 30 days'
+  }
+  return { earlyHR, lateHR, avgHR30, trend }
+}
+
+function computeSwimmingVolumeHistory(activities: Activity[]) {
+  return Array.from({ length: 4 }, (_, i) => {
+    const weeksBack = 3 - i
+    const start = new Date(Date.now() - (weeksBack + 1) * 7 * 86400000).toISOString()
+    const end   = new Date(Date.now() -  weeksBack      * 7 * 86400000).toISOString()
+    const week  = activities.filter(a => isSwim(a) && a.start_date >= start && a.start_date < end)
+    return {
+      label: weeksBack === 0 ? 'This' : weeksBack === 1 ? 'Last' : `${weeksBack}w`,
+      meters: week.reduce((s, a) => s + (a.distance ?? 0), 0),
+      sessions: week.length,
+    }
+  })
+}
+
+function computeSwimmingPaceTrend(activities: Activity[]) {
+  const now = Date.now()
+  const thirtyAgo = new Date(now - 30 * 86400000).toISOString()
+  const fifteenAgo = new Date(now - 15 * 86400000).toISOString()
+  const early = activities.filter(a => isSwim(a) && a.average_speed && a.start_date >= thirtyAgo && a.start_date < fifteenAgo)
+  const late  = activities.filter(a => isSwim(a) && a.average_speed && a.start_date >= fifteenAgo)
+  const avgSpd = (arr: Activity[]) => arr.length
+    ? arr.reduce((s, a) => s + (a.average_speed ?? 0), 0) / arr.length
+    : null
+  const earlySpd = avgSpd(early), lateSpd = avgSpd(late)
+  return {
+    earlyPace: earlySpd ? formatPace100m(earlySpd) : null,
+    latePace:  lateSpd  ? formatPace100m(lateSpd)  : null,
+    improved:  earlySpd && lateSpd ? lateSpd > earlySpd : null,
+  }
+}
+
 export function extractKeyLifts(hevy: HevyWorkout[]) {
   const liftDefs = [
     { name: 'Squat', keywords: ['squat'], color: 'text-teal-400' },
@@ -445,6 +547,72 @@ function computeMuscleDistribution(hevy: HevyWorkout[]) {
     .filter(g => setCounts[g.label] > 0)
     .map(g => ({ label: g.label, pct: Math.round((setCounts[g.label] / totalSets) * 100), color: g.color }))
     .sort((a, b) => b.pct - a.pct)
+}
+
+function computeVolumeHistory(hevy: HevyWorkout[]) {
+  return Array.from({ length: 4 }, (_, i) => {
+    const weeksBack = 3 - i
+    const start = new Date(Date.now() - (weeksBack + 1) * 7 * 86400000).toISOString()
+    const end   = new Date(Date.now() -  weeksBack      * 7 * 86400000).toISOString()
+    const week  = hevy.filter(h => h.start_time >= start && h.start_time < end)
+    return {
+      label:    weeksBack === 0 ? 'This' : weeksBack === 1 ? 'Last' : `${weeksBack}w`,
+      vol:      week.reduce((s, h) => s + (h.volume_kg ?? 0), 0),
+      sessions: week.length,
+    }
+  })
+}
+
+function computeTopExercises(hevy: HevyWorkout[]) {
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+  const map: Record<string, { count: number; best1RM: number }> = {}
+  hevy.filter(h => h.start_time >= monthStart.toISOString()).forEach(w => {
+    ;(w.exercises ?? []).forEach(ex => {
+      if (!map[ex.title]) map[ex.title] = { count: 0, best1RM: 0 }
+      map[ex.title].count++
+      ;(ex.sets ?? []).forEach(s => {
+        const rm = epley1RM(s.weight_kg, s.reps)
+        if (rm > map[ex.title].best1RM) map[ex.title].best1RM = rm
+      })
+    })
+  })
+  return Object.entries(map)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 5)
+    .map(([name, d]) => ({ name, count: d.count, best1RM: d.best1RM }))
+}
+
+function computeWeeklySetBreakdown(hevy: HevyWorkout[]) {
+  const groups = [
+    { label: 'Legs',      keywords: ['squat', 'deadlift', 'leg press', 'lunge', 'rdl', 'hip thrust', 'calf', 'hamstring', 'quad', 'leg curl', 'leg extension'], color: '#4ade80' },
+    { label: 'Chest',     keywords: ['bench', 'push', 'fly', 'dip', 'chest'],                                                                                    color: '#60a5fa' },
+    { label: 'Back',      keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'],                                                        color: '#2dd4bf' },
+    { label: 'Shoulders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'],                      color: '#facc15' },
+    { label: 'Arms',      keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'],                                                              color: '#fb923c' },
+  ]
+  const wk = startOfWeek()
+  const counts: Record<string, number> = {}
+  hevy.filter(h => h.start_time >= wk).forEach(w => {
+    ;(w.exercises ?? []).forEach(ex => {
+      const t = (ex.title ?? '').toLowerCase()
+      for (const g of groups) {
+        if (g.keywords.some(k => t.includes(k))) { counts[g.label] = (counts[g.label] ?? 0) + (ex.sets?.length ?? 0); break }
+      }
+    })
+  })
+  return groups.filter(g => counts[g.label] > 0).map(g => ({ ...g, sets: counts[g.label] }))
+}
+
+function computeTrainingStreak(hevy: HevyWorkout[]) {
+  const days = new Set(hevy.map(h => h.start_time.split('T')[0]))
+  const today = new Date()
+  let streak = 0
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i)
+    if (days.has(d.toISOString().split('T')[0])) streak++
+    else if (streak > 0 || i > 0) break
+  }
+  return { streak, totalDays: days.size, totalWorkouts: hevy.length }
 }
 
 // ─── AI Insight builders ──────────────────────────────────────────────────────
@@ -710,6 +878,12 @@ function LastRunCard({ run }: { run: Activity }) {
           {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-teal-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">Pace /km</span></div>}
           {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
         </div>
+        {run.average_heartrate && (
+          <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
+            <span className="text-[13px] text-white/40">Avg HR</span>
+            <span className="text-[13px] font-semibold text-red-400">{Math.round(run.average_heartrate)} bpm</span>
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -791,6 +965,12 @@ function LastRideCard({ ride }: { ride: Activity }) {
           {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
           {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Elevation</span></div>}
         </div>
+        {ride.average_heartrate && (
+          <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
+            <span className="text-[13px] text-white/40">Avg HR</span>
+            <span className="text-[13px] font-semibold text-red-400">{Math.round(ride.average_heartrate)} bpm</span>
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -884,6 +1064,154 @@ function MuscleDistributionCard({ distribution }: { distribution: { label: strin
             </div>
           </div>
         ))}
+      </div>
+    </Card>
+  )
+}
+
+function LastStrengthWorkoutCard({ workout }: { workout: HevyWorkout }) {
+  const exList = (workout.exercises ?? []).slice(0, 5)
+  return (
+    <Card>
+      <div className="flex flex-col gap-2">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Workout</span>
+        <span className="text-[17px] font-semibold text-white leading-snug">{workout.title}</span>
+        <span className="text-[12px] text-white/40">{formatDate(workout.start_time)}</span>
+        <div className="flex gap-5 mt-1">
+          {(workout.duration ?? 0) > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[20px] font-bold text-white leading-none">{formatDuration(workout.duration!)}</span>
+              <span className="text-[11px] text-white/40">Duration</span>
+            </div>
+          )}
+          {(workout.volume_kg ?? 0) > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[20px] font-bold text-orange-400 leading-none">{Math.round(workout.volume_kg!).toLocaleString('en-US')} kg</span>
+              <span className="text-[11px] text-white/40">Volume</span>
+            </div>
+          )}
+          {(workout.sets ?? 0) > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[20px] font-bold text-white leading-none">{workout.sets}</span>
+              <span className="text-[11px] text-white/40">Sets</span>
+            </div>
+          )}
+        </div>
+        {exList.length > 0 && (
+          <div className="pt-2 border-t border-white/[0.06] flex flex-wrap gap-1.5">
+            {exList.map(ex => (
+              <span key={ex.title} className="text-[12px] font-medium px-2 py-0.5 rounded-full"
+                style={{ color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.07)' }}>
+                {ex.title}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function VolumeHistoryCard({ weeks }: { weeks: ReturnType<typeof computeVolumeHistory> }) {
+  const maxVol = Math.max(...weeks.map(w => w.vol), 1)
+  const thisWeek = weeks[weeks.length - 1]
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">4-Week Volume</span>
+        <div className="flex items-end gap-2" style={{ height: 64 }}>
+          {weeks.map((w, i) => {
+            const isThis = i === weeks.length - 1
+            const barH = w.vol > 0 ? Math.max(8, Math.round((w.vol / maxVol) * 52)) : 4
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5">
+                <span className="text-[10px] font-semibold" style={{ color: isThis ? '#fb923c' : 'rgba(255,255,255,0.3)' }}>
+                  {w.vol > 0 ? `${Math.round(w.vol / 100) / 10}k` : '–'}
+                </span>
+                <div className="w-full rounded-[6px]"
+                  style={{ height: barH, background: isThis ? '#fb923c' : 'rgba(255,255,255,0.15)' }} />
+                <span className="text-[10px] text-white/35">{w.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-[12px] pt-1 border-t border-white/[0.06]">
+          <span className="text-white/40">{thisWeek.sessions} session{thisWeek.sessions !== 1 ? 's' : ''} this week</span>
+          <span className="font-semibold text-orange-400">{Math.round(thisWeek.vol).toLocaleString('en-US')} kg</span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function TopExercisesCard({ exercises }: { exercises: ReturnType<typeof computeTopExercises> }) {
+  if (exercises.length === 0) return null
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Top Exercises This Month</span>
+        {exercises.map((ex, i) => (
+          <div key={ex.name} className="flex items-center gap-3">
+            <span className="text-[13px] font-bold text-white/20 w-4 shrink-0 text-center">{i + 1}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[15px] font-medium text-white truncate">{ex.name}</p>
+              <p className="text-[12px] text-white/40">{ex.count}× this month</p>
+            </div>
+            {ex.best1RM > 0 && (
+              <div className="text-right shrink-0">
+                <p className="text-[15px] font-semibold text-orange-400">{Math.round(ex.best1RM)} kg</p>
+                <p className="text-[11px] text-white/30">est. 1RM</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function WeeklySetBreakdownCard({ breakdown }: { breakdown: ReturnType<typeof computeWeeklySetBreakdown> }) {
+  if (breakdown.length === 0) return null
+  const maxSets = Math.max(...breakdown.map(g => g.sets))
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Sets This Week</span>
+        {breakdown.map(g => (
+          <div key={g.label} className="flex items-center gap-3">
+            <span className="text-[14px] text-white w-[76px] shrink-0">{g.label}</span>
+            <div className="flex-1 h-[6px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div className="h-full rounded-full transition-all duration-300"
+                style={{ width: `${(g.sets / maxSets) * 100}%`, background: g.color }} />
+            </div>
+            <span className="text-[13px] font-semibold w-14 text-right shrink-0" style={{ color: g.color }}>{g.sets} sets</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function TrainingStreakCard({ data }: { data: ReturnType<typeof computeTrainingStreak> }) {
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Training Activity</span>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[28px] font-bold text-teal-400 leading-none">{data.streak}</span>
+            <span className="text-[11px] text-white/40">day streak</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[28px] font-bold text-white leading-none">{data.totalDays}</span>
+            <span className="text-[11px] text-white/40">active days</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[28px] font-bold text-white leading-none">{data.totalWorkouts}</span>
+            <span className="text-[11px] text-white/40">workouts</span>
+          </div>
+        </div>
+        <span className="text-[12px] text-white/30">Past 30 days</span>
       </div>
     </Card>
   )
@@ -1162,8 +1490,8 @@ function TopInsightsCard({ insights }: { insights: InsightBadge[] }) {
   )
 }
 
-function NextWorkoutCard({ calendarEvents, onRefresh, refreshing }: {
-  calendarEvents: any[]; onRefresh?: () => void; refreshing?: boolean
+function NextWorkoutCard({ calendarEvents }: {
+  calendarEvents: any[]
 }) {
   const now = new Date().toISOString()
   const next = (calendarEvents ?? [])
@@ -1198,15 +1526,6 @@ function NextWorkoutCard({ calendarEvents, onRefresh, refreshing }: {
             <span className="text-[15px] text-white/30 mt-1">No planned workouts</span>
           )}
         </div>
-        {onRefresh && (
-          <button
-            onClick={onRefresh}
-            className={`text-teal-400 text-[13px] font-semibold px-3 py-1.5 rounded-full transition-opacity ${refreshing ? 'opacity-40' : ''}`}
-            style={{ background: 'rgba(45,212,191,0.12)' }}
-          >
-            {refreshing ? '...' : 'Sync'}
-          </button>
-        )}
       </div>
     </Card>
   )
@@ -1214,9 +1533,8 @@ function NextWorkoutCard({ calendarEvents, onRefresh, refreshing }: {
 
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
-export function OverviewSection({ activities, hevy, calendarEvents, onRefresh, refreshing }: {
+export function OverviewSection({ activities, hevy, calendarEvents }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
-  onRefresh?: () => void; refreshing?: boolean
 }) {
   const { data: gezondheid } = useSWR<{ datum: string; stappen: number; gewicht: number }[]>('health-gezondheid', null)
   const { data: foodData } = useSWR<{ foodLog: any[]; targets: any }>('food-log', null)
@@ -1281,8 +1599,193 @@ export function OverviewSection({ activities, hevy, calendarEvents, onRefresh, r
       <TopInsightsCard insights={topInsights} />
 
       {/* 7. Next Workout */}
-      <NextWorkoutCard calendarEvents={calendarEvents} onRefresh={onRefresh} refreshing={refreshing} />
+      <NextWorkoutCard calendarEvents={calendarEvents} />
     </div>
+  )
+}
+
+// ─── Running cards ────────────────────────────────────────────────────────────
+
+function RunningVolumeHistoryCard({ weeks }: { weeks: ReturnType<typeof computeRunningVolumeHistory> }) {
+  const maxKm = Math.max(...weeks.map(w => w.km), 1)
+  const thisWeek = weeks[weeks.length - 1]
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">4-Week Volume</span>
+        <div className="flex items-end gap-2" style={{ height: 64 }}>
+          {weeks.map((w, i) => {
+            const isThis = i === weeks.length - 1
+            const barH = w.km > 0 ? Math.max(8, Math.round((w.km / maxKm) * 52)) : 4
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5">
+                <span className="text-[10px] font-semibold" style={{ color: isThis ? '#2dd4bf' : 'rgba(255,255,255,0.3)' }}>
+                  {w.km > 0 ? `${w.km.toFixed(1)}` : '–'}
+                </span>
+                <div className="w-full rounded-[6px]"
+                  style={{ height: barH, background: isThis ? '#2dd4bf' : 'rgba(255,255,255,0.15)' }} />
+                <span className="text-[10px] text-white/35">{w.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-[12px] pt-1 border-t border-white/[0.06]">
+          <span className="text-white/40">{thisWeek.runs} run{thisWeek.runs !== 1 ? 's' : ''} this week</span>
+          <span className="font-semibold text-teal-400">{thisWeek.km.toFixed(1)} km</span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function RunningHRCard({ hr }: { hr: ReturnType<typeof computeRunningHRTrend> }) {
+  if (hr.avgHR30 === null) return null
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Heart Rate (30 days)</span>
+        <div className="flex items-end justify-between">
+          <div className="flex items-baseline gap-1">
+            <span className="text-[40px] font-bold text-red-400 leading-none">{hr.avgHR30}</span>
+            <span className="text-[15px] font-semibold text-white/50">bpm avg</span>
+          </div>
+          {hr.earlyHR && hr.lateHR && (
+            <div className="flex flex-col items-end gap-0.5 pb-1 text-right">
+              <span className="text-[12px] text-white/40">First 2 weeks</span>
+              <span className="text-[14px] font-semibold text-white/70">{hr.earlyHR} bpm</span>
+              <span className="text-[12px] text-white/40">Last 2 weeks</span>
+              <span className="text-[14px] font-semibold text-white/70">{hr.lateHR} bpm</span>
+            </div>
+          )}
+        </div>
+        {hr.trend && <span className="text-[13px] text-white/50">{hr.trend}</span>}
+      </div>
+    </Card>
+  )
+}
+
+// ─── Cycling cards ────────────────────────────────────────────────────────────
+
+function CyclingVolumeHistoryCard({ weeks }: { weeks: ReturnType<typeof computeCyclingVolumeHistory> }) {
+  const maxKm = Math.max(...weeks.map(w => w.km), 1)
+  const thisWeek = weeks[weeks.length - 1]
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">4-Week Volume</span>
+        <div className="flex items-end gap-2" style={{ height: 64 }}>
+          {weeks.map((w, i) => {
+            const isThis = i === weeks.length - 1
+            const barH = w.km > 0 ? Math.max(8, Math.round((w.km / maxKm) * 52)) : 4
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5">
+                <span className="text-[10px] font-semibold" style={{ color: isThis ? '#22d3ee' : 'rgba(255,255,255,0.3)' }}>
+                  {w.km > 0 ? `${w.km.toFixed(0)}` : '–'}
+                </span>
+                <div className="w-full rounded-[6px]"
+                  style={{ height: barH, background: isThis ? '#22d3ee' : 'rgba(255,255,255,0.15)' }} />
+                <span className="text-[10px] text-white/35">{w.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-[12px] pt-1 border-t border-white/[0.06]">
+          <span className="text-white/40">{thisWeek.rides} ride{thisWeek.rides !== 1 ? 's' : ''} this week</span>
+          <span className="font-semibold text-cyan-400">{thisWeek.km.toFixed(0)} km</span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function CyclingHRCard({ hr }: { hr: ReturnType<typeof computeCyclingHRTrend> }) {
+  if (hr.avgHR30 === null) return null
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Heart Rate (30 days)</span>
+        <div className="flex items-end justify-between">
+          <div className="flex items-baseline gap-1">
+            <span className="text-[40px] font-bold text-red-400 leading-none">{hr.avgHR30}</span>
+            <span className="text-[15px] font-semibold text-white/50">bpm avg</span>
+          </div>
+          {hr.earlyHR && hr.lateHR && (
+            <div className="flex flex-col items-end gap-0.5 pb-1 text-right">
+              <span className="text-[12px] text-white/40">First 2 weeks</span>
+              <span className="text-[14px] font-semibold text-white/70">{hr.earlyHR} bpm</span>
+              <span className="text-[12px] text-white/40">Last 2 weeks</span>
+              <span className="text-[14px] font-semibold text-white/70">{hr.lateHR} bpm</span>
+            </div>
+          )}
+        </div>
+        {hr.trend && <span className="text-[13px] text-white/50">{hr.trend}</span>}
+      </div>
+    </Card>
+  )
+}
+
+// ─── Swimming cards ───────────────────────────────────────────────────────────
+
+function SwimmingVolumeHistoryCard({ weeks }: { weeks: ReturnType<typeof computeSwimmingVolumeHistory> }) {
+  const maxM = Math.max(...weeks.map(w => w.meters), 1)
+  const thisWeek = weeks[weeks.length - 1]
+  const fmt = (m: number) => m >= 1000 ? `${(m / 1000).toFixed(1)}k` : `${Math.round(m)}`
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">4-Week Volume</span>
+        <div className="flex items-end gap-2" style={{ height: 64 }}>
+          {weeks.map((w, i) => {
+            const isThis = i === weeks.length - 1
+            const barH = w.meters > 0 ? Math.max(8, Math.round((w.meters / maxM) * 52)) : 4
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5">
+                <span className="text-[10px] font-semibold" style={{ color: isThis ? '#60a5fa' : 'rgba(255,255,255,0.3)' }}>
+                  {w.meters > 0 ? fmt(w.meters) : '–'}
+                </span>
+                <div className="w-full rounded-[6px]"
+                  style={{ height: barH, background: isThis ? '#60a5fa' : 'rgba(255,255,255,0.15)' }} />
+                <span className="text-[10px] text-white/35">{w.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-[12px] pt-1 border-t border-white/[0.06]">
+          <span className="text-white/40">{thisWeek.sessions} session{thisWeek.sessions !== 1 ? 's' : ''} this week</span>
+          <span className="font-semibold text-blue-400">{thisWeek.meters >= 1000 ? `${(thisWeek.meters / 1000).toFixed(1)} km` : `${Math.round(thisWeek.meters)} m`}</span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function SwimmingPaceTrendCard({ pace }: { pace: ReturnType<typeof computeSwimmingPaceTrend> }) {
+  if (!pace.earlyPace || !pace.latePace) return null
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Pace Trend (30 days)</span>
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px] text-white/40">2 weeks ago</span>
+            <span className="text-[22px] font-bold text-white/60 leading-none">{pace.earlyPace}</span>
+            <span className="text-[11px] text-white/30">/100m</span>
+          </div>
+          <span className="text-[22px] text-white/20">{pace.improved ? '→' : '→'}</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px] text-white/40">Recent</span>
+            <span className={`text-[22px] font-bold leading-none ${pace.improved ? 'text-blue-400' : 'text-red-400'}`}>{pace.latePace}</span>
+            <span className="text-[11px] text-white/30">/100m</span>
+          </div>
+          <div className="ml-auto flex flex-col items-end gap-0.5">
+            <span className="text-[22px]">{pace.improved ? '🏊' : '📉'}</span>
+            <span className={`text-[12px] font-semibold ${pace.improved ? 'text-blue-400' : 'text-red-400'}`}>
+              {pace.improved ? 'Faster' : 'Slower'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Card>
   )
 }
 
@@ -1293,6 +1796,8 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
   const trend = computeRunning7DayTrend(activities)
   const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRun = allRuns[0] ?? null
+  const volumeHistory = computeRunningVolumeHistory(activities)
+  const hrTrend = computeRunningHRTrend(activities)
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const weekRuns = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo)
@@ -1315,6 +1820,10 @@ export function RunningSection({ activities }: { activities: Activity[] }) {
       {lastRun && <LastRunCard run={lastRun} />}
 
       <RunningTrendCard trend={trend} />
+
+      <RunningVolumeHistoryCard weeks={volumeHistory} />
+
+      <RunningHRCard hr={hrTrend} />
 
       {avgCadence > 0 && (
         <Card>
@@ -1378,6 +1887,8 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
   const lastRide = allRides[0] ?? null
   const ftp = computeFTP(activities)
   const enduranceTrend = computeCyclingEnduranceTrend(activities)
+  const volumeHistory = computeCyclingVolumeHistory(activities)
+  const hrTrend = computeCyclingHRTrend(activities)
 
   return (
     <div className="flex flex-col gap-6">
@@ -1388,6 +1899,10 @@ export function CyclingSection({ activities }: { activities: Activity[] }) {
       {lastRide && <LastRideCard ride={lastRide} />}
 
       <CyclingWeeklyTrendCard trend={trend} />
+
+      <CyclingVolumeHistoryCard weeks={volumeHistory} />
+
+      <CyclingHRCard hr={hrTrend} />
 
       {enduranceTrend !== null && (
         <Card>
@@ -1443,19 +1958,34 @@ function matchMuscle(name: string): string | null {
 }
 
 export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
-  const progress = computeStrengthProgress(hevy)
-  const distribution = computeMuscleDistribution(hevy)
-  const keyLifts = extractKeyLifts(hevy)
+  const progress      = computeStrengthProgress(hevy)
+  const distribution  = computeMuscleDistribution(hevy)
+  const keyLifts      = extractKeyLifts(hevy)
   const allMuscleRecovery = computeMuscleRecovery(hevy)
-  const recoveringGroups = allMuscleRecovery.filter(g => g.recovery < 95)
+  const recoveringGroups  = allMuscleRecovery.filter(g => g.recovery < 95)
+  const lastWorkout   = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))[0] ?? null
+  const volumeHistory = computeVolumeHistory(hevy)
+  const topExercises  = computeTopExercises(hevy)
+  const setBreakdown  = computeWeeklySetBreakdown(hevy)
+  const streak        = computeTrainingStreak(hevy)
 
   return (
     <div className="flex flex-col gap-6">
       <AiInsight text={buildStrengthInsight(hevy)} />
 
+      {lastWorkout && <LastStrengthWorkoutCard workout={lastWorkout} />}
+
       <StrengthProgressCard progress={progress} />
 
+      <VolumeHistoryCard weeks={volumeHistory} />
+
+      <TrainingStreakCard data={streak} />
+
+      <TopExercisesCard exercises={topExercises} />
+
       <MuscleDistributionCard distribution={distribution} />
+
+      <WeeklySetBreakdownCard breakdown={setBreakdown} />
 
       {recoveringGroups.length > 0 && (
         <Card>
@@ -1579,15 +2109,15 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
     return d.getFullYear() === displayMonth.getFullYear() && d.getMonth() === displayMonth.getMonth()
   }
 
-  // Track which sport types happened on each calendar day
+  // Track which sport types happened on each calendar day (skip <60s artefacts)
   const workoutDays = new Map<number, Set<'run' | 'ride' | 'strength'>>()
-  activities.forEach(a => {
+  activities.filter(a => (a.moving_time ?? 0) >= 60).forEach(a => {
     if (!inMonth(a.start_date)) return
     const day = new Date(a.start_date).getDate()
     if (!workoutDays.has(day)) workoutDays.set(day, new Set())
     workoutDays.get(day)!.add(sportIcon(a.sport_type))
   })
-  hevy.forEach(h => {
+  hevy.filter(h => (h.duration ?? 0) >= 60).forEach(h => {
     if (!inMonth(h.start_time)) return
     const day = new Date(h.start_time).getDate()
     if (!workoutDays.has(day)) workoutDays.set(day, new Set())
@@ -1595,8 +2125,8 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
   })
 
   const allRecent = [
-    ...activities.map(a => ({ date: a.start_date, label: a.name, duration: a.moving_time ? formatDuration(a.moving_time) : '–', type: sportIcon(a.sport_type) as 'run' | 'ride' | 'strength', relDate: relativeDay(a.start_date) })),
-    ...hevy.map(h => ({ date: h.start_time, label: h.title ?? 'Strength', duration: h.duration ? formatDuration(h.duration) : '–', type: 'strength' as const, relDate: relativeDay(h.start_time) })),
+    ...activities.filter(a => (a.moving_time ?? 0) >= 60).map(a => ({ date: a.start_date, label: a.name, duration: formatDuration(a.moving_time!), type: sportIcon(a.sport_type) as 'run' | 'ride' | 'strength', relDate: relativeDay(a.start_date) })),
+    ...hevy.filter(h => (h.duration ?? 0) >= 60).map(h => ({ date: h.start_time, label: h.title ?? 'Strength', duration: formatDuration(h.duration!), type: 'strength' as const, relDate: relativeDay(h.start_time) })),
   ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
 
   const monthActivities = activities.filter(a => inMonth(a.start_date))
@@ -1873,6 +2403,8 @@ export function SwimmingSection({ activities }: { activities: Activity[] }) {
   const trend = computeSwimmingWeeklyTrend(activities)
   const allSwims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastSwim = allSwims[0] ?? null
+  const volumeHistory = computeSwimmingVolumeHistory(activities)
+  const paceTrend = computeSwimmingPaceTrend(activities)
 
   if (allSwims.length === 0) {
     return (
@@ -1893,6 +2425,8 @@ export function SwimmingSection({ activities }: { activities: Activity[] }) {
       <SwimmingReadinessCard readiness={readiness} />
       {lastSwim && <LastSwimCard swim={lastSwim} />}
       <SwimmingWeeklyTrendCard trend={trend} />
+      <SwimmingVolumeHistoryCard weeks={volumeHistory} />
+      <SwimmingPaceTrendCard pace={paceTrend} />
     </div>
   )
 }
