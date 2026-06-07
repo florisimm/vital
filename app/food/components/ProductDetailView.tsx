@@ -6,22 +6,143 @@ import { createClient } from '@/lib/supabase'
 import type { FoodLogEntry, Product } from '@/lib/types'
 import type { Targets } from '@/app/food/fetchers'
 
-function Accordion({ title, summary, children }: { title: string; summary: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
+// ─── Macro tile (top 4-grid) ──────────────────────────────────────────────────
+function MacroTile({ icon, label, value, unit, color }: {
+  icon: string; label: string; value: string; unit: string; color: string
+}) {
   return (
-    <div className="rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
-      <button className="w-full flex flex-col px-4 py-3 gap-0.5 text-left" onClick={() => setOpen(o => !o)}>
-        <div className="flex items-center justify-between w-full">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">{title}</span>
-          <span className="text-[11px] text-white/30">{open ? '▲' : '▼'}</span>
-        </div>
-        <span className="text-[14px] font-semibold text-white leading-tight truncate">{summary}</span>
-      </button>
-      {open && <div className="px-4 pb-4">{children}</div>}
+    <div className="flex-1 flex flex-col gap-1.5 px-3 py-3 rounded-[16px]"
+      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[14px] leading-none">{icon}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color }}>{label}</span>
+      </div>
+      <div className="flex items-baseline gap-0.5">
+        <span className="text-[20px] font-bold text-white leading-none">{value}</span>
+        <span className="text-[11px] text-white/35 leading-none">{unit}</span>
+      </div>
     </div>
   )
 }
 
+// ─── Dropdown row ─────────────────────────────────────────────────────────────
+function SelectorRow({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center justify-between px-3 py-2 rounded-[14px] text-left"
+      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[10px] font-semibold text-white/35 uppercase tracking-[0.07em]">{label}</span>
+        <span className="text-[14px] font-semibold text-white">{value}</span>
+      </div>
+      <span className="text-white/30 text-[12px]">▼</span>
+    </button>
+  )
+}
+
+// ─── Macro progress row (in expandable section) ───────────────────────────────
+function MacroProgressRow({ label, color, after, delta, target }: {
+  label: string; color: string; after: number; delta: number; target: number
+}) {
+  const pct = Math.min(after / target * 100, 100)
+  const rem = Math.max(0, target - after)
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-white/70">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-bold" style={{ color }}>+{delta.toFixed(1)}g</span>
+          <span className="text-[12px] text-white/35">{after.toFixed(0)}g / {target}g</span>
+          <span className="text-[11px] text-white/25">{rem > 0 ? `${rem.toFixed(0)} left` : '✓'}</span>
+        </div>
+      </div>
+      <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Activity card ────────────────────────────────────────────────────────────
+function ActivityCard({ emoji, label, min }: { emoji: string; label: string; min: number }) {
+  return (
+    <div className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-[14px]"
+      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <span className="text-[20px] leading-none">{emoji}</span>
+      <span className="text-[18px] font-bold text-white leading-none">{min}</span>
+      <span className="text-[10px] text-white/35 leading-none">min {label}</span>
+    </div>
+  )
+}
+
+// ─── Sheets ───────────────────────────────────────────────────────────────────
+const SHEET_STYLE = `
+  @keyframes sheetUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+  @keyframes fadeIn  { from { opacity: 0 }                  to { opacity: 1 } }
+`
+
+function ServingSheet({ servingPills, active, onPick, onClose }: {
+  servingPills: { label: string; amount_g: number }[]
+  active: { label: string; amount_g: number }
+  onPick: (s: { label: string; amount_g: number }) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end"
+      style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 0.2s ease' }} onClick={onClose}>
+      <style>{SHEET_STYLE}</style>
+      <div className="rounded-t-[24px] flex flex-col pb-8"
+        style={{ background: 'rgb(18,19,22)', animation: 'sheetUp 0.32s cubic-bezier(0.32,0.72,0,1)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 shrink-0">
+          <span className="text-[17px] font-semibold text-white">Serving size</span>
+          <button onClick={onClose} className="text-white/50 text-[15px] font-semibold px-3 py-1 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>Close</button>
+        </div>
+        <div className="flex flex-col divide-y" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {servingPills.map((s, i) => (
+            <button key={i} onClick={() => onPick(s)}
+              className="flex items-center justify-between px-5 py-4 text-left"
+              style={{ background: active.label === s.label ? 'rgba(45,212,191,0.08)' : 'transparent' }}>
+              <span className="text-[16px] text-white">{s.label}</span>
+              {active.label === s.label && <span className="text-teal-400 text-[14px] font-semibold">✓</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MealSheet({ meal, setMeal, onClose }: { meal: string; setMeal: (m: string) => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end"
+      style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 0.2s ease' }} onClick={onClose}>
+      <style>{SHEET_STYLE}</style>
+      <div className="rounded-t-[24px] flex flex-col pb-8"
+        style={{ background: 'rgb(18,19,22)', animation: 'sheetUp 0.32s cubic-bezier(0.32,0.72,0,1)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 shrink-0">
+          <span className="text-[17px] font-semibold text-white">Meal</span>
+          <button onClick={onClose} className="text-white/50 text-[15px] font-semibold px-3 py-1 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>Close</button>
+        </div>
+        <div className="flex flex-col divide-y" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {MEAL_ORDER.map(m => (
+            <button key={m} onClick={() => { setMeal(m); onClose() }}
+              className="flex items-center gap-3 px-5 py-4 text-left"
+              style={{ background: meal === m ? 'rgba(45,212,191,0.08)' : 'transparent' }}>
+              <span className="text-[20px]">{MEAL_ICONS[m]}</span>
+              <span className="text-[16px] text-white">{MEAL_LABELS_SHORT[m]}</span>
+              {meal === m && <span className="ml-auto text-teal-400 text-[14px] font-semibold">✓</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export function ProductDetailView({ selected, meal, setMeal, userId, today, totals, targets, trainingCache, healthCache, onAdded }: {
   selected: Product
   meal: string
@@ -36,51 +157,45 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
 }) {
   const servings = selected.servings ?? []
   const GRAM_SERVING = { label: 'gram / ml', amount_g: 1 }
+  const servingPills = [...servings, GRAM_SERVING]
 
-  const [grams, setGrams] = useState(() =>
-    servings[0] ? String(servings[0].amount_g) : '100'
-  )
-  const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(
-    () => servings[0] ?? null
-  )
+  const [grams, setGrams] = useState(() => servings[0] ? String(servings[0].amount_g) : '100')
+  const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(() => servings[0] ?? null)
+  const [showServings, setShowServings] = useState(false)
+  const [showMeals, setShowMeals] = useState(false)
+  const [showImpact, setShowImpact] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [inputFocused, setInputFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const repeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const active = selectedServing ?? servings[0] ?? GRAM_SERVING
   const stepAmt = active.amount_g > 1 ? active.amount_g : 10
   const g = Math.max(0, Number(grams) || 0)
 
+  const per100 = {
+    kcal:    Number(selected.kcal    ?? 0),
+    protein: Number(selected.protein ?? 0),
+    carbs:   Number(selected.carbs   ?? 0),
+    fat:     Number(selected.fat     ?? 0),
+  }
   const preview = g > 0 ? {
-    kcal:    (Number(selected.kcal    ?? 0) * g) / 100,
-    protein: (Number(selected.protein ?? 0) * g) / 100,
-    carbs:   (Number(selected.carbs   ?? 0) * g) / 100,
-    fat:     (Number(selected.fat     ?? 0) * g) / 100,
+    kcal:    per100.kcal    * g / 100,
+    protein: per100.protein * g / 100,
+    carbs:   per100.carbs   * g / 100,
+    fat:     per100.fat     * g / 100,
   } : null
 
   function pickServing(s: { label: string; amount_g: number }) {
     setSelectedServing(s)
-    setGrams(String(s.amount_g))
+    if (s.label !== GRAM_SERVING.label) setGrams(String(s.amount_g))
+    setShowServings(false)
   }
-
   function applyStep(dir: 1 | -1) {
     setGrams(prev => String(Math.max(stepAmt, (Number(prev) || 0) + dir * stepAmt)))
   }
-
-  function startRepeat(dir: 1 | -1) {
-    applyStep(dir)
-    repeatRef.current = setInterval(() => applyStep(dir), 110)
-  }
-  function stopRepeat() {
-    if (repeatRef.current) { clearInterval(repeatRef.current); repeatRef.current = null }
-  }
-
-  const servingPills = [
-    ...servings,
-    ...[50, 100, 150, 200]
-      .filter(v => !servings.some(s => s.amount_g === v))
-      .map(v => ({ label: `${v}g`, amount_g: v })),
-    GRAM_SERVING,
-  ]
+  function startRepeat(dir: 1 | -1) { applyStep(dir); repeatRef.current = setInterval(() => applyStep(dir), 110) }
+  function stopRepeat() { if (repeatRef.current) { clearInterval(repeatRef.current); repeatRef.current = null } }
 
   async function handleSave() {
     if (!preview) return
@@ -89,7 +204,7 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     const { data, error } = await supabase.from('food_log').insert({
       user_id: userId, date: today, meal_category: meal,
       food_name: selected.name, amount_g: Number(grams),
-      kcal:    Math.round(preview.kcal),
+      kcal: Math.round(preview.kcal),
       protein: Math.round(preview.protein * 10) / 10,
       carbs:   Math.round(preview.carbs   * 10) / 10,
       fat:     Math.round(preview.fat     * 10) / 10,
@@ -99,194 +214,167 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     if (!error && data) onAdded(data as FoodLogEntry)
   }
 
-  // ── Daily impact ──────────────────────────────────────────────────────────────
-
+  // Daily impact
   const afterKcal    = totals.kcal    + (preview?.kcal    ?? 0)
   const afterProtein = totals.protein + (preview?.protein ?? 0)
   const afterCarbs   = totals.carbs   + (preview?.carbs   ?? 0)
   const afterFat     = totals.fat     + (preview?.fat     ?? 0)
   const kcalPct      = Math.round(Math.min(afterKcal / targets.kcal * 100, 999))
 
-  // ── Activity equivalents ──────────────────────────────────────────────────────
-
-  const bodyWeight = (() => {
-    const row = (healthCache ?? []).find((r: any) => r.gewicht)
-    return row ? Number(row.gewicht) : 75
-  })()
+  // Activity equivalents
+  const bodyWeight = (() => { const r = (healthCache ?? []).find((r: any) => r.gewicht); return r ? Number(r.gewicht) : 75 })()
   const allActs: any[] = (trainingCache as any)?.activities ?? []
   const runs  = allActs.filter(a => a.sport_type?.toLowerCase().includes('run')  && (a.average_speed ?? 0) > 0)
   const rides = allActs.filter(a => (a.sport_type?.toLowerCase().includes('ride') || a.sport_type?.toLowerCase().includes('cycl')) && (a.average_speed ?? 0) > 0)
   const runCount  = allActs.filter(a => a.sport_type?.toLowerCase().includes('run')).length
   const rideCount = allActs.filter(a => a.sport_type?.toLowerCase().includes('ride') || a.sport_type?.toLowerCase().includes('cycl')).length
-  const runMet = runs.length
-    ? (() => { const kmh = runs.reduce((s: number, a: any) => s + a.average_speed, 0) / runs.length * 3.6; return Math.max(7, Math.min(15, kmh * 0.75 + 3.5)) })()
-    : 10
-  const rideMet = rides.length
-    ? (() => { const kmh = rides.reduce((s: number, a: any) => s + a.average_speed * 3.6, 0) / rides.length; return kmh < 18 ? 5.5 : kmh < 24 ? 7.5 : kmh < 30 ? 9.5 : 11.5 })()
-    : 7.5
+  const runMet  = runs.length  ? (() => { const k = runs.reduce((s: number,a: any) => s + a.average_speed,0) / runs.length * 3.6; return Math.max(7,Math.min(15,k*0.75+3.5)) })() : 10
+  const rideMet = rides.length ? (() => { const k = rides.reduce((s: number,a: any) => s + a.average_speed*3.6,0) / rides.length; return k<18?5.5:k<24?7.5:k<30?9.5:11.5 })() : 7.5
   const burnMin = (met: number, kcal: number) => Math.max(1, Math.round(kcal * 60 / (met * bodyWeight)))
   const actItems = (() => {
-    const kcal = preview?.kcal ?? 0
-    if (kcal <= 5) return []
-    const walk = { emoji: '🚶', label: 'walking',  min: burnMin(3.5,     kcal) }
-    const run  = { emoji: '🏃', label: 'running',  min: burnMin(runMet,  kcal) }
-    const ride = { emoji: '🚴', label: 'cycling',  min: burnMin(rideMet, kcal) }
-    if (runCount === 0 && rideCount === 0) return [walk]
-    const userActs = ([
-      runCount  > 0 ? { ...run,  cnt: runCount  } : null,
-      rideCount > 0 ? { ...ride, cnt: rideCount } : null,
-    ].filter(Boolean) as any[]).sort((a, b) => b.cnt - a.cnt).slice(0, 2)
-    return [...userActs, walk]
+    const kcal = preview?.kcal ?? 0; if (kcal <= 5) return []
+    const items: { emoji: string; label: string; min: number }[] = [{ emoji: '🚶', label: 'walk', min: burnMin(3.5, kcal) }]
+    if (runCount > 0)  items.unshift({ emoji: '🏃', label: 'run',  min: burnMin(runMet,  kcal) })
+    if (rideCount > 0) items.splice(runCount > 0 ? 1 : 0, 0, { emoji: '🚴', label: 'ride', min: burnMin(rideMet, kcal) })
+    return items.slice(0, 3)
   })()
-  const isPersonalized = runs.length > 0 || rides.length > 0
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-1 overflow-y-auto flex flex-col gap-4 pt-1 pb-4" style={{ overscrollBehavior: 'contain' }}>
+    <>
+      {showServings && <ServingSheet servingPills={servingPills} active={active} onPick={pickServing} onClose={() => setShowServings(false)} />}
+      {showMeals    && <MealSheet meal={meal} setMeal={setMeal} onClose={() => setShowMeals(false)} />}
 
-        {/* Product name */}
-        <div className="px-5">
-          <p className="text-[26px] font-bold text-white leading-tight">{selected.name.charAt(0).toUpperCase() + selected.name.slice(1)}</p>
-          <p className="text-[13px] text-white/40 mt-0.5">
-            {[selected.brand, `${Number(selected.kcal ?? 0)} kcal / 100g`].filter(Boolean).join(' · ')}
-          </p>
-        </div>
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto flex flex-col gap-3 pt-2 pb-4 px-5" style={{ overscrollBehavior: 'contain' }}>
 
-        {/* Gram stepper + Porties naast elkaar */}
-        <div className="px-5 flex gap-3 items-start">
-          <div className="flex-1 rounded-[18px] flex items-center justify-between px-3 py-2"
-            style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <button
-              onPointerDown={() => startRepeat(-1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
-              className="w-[44px] h-[44px] rounded-full flex items-center justify-center text-[28px] font-light text-white select-none"
-              style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
-            <div className="flex flex-col items-center">
-              <div className="flex items-baseline gap-1">
-                <input type="number" inputMode="decimal" value={grams}
-                  onChange={e => setGrams(e.target.value)}
-                  className="text-[44px] font-bold text-white bg-transparent text-center outline-none w-24" />
-                <span className="text-[16px] text-white/50">g</span>
-              </div>
-              {active.amount_g > 1 && g > 0 && (
-                <span className="text-[11px] text-white/30 -mt-1">{(g / active.amount_g).toFixed(1)} × {active.label}</span>
-              )}
-            </div>
-            <button
-              onPointerDown={() => startRepeat(1)} onPointerUp={stopRepeat} onPointerLeave={stopRepeat}
-              className="w-[44px] h-[44px] rounded-full flex items-center justify-center text-[28px] font-light text-white select-none"
-              style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
-          </div>
-          <div className="w-[130px] shrink-0">
-            <Accordion title="Porties" summary={active.label}>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {servingPills.map((s, i) => (
-                  <button key={i} onClick={() => pickServing(s)}
-                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                    style={active.label === s.label
-                      ? { background: 'white', color: 'black' }
-                      : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </Accordion>
-          </div>
-        </div>
-
-        {/* Dagdeel eronder */}
-        <div className="px-5">
-          <Accordion title="Dagdeel" summary={`${MEAL_ICONS[meal]} ${MEAL_LABELS_SHORT[meal] ?? meal}`}>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {MEAL_ORDER.map(m => (
-                <button key={m} onClick={() => setMeal(m)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                  style={meal === m
-                    ? { background: 'white', color: 'black' }
-                    : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.65)' }}>
-                  <span>{MEAL_ICONS[m]}</span>
-                  <span>{MEAL_LABELS_SHORT[m]}</span>
-                </button>
-              ))}
-            </div>
-          </Accordion>
-        </div>
-
-        {/* Calorie / macro preview */}
-        {preview && (
-          <div className="mx-5 rounded-[20px] p-4 flex flex-col gap-3"
-            style={{ background: 'rgba(255,255,255,0.07)' }}>
-            <div className="flex items-end justify-between">
-              <div className="flex items-baseline gap-2">
-                <span className="text-[40px] font-bold text-white leading-none">{Math.round(afterKcal)}</span>
-                <span className="text-[15px] text-white/45">kcal</span>
-              </div>
-              <div className="flex items-center gap-1.5 pb-1">
-                <span className="text-[13px] text-white/30">{Math.round(totals.kcal)} →</span>
-                <span className="text-[13px] font-semibold text-orange-400">+{Math.round(preview.kcal)}</span>
-                <span className="text-[13px] text-white/30">· {kcalPct}%</span>
-              </div>
-            </div>
-            <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <div className="h-full rounded-full transition-all duration-150 bg-orange-400"
-                style={{ width: `${Math.min(afterKcal / targets.kcal * 100, 100)}%` }} />
-            </div>
-            {([
-              { label: 'Protein', after: afterProtein, delta: preview.protein, target: targets.protein, color: '#2dd4bf' },
-              { label: 'Carbs',   after: afterCarbs,   delta: preview.carbs,   target: targets.carbs,   color: '#facc15' },
-              { label: 'Fat',     after: afterFat,     delta: preview.fat,     target: targets.fat,     color: '#818cf8' },
-            ] as const).map(({ label, after, delta, target, color }) => {
-              const pct = Math.round(Math.min(after / target * 100, 999))
-              const rem = Math.max(0, Math.round(target - after))
-              return (
-                <div key={label} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-semibold text-white/45 uppercase tracking-wide">{label}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-bold" style={{ color }}>+{delta.toFixed(1)}g</span>
-                      <span className="text-[12px] text-white/30">{pct}% · {rem > 0 ? `${rem}g left` : 'done ✓'}</span>
-                    </div>
-                  </div>
-                  <div className="h-[4px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div className="h-full rounded-full transition-all duration-150"
-                      style={{ width: `${Math.min(after / target * 100, 100)}%`, background: color }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Activity equivalent */}
-        {actItems.length > 0 && (
-          <div className="mx-5 rounded-[20px] px-5 py-4 flex flex-col items-center gap-3"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.12em]">🔥 Activity Equivalent</span>
-            <div className="flex items-center justify-center gap-5">
-              {actItems.map((a: any, i: number) => (
-                <span key={i} className="flex items-center gap-5">
-                  <span className="flex flex-col items-center gap-1">
-                    <span className="text-[22px] leading-none">{a.emoji}</span>
-                    <span className="text-[16px] font-bold text-white leading-none">{a.min} min</span>
-                    <span className="text-[11px] text-white/35 leading-none">{a.label}</span>
-                  </span>
-                  {i < actItems.length - 1 && <span className="text-white/15 text-[18px] font-light">·</span>}
-                </span>
-              ))}
-            </div>
-            <p className="text-[11px] text-white/25 text-center leading-relaxed">
-              {isPersonalized ? 'Based on your weight & activity profile' : 'General estimate · connect Strava to personalise'}
+          {/* Product name */}
+          <div>
+            <p className="text-[26px] font-bold text-white leading-tight">
+              {selected.name.charAt(0).toUpperCase() + selected.name.slice(1)}
+            </p>
+            <p className="text-[13px] text-white/40 mt-0.5">
+              {[selected.brand, `${per100.kcal} kcal / 100g`].filter(Boolean).join(' · ')}
             </p>
           </div>
-        )}
-      </div>
 
-      {/* Log button */}
-      <div className="shrink-0 px-5 pt-3 pb-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <button onClick={handleSave} disabled={saving || !preview}
-          className="w-full h-[56px] rounded-[18px] bg-white text-black font-bold text-[17px] disabled:opacity-40">
-          {saving ? '…' : `Log · ${MEAL_ICONS[meal]} ${MEAL_LABELS_SHORT[meal] ?? meal}`}
-        </button>
+          {/* 4 macro tiles — dynamic on current grams */}
+          <div className="flex gap-2">
+            <MacroTile icon="🔥" label="Energy"   color="#fb923c"
+              value={preview ? String(Math.round(preview.kcal))         : String(per100.kcal)}
+              unit={preview ? 'kcal' : 'kcal'} />
+            <MacroTile icon="💪" label="Protein"  color="#2dd4bf"
+              value={preview ? preview.protein.toFixed(1)                : String(per100.protein)}
+              unit="g" />
+            <MacroTile icon="🌾" label="Carbs"    color="#facc15"
+              value={preview ? preview.carbs.toFixed(1)                  : String(per100.carbs)}
+              unit="g" />
+            <MacroTile icon="🫙" label="Vet"      color="#818cf8"
+              value={preview ? preview.fat.toFixed(1)                    : String(per100.fat)}
+              unit="g" />
+          </div>
+
+          {/* Quantity stepper + Portie naast elkaar */}
+          <div className="flex gap-3 items-stretch">
+            <div className="flex-[1] flex items-center justify-center px-3 py-2 rounded-[14px] cursor-text"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.07)' }}
+              onClick={() => inputRef.current?.focus()}>
+              <div className="flex items-baseline gap-0">
+                {active.amount_g > 1 ? (
+                  <input ref={inputRef} type="text" inputMode="decimal"
+                    value={g > 0 ? String(Math.round(g / active.amount_g * 10) / 10) : ''}
+                    size={Math.max(1, String(Math.round(g / active.amount_g * 10) / 10).length)}
+                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setGrams(String(Number(v) * active.amount_g)) }}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
+                    className="text-[18px] font-bold text-white bg-transparent outline-none" />
+                ) : (
+                  <input ref={inputRef} type="text" inputMode="decimal" value={grams}
+                    size={Math.max(1, grams.length)}
+                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setGrams(v) }}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
+                    className="text-[18px] font-bold text-white bg-transparent outline-none" />
+                )}
+                {!inputFocused && active.amount_g > 1 && (
+                  <span className="text-[12px] text-white/40">×</span>
+                )}
+              </div>
+            </div>
+            <button onClick={() => setShowServings(true)}
+              className="flex-[3] flex flex-row items-center justify-between px-3 py-2 rounded-[14px]"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[14px] font-semibold text-white leading-tight truncate min-w-0">{active.label}</span>
+              <span className="text-[11px] text-white/30 shrink-0 ml-2">▼</span>
+            </button>
+          </div>
+
+          {/* Meal selector */}
+          <SelectorRow
+            label="Logged as"
+            value={`${MEAL_ICONS[meal]} ${MEAL_LABELS_SHORT[meal] ?? meal}`}
+            onClick={() => setShowMeals(true)}
+          />
+
+          {/* Daily impact — expandable */}
+          {preview && (
+            <div className="rounded-[16px] overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <button className="w-full flex items-center justify-between px-4 py-3.5"
+                onClick={() => setShowImpact(o => !o)}>
+                <div className="flex flex-col gap-0.5 text-left">
+                  <span className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.07em]">Daily impact</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-[18px] font-bold text-white">{Math.round(afterKcal)}</span>
+                    <span className="text-[13px] text-white/40">kcal · {kcalPct}% of goal</span>
+                    <span className="text-[13px] font-semibold text-orange-400">+{Math.round(preview.kcal)}</span>
+                  </div>
+                </div>
+                <span className="text-white/30 text-[13px]">{showImpact ? '▲' : '▼'}</span>
+              </button>
+              {showImpact && (
+                <div className="px-4 pb-4 flex flex-col gap-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-[5px] rounded-full overflow-hidden mt-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div className="h-full rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(afterKcal / targets.kcal * 100, 100)}%`, background: 'linear-gradient(90deg,#fb923c,#f97316)' }} />
+                  </div>
+                  <MacroProgressRow label="Protein" color="#2dd4bf" after={afterProtein} delta={preview.protein} target={targets.protein} />
+                  <MacroProgressRow label="Carbs"   color="#facc15" after={afterCarbs}   delta={preview.carbs}   target={targets.carbs}   />
+                  <MacroProgressRow label="Fat"     color="#818cf8" after={afterFat}     delta={preview.fat}     target={targets.fat}     />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Activity equivalent */}
+          {actItems.length > 0 && preview && (
+            <div className="rounded-[16px] px-4 py-4 flex flex-col gap-3"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.07em]">
+                Burn <span className="text-white/60">{Math.round(preview.kcal)} kcal</span> via
+              </span>
+              <div className="flex gap-2">
+                {actItems.map((a, i) => <ActivityCard key={i} emoji={a.emoji} label={a.label} min={a.min} />)}
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Log button */}
+        <div className="shrink-0 px-5 pt-3 pb-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button onClick={handleSave} disabled={saving || !preview}
+            className="w-full h-[54px] rounded-[16px] font-bold text-[16px] disabled:opacity-40 flex items-center justify-center gap-2"
+            style={{ background: preview ? 'white' : 'rgba(255,255,255,0.15)', color: preview ? 'black' : 'rgba(255,255,255,0.4)' }}>
+            {saving ? '…' : (
+              <>
+                <span>{MEAL_ICONS[meal]}</span>
+                <span>Log · {MEAL_LABELS_SHORT[meal] ?? meal}</span>
+                {preview && <span className="ml-1 text-[13px] font-normal opacity-50">· {Math.round(preview.kcal)} kcal</span>}
+              </>
+            )}
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
