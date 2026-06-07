@@ -20,11 +20,95 @@ export type GezondheidsRow = {
   wakker_minuten: number | null
   spo2: number | null
   ademhalingsfrequentie: number | null
+  slaap_start_min: number | null
+  slaap_einde_min: number | null
 }
 
 const SWR_OPTS = { revalidateOnFocus: false, dedupingInterval: 60_000 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function fmtMin(min: number | null) {
+  if (!min) return '–'
+  const h = Math.floor(Math.abs(min) / 60)
+  const m = Math.abs(min) % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+function fmtTime(min: number | null) {
+  if (min === null) return '–'
+  const h = Math.floor(min / 60) % 24
+  const m = min % 60
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+}
+
+function avg(vals: (number | null)[]): number | null {
+  const clean = vals.filter((v): v is number => v !== null)
+  return clean.length ? Math.round(clean.reduce((a, b) => a + b, 0) / clean.length) : null
+}
+
+// Large metric card with vs-30d comparison
+function HeroCard({ label, value, diff, formatDiff, tint }: {
+  label: string; value: string; diff: number | null
+  formatDiff: (d: number) => string; tint: string
+}) {
+  const diffColor = diff === null ? '' : diff > 0 ? '#4ade80' : diff < 0 ? '#f87171' : 'rgba(255,255,255,0.3)'
+  return (
+    <div className="rounded-[16px] p-4 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.10em] text-white/40">{label}</span>
+      <span className="text-[34px] font-bold leading-none" style={{ color: tint }}>{value}</span>
+      {diff !== null ? (
+        <span className="text-[12px] font-semibold" style={{ color: diffColor }}>
+          {diff > 0 ? '+' : ''}{formatDiff(diff)} vs 30d avg
+        </span>
+      ) : (
+        <span className="text-[12px] text-white/20">–</span>
+      )}
+    </div>
+  )
+}
+
+// 30-day bar trend chart
+function TrendChart({ label, values, color, avg7, avg30, format }: {
+  label: string; values: (number | null)[]; color: string
+  avg7: number | null; avg30: number | null; format: (v: number) => string
+}) {
+  const nonNull = values.filter((v): v is number => v !== null)
+  const maxV = nonNull.length ? Math.max(...nonNull) : 1
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-white/50">{label}</span>
+        <div className="flex gap-3">
+          {avg7  !== null && <span className="text-[11px] text-white/40">7d <span className="text-white/65 font-medium">{format(avg7)}</span></span>}
+          {avg30 !== null && <span className="text-[11px] text-white/40">30d <span className="text-white/65 font-medium">{format(avg30)}</span></span>}
+        </div>
+      </div>
+      <div className="flex items-end gap-[2px] h-14">
+        {values.map((v, i) => {
+          const h = v ? Math.max((v / maxV) * 48, 4) : 3
+          const isLast = i === values.length - 1
+          return (
+            <div key={i} className="flex-1 rounded-sm transition-all" style={{
+              height: `${h}px`,
+              background: isLast ? color : v ? `${color}55` : 'rgba(255,255,255,0.05)',
+            }} />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Compact secondary metric tile
+function MiniCard({ title, value, tint }: { title: string; value: string; tint: string }) {
+  return (
+    <div className="rounded-[12px] px-3 py-2.5 flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <span className="text-[10px] text-white/30 uppercase tracking-[0.08em]">{title}</span>
+      <span className={`text-[15px] font-semibold ${tint}`}>{value}</span>
+    </div>
+  )
+}
 
 function AiInsight({ text }: { text: string }) {
   return (
@@ -71,12 +155,14 @@ function SmallCard({ title, value, unit = '', detail, Icon, tint }: {
   )
 }
 
-function StageBar({ label, duration, percent, tint }: { label: string; duration: string; percent: number; tint: string }) {
+function StageBar({ label, duration, percent, pct, tint }: { label: string; duration: string; percent: number; pct?: number | null; tint: string }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <span className="text-[15px] font-medium text-white">{label}</span>
-        <span className={`text-[15px] font-semibold ${tint}`}>{duration}</span>
+        <span className={`text-[14px] font-semibold ${tint}`}>
+          {duration}{pct != null ? ` · ${pct}%` : ''}
+        </span>
       </div>
       <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
         <div className={`h-full rounded-full ${tint.replace('text-', 'bg-')} opacity-80`} style={{ width: `${percent * 100}%` }} />
@@ -121,71 +207,208 @@ function RingChart({ progress, color, label, value }: { progress: number; color:
 
 // ─── Sleep ────────────────────────────────────────────────────────────────────
 
-function fmtMin(min: number | null) {
-  if (!min) return '–'
-  const h = Math.floor(min / 60), m = min % 60
-  return `${h}h ${m}m`
-}
-
 export function SleepSection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
 
-  const sleepRows = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
+  const sleepRows = rows.filter(r => r.slaap_minuten != null)
   const latest = sleepRows[0]
-  const totalMin = latest?.slaap_minuten ?? null
-  const score = latest?.slaap_score ?? null
-  const deep = latest?.slaap_diep ?? null
-  const light = latest?.slaap_licht ?? null
-  const rem = latest?.slaap_rem ?? null
-  const wake = latest?.wakker_minuten ?? null
-  const spo2 = latest?.spo2 ?? null
-  const resp = latest?.ademhalingsfrequentie ?? null
-  const bedTotal = (totalMin ?? 0) + (wake ?? 0)
-  const stagesTotal = bedTotal || 1
 
-  const avgMin = sleepRows.length
-    ? Math.round(sleepRows.reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / sleepRows.length)
-    : null
+  const totalMin    = latest?.slaap_minuten ?? null
+  const score       = latest?.slaap_score ?? null
+  const deep        = latest?.slaap_diep ?? null
+  const light       = latest?.slaap_licht ?? null
+  const rem         = latest?.slaap_rem ?? null
+  const wake        = latest?.wakker_minuten ?? null
+  const spo2        = latest?.spo2 ?? null
+  const resp        = latest?.ademhalingsfrequentie ?? null
+  const bedtimeMin  = latest?.slaap_start_min ?? null
+  const wakeTimeMin = latest?.slaap_einde_min ?? null
 
-  const trendHeights = sleepRows.map(r => r.slaap_minuten ?? 0)
-  const maxH = trendHeights.length ? Math.max(...trendHeights, 1) : 1
-  const days = sleepRows.map(r => ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(r.datum).getDay()]).reverse()
-  const trendRev = [...trendHeights].reverse()
+  const last30 = sleepRows.slice(0, 30)
+  const last7  = sleepRows.slice(0, 7)
+
+  const avg30Score = avg(last30.map(r => r.slaap_score))
+  const avg30Min   = avg(last30.map(r => r.slaap_minuten))
+  const avg7Score  = avg(last7.map(r => r.slaap_score))
+  const avg7Min    = avg(last7.map(r => r.slaap_minuten))
+
+  const scoreDiff    = score !== null && avg30Score !== null ? score - avg30Score : null
+  const durationDiff = totalMin !== null && avg30Min !== null ? totalMin - avg30Min : null
+
+  const asleepTotal  = (totalMin ?? ((deep ?? 0) + (rem ?? 0) + (light ?? 0))) || 1
+  const stagesTotal  = (asleepTotal + (wake ?? 0)) || 1
+
+  const efficiency = asleepTotal > 0 && stagesTotal > 0
+    ? Math.round((asleepTotal / stagesTotal) * 100) : null
+
+  const deepPct  = deep  && asleepTotal ? Math.round(deep  / asleepTotal * 100) : null
+  const remPct   = rem   && asleepTotal ? Math.round(rem   / asleepTotal * 100) : null
+  const lightPct = light && asleepTotal ? Math.round(light / asleepTotal * 100) : null
+  const wakePct  = wake  && stagesTotal ? Math.round(wake  / stagesTotal * 100) : null
+
+  // Consistency: lower stddev of wake times = more consistent; score 0–100%
+  const wakeTimes = last7.map(r => r.slaap_einde_min).filter((v): v is number => v !== null)
+  let consistency: number | null = null
+  if (wakeTimes.length >= 3) {
+    const mean = wakeTimes.reduce((a, b) => a + b, 0) / wakeTimes.length
+    const stddev = Math.sqrt(wakeTimes.reduce((a, b) => a + (b - mean) ** 2, 0) / wakeTimes.length)
+    consistency = Math.round(Math.max(0, Math.min(100, 100 - (stddev / 90) * 100)))
+  }
+
+  // Trend arrays oldest→newest
+  const scoreValues    = [...last30].reverse().map(r => r.slaap_score)
+  const durationValues = [...last30].reverse().map(r => r.slaap_minuten)
+
+  // AI quality
+  const quality = score === null ? null
+    : score >= 85 ? 'Excellent' : score >= 70 ? 'Good' : score >= 55 ? 'Fair' : 'Poor'
+  const qualityColor = quality === 'Excellent' ? '#4ade80'
+    : quality === 'Good' ? '#34d399' : quality === 'Fair' ? '#fbbf24' : '#f87171'
+
+  const insightLines: string[] = []
+  if (totalMin !== null && avg30Min !== null) {
+    const diff = totalMin - avg30Min
+    insightLines.push(
+      `Sleep duration ${diff >= 0 ? 'exceeded' : 'was below'} your 30-day average by ${fmtMin(Math.abs(diff))}.`
+    )
+  }
+  if (deepPct !== null)
+    insightLines.push(`Deep sleep at ${deepPct}% — ${deepPct >= 20 ? 'within' : 'below'} the healthy 20–25% range.`)
+  if (efficiency !== null)
+    insightLines.push(`Sleep efficiency ${efficiency}%.`)
+
+  if (!totalMin) {
+    return (
+      <div className="flex flex-col gap-4">
+        <AiInsight text="Connect Fitbit and sync to see your sleep quality data." />
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      <AiInsight text={totalMin ? `Last night: ${fmtMin(totalMin)} sleep, score ${score ?? '–'}.${spo2 ? ` SpO₂ ${spo2}%.` : ''}` : 'Connect Fitbit to see sleep data.'} />
-      <HeroMetric value={score ? String(score) : '–'} label="Sleep Score" note={totalMin ? fmtMin(totalMin) : '–'} Icon={BedDouble} tint="text-indigo-400" />
-      <Card>
-        <div className="flex flex-col gap-4">
-          <span className="text-[15px] font-semibold text-white/50">Sleep Stages</span>
-          <StageBar label="Deep"  duration={fmtMin(deep)}  percent={deep  ? deep  / stagesTotal : 0} tint="text-indigo-400" />
-          <StageBar label="REM"   duration={fmtMin(rem)}   percent={rem   ? rem   / stagesTotal : 0} tint="text-purple-400" />
-          <StageBar label="Light" duration={fmtMin(light)} percent={light ? light / stagesTotal : 0} tint="text-blue-400"   />
-          <StageBar label="Awake" duration={fmtMin(wake)}  percent={wake  ? wake  / stagesTotal : 0} tint="text-white/40"   />
-        </div>
-      </Card>
+    <div className="flex flex-col gap-5">
+
+      {/* Hero 4 metrics */}
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Duration"    value={totalMin ? `${Math.floor(totalMin / 60)}h` : '–'} unit={totalMin ? `${totalMin % 60}m` : ''} detail="Asleep" Icon={Timer} tint="text-blue-400" />
-        <SmallCard title="Awake"       value={wake ? `${wake}` : '–'} unit={wake ? 'min' : ''} detail="During night" Icon={Moon} tint="text-orange-400" />
-        <SmallCard title="SpO₂"        value={spo2 ? `${spo2}` : '–'} unit={spo2 ? '%' : ''} detail="Oxygen saturation" Icon={Activity} tint="text-teal-400" />
-        <SmallCard title="Breathing"   value={resp ? `${resp}` : '–'} unit={resp ? '/min' : ''} detail="Respiratory rate" Icon={Zap} tint="text-cyan-400" />
-        <SmallCard title="Deep sleep"  value={deep ? `${deep}` : '–'} unit={deep ? 'min' : ''} detail={deep && totalMin ? `${Math.round(deep / totalMin * 100)}% of sleep` : '–'} Icon={BedDouble} tint="text-indigo-400" />
-        <SmallCard title="7-day avg"   value={avgMin ? `${Math.floor(avgMin / 60)}h` : '–'} unit={avgMin ? `${avgMin % 60}m` : ''} detail="Average sleep" Icon={Zap} tint="text-teal-400" />
+        <HeroCard
+          label="Sleep Score"
+          value={score !== null ? String(score) : '–'}
+          diff={scoreDiff}
+          formatDiff={d => `${Math.abs(Math.round(d))} pts`}
+          tint="#818cf8"
+        />
+        <HeroCard
+          label="Duration"
+          value={totalMin ? `${Math.floor(totalMin / 60)}h ${totalMin % 60}m` : '–'}
+          diff={durationDiff}
+          formatDiff={d => fmtMin(Math.round(Math.abs(d)))}
+          tint="#60a5fa"
+        />
+        <HeroCard
+          label="Bedtime"
+          value={fmtTime(bedtimeMin)}
+          diff={null}
+          formatDiff={() => ''}
+          tint="rgba(255,255,255,0.75)"
+        />
+        <HeroCard
+          label="Wake time"
+          value={fmtTime(wakeTimeMin)}
+          diff={null}
+          formatDiff={() => ''}
+          tint="rgba(255,255,255,0.75)"
+        />
       </div>
-      {trendRev.length > 1 && (
+
+      {/* AI Insight */}
+      {quality && (
         <Card>
-          <SectionHeader title="7-Day Trend" detail={avgMin ? `avg ${fmtMin(avgMin)}` : ''} />
-          <div className="flex items-end gap-2 h-20 mt-4">
-            {trendRev.map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className="w-full rounded-[4px]" style={{ height: `${(h / maxH) * 64}px`, background: i === trendRev.length - 1 ? '#818cf8' : 'rgba(255,255,255,0.15)' }} />
-                <span className="text-[10px] text-white/40">{days[i]}</span>
-              </div>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-orange-400 text-[14px]">✦</span>
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Insight</span>
+              <span className="ml-auto text-[12px] font-bold" style={{ color: qualityColor }}>
+                Sleep Quality: {quality}
+              </span>
+            </div>
+            {insightLines.map((line, i) => (
+              <p key={i} className="text-[15px] text-white/75 leading-relaxed">{line}</p>
             ))}
           </div>
         </Card>
       )}
+
+      {/* Sleep Stages */}
+      <Card>
+        <div className="flex flex-col gap-4">
+          <span className="text-[15px] font-semibold text-white/50">Sleep Stages</span>
+          <StageBar label="Deep"  pct={deepPct}  duration={fmtMin(deep)}  percent={deep  ? deep  / stagesTotal : 0} tint="text-indigo-400" />
+          <StageBar label="REM"   pct={remPct}   duration={fmtMin(rem)}   percent={rem   ? rem   / stagesTotal : 0} tint="text-purple-400" />
+          <StageBar label="Light" pct={lightPct} duration={fmtMin(light)} percent={light ? light / stagesTotal : 0} tint="text-blue-400"   />
+          <StageBar label="Awake" pct={wakePct}  duration={fmtMin(wake)}  percent={wake  ? wake  / stagesTotal : 0} tint="text-white/40"   />
+        </div>
+      </Card>
+
+      {/* Quality Insights 2×2 */}
+      <div className="grid grid-cols-2 gap-3">
+        <MiniCard
+          title="Deep Sleep"
+          value={deepPct !== null ? `${deepPct}%` : '–'}
+          tint={deepPct !== null && deepPct >= 20 ? 'text-indigo-400' : 'text-yellow-400'}
+        />
+        <MiniCard
+          title="REM Sleep"
+          value={remPct !== null ? `${remPct}%` : '–'}
+          tint={remPct !== null && remPct >= 20 ? 'text-purple-400' : 'text-yellow-400'}
+        />
+        <MiniCard
+          title="Efficiency"
+          value={efficiency !== null ? `${efficiency}%` : '–'}
+          tint={efficiency !== null && efficiency >= 85 ? 'text-green-400' : 'text-yellow-400'}
+        />
+        <MiniCard
+          title="Consistency"
+          value={consistency !== null ? `${consistency}%` : '–'}
+          tint={consistency !== null && consistency >= 80 ? 'text-teal-400' : 'text-yellow-400'}
+        />
+      </div>
+
+      {/* 30-day trends */}
+      {last30.length > 2 && (
+        <Card>
+          <div className="flex flex-col gap-6">
+            <TrendChart
+              label="Sleep Score"
+              values={scoreValues}
+              color="#818cf8"
+              avg7={avg7Score}
+              avg30={avg30Score}
+              format={v => String(v)}
+            />
+            <TrendChart
+              label="Sleep Duration"
+              values={durationValues}
+              color="#60a5fa"
+              avg7={avg7Min}
+              avg30={avg30Min}
+              format={v => fmtMin(v)}
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* Secondary: SpO₂ / Resp / Awake */}
+      {(spo2 !== null || resp !== null || wake !== null) && (
+        <div className="flex flex-col gap-3">
+          <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also last night</span>
+          <div className="grid grid-cols-3 gap-2">
+            {spo2 !== null && <MiniCard title="SpO₂"      value={`${spo2}%`}    tint="text-teal-400"  />}
+            {resp !== null && <MiniCard title="Resp rate" value={`${resp}/min`}  tint="text-cyan-400"  />}
+            {wake !== null && <MiniCard title="Awake"     value={fmtMin(wake)}   tint="text-white/50"  />}
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
