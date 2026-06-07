@@ -11,7 +11,6 @@ async function getValidToken(supabase: Awaited<ReturnType<typeof createServerSup
   if (!row) return null
   if (new Date(row.expires_at) > new Date()) return row.access_token
 
-  // Refresh via Google OAuth
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -35,20 +34,10 @@ async function getValidToken(supabase: Awaited<ReturnType<typeof createServerSup
   return data.access_token
 }
 
-async function fitGet(path: string, token: string) {
-  const res = await fetch(`https://www.googleapis.com/fitness/v1${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  return res.ok ? res.json() : null
-}
-
 async function fitAggregate(token: string, dataTypeName: string, startMs: number, endMs: number) {
   const res = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       aggregateBy: [{ dataTypeName }],
       bucketByTime: { durationMillis: 86400000 },
@@ -63,6 +52,12 @@ function msToDate(ms: number) {
   return new Date(ms).toISOString().split('T')[0]
 }
 
+// Sleep segment type codes from Google Fit
+const SLEEP_AWAKE = 1
+const SLEEP_LIGHT = 4
+const SLEEP_DEEP  = 5
+const SLEEP_REM   = 6
+
 export async function POST(_req: NextRequest) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -74,44 +69,97 @@ export async function POST(_req: NextRequest) {
   const endMs = Date.now()
   const startMs = endMs - 7 * 24 * 60 * 60 * 1000
 
-  const [stepsData, heartData, sleepData] = await Promise.all([
-    fitAggregate(token, 'com.google.step_count.delta', startMs, endMs),
-    fitAggregate(token, 'com.google.heart_rate.bpm', startMs, endMs),
-    fitAggregate(token, 'com.google.sleep.segment', startMs, endMs),
+  const [stepsData, heartData, sleepData, spo2Data, respData, hrvData] = await Promise.all([
+    fitAggregate(token, 'com.google.step_count.delta',          startMs, endMs),
+    fitAggregate(token, 'com.google.heart_rate.bpm',            startMs, endMs),
+    fitAggregate(token, 'com.google.sleep.segment',             startMs, endMs),
+    fitAggregate(token, 'com.google.oxygen_saturation',         startMs, endMs),
+    fitAggregate(token, 'com.google.respiratory_rate',          startMs, endMs),
+    fitAggregate(token, 'com.google.heart_rate.variability.rmssd.measurement', startMs, endMs),
   ])
 
   const rows: Record<string, Record<string, unknown>> = {}
 
-  // Steps per day
+  // Steps
   for (const bucket of stepsData?.bucket ?? []) {
     const date = msToDate(parseInt(bucket.startTimeMillis))
     const val = bucket.dataset?.[0]?.point?.[0]?.value?.[0]?.intVal ?? null
-    if (val !== null) {
-      rows[date] = { ...rows[date], datum: date, stappen: val }
-    }
+    if (val !== null) rows[date] = { ...rows[date], datum: date, stappen: val }
   }
 
-  // Resting HR per day (average of day's readings)
+  // Resting HR (min of daily averages — approximation of resting)
   for (const bucket of heartData?.bucket ?? []) {
     const date = msToDate(parseInt(bucket.startTimeMillis))
-    const points = bucket.dataset?.[0]?.point ?? []
+    const points: any[] = bucket.dataset?.[0]?.point ?? []
     if (points.length > 0) {
-      const avg = Math.round(points.reduce((s: number, p: any) => s + (p.value?.[0]?.fpVal ?? 0), 0) / points.length)
-      rows[date] = { ...rows[date], datum: date, hartslag_rust: avg }
+      const vals = points.map((p: any) => p.value?.[0]?.fpVal ?? 0).filter(Boolean)
+      const resting = vals.length ? Math.round(Math.min(...vals)) : null
+      if (resting) rows[date] = { ...rows[date], datum: date, hartslag_rust: resting }
     }
   }
 
-  // Sleep per day (sum minutes of sleep segments)
-  const sleepByDate: Record<string, number> = {}
+  // Sleep phases from segments
   for (const bucket of sleepData?.bucket ?? []) {
+    const date = msToDate(parseInt(bucket.startTimeMillis))
+    let awake = 0, light = 0, deep = 0, rem = 0
+
     for (const point of bucket.dataset?.[0]?.point ?? []) {
-      const date = msToDate(parseInt(point.startTimeNanos) / 1_000_000)
-      const durationMs = (parseInt(point.endTimeNanos) - parseInt(point.startTimeNanos)) / 1_000_000
-      sleepByDate[date] = (sleepByDate[date] ?? 0) + Math.round(durationMs / 60000)
+      const startNs  = parseInt(point.startTimeNanos)
+      const endNs    = parseInt(point.endTimeNanos)
+      const durationMin = Math.round((endNs - startNs) / 1_000_000 / 60_000)
+      const type = point.value?.[0]?.intVal
+
+      if (type === SLEEP_AWAKE) awake += durationMin
+      else if (type === SLEEP_LIGHT) light += durationMin
+      else if (type === SLEEP_DEEP)  deep  += durationMin
+      else if (type === SLEEP_REM)   rem   += durationMin
+    }
+
+    const asleep = light + deep + rem
+    if (asleep === 0 && awake === 0) continue
+
+    const score = asleep > 0 ? Math.round((asleep / (asleep + awake)) * 100) : null
+
+    rows[date] = {
+      ...rows[date],
+      datum: date,
+      slaap_minuten:  asleep,
+      wakker_minuten: awake,
+      slaap_licht:    light,
+      slaap_diep:     deep,
+      slaap_rem:      rem,
+      slaap_score:    score,
     }
   }
-  for (const [date, minutes] of Object.entries(sleepByDate)) {
-    rows[date] = { ...rows[date], datum: date, slaap_minuten: minutes }
+
+  // SpO2
+  for (const bucket of spo2Data?.bucket ?? []) {
+    const date = msToDate(parseInt(bucket.startTimeMillis))
+    const points: any[] = bucket.dataset?.[0]?.point ?? []
+    if (points.length > 0) {
+      const avg = points.reduce((s: number, p: any) => s + (p.value?.[0]?.fpVal ?? 0), 0) / points.length
+      rows[date] = { ...rows[date], datum: date, spo2: Math.round(avg * 10) / 10 }
+    }
+  }
+
+  // Respiratory rate
+  for (const bucket of respData?.bucket ?? []) {
+    const date = msToDate(parseInt(bucket.startTimeMillis))
+    const points: any[] = bucket.dataset?.[0]?.point ?? []
+    if (points.length > 0) {
+      const avg = points.reduce((s: number, p: any) => s + (p.value?.[0]?.fpVal ?? 0), 0) / points.length
+      rows[date] = { ...rows[date], datum: date, ademhalingsfrequentie: Math.round(avg * 10) / 10 }
+    }
+  }
+
+  // HRV
+  for (const bucket of hrvData?.bucket ?? []) {
+    const date = msToDate(parseInt(bucket.startTimeMillis))
+    const points: any[] = bucket.dataset?.[0]?.point ?? []
+    if (points.length > 0) {
+      const avg = points.reduce((s: number, p: any) => s + (p.value?.[0]?.fpVal ?? 0), 0) / points.length
+      rows[date] = { ...rows[date], datum: date, hrv_rmssd: Math.round(avg * 10) / 10 }
+    }
   }
 
   const upsertRows = Object.values(rows).map(r => ({ ...r, user_id: user.id }))
@@ -119,6 +167,11 @@ export async function POST(_req: NextRequest) {
   if (upsertRows.length > 0) {
     await supabase.from('gezondheid').upsert(upsertRows, { onConflict: 'user_id,datum' })
   }
+
+  // Mark last sync time
+  await supabase.from('fitbit_tokens')
+    .update({ last_synced_at: new Date().toISOString() })
+    .eq('user_id', user.id)
 
   return NextResponse.json({ ok: true, synced: upsertRows.length })
 }

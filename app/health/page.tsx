@@ -16,7 +16,7 @@ async function fetchHealth() {
   if (!user) throw new Error('unauthenticated')
   const { data } = await supabase
     .from('gezondheid')
-    .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem')
+    .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,spo2,ademhalingsfrequentie')
     .eq('user_id', user.id).order('datum', { ascending: false }).limit(30)
   return (data ?? []) as GezondheidsRow[]
 }
@@ -30,17 +30,40 @@ const CATEGORIES = [
   { label: 'Activity', href: '/health/activity' },
 ]
 
-function FitbitConnectHandler() {
+function FitbitSyncHandler() {
   const searchParams = useSearchParams()
   const router = useRouter()
+
   useEffect(() => {
-    const param = searchParams.get('fitbit')
-    if (param === 'connected') {
+    // Handle redirect after OAuth connect
+    if (searchParams.get('fitbit') === 'connected') {
       fetch('/api/fitbit/sync', { method: 'POST' })
         .then(() => mutate('health-gezondheid'))
       router.replace('/health')
+      return
     }
+
+    // Auto-sync once per day when Health page opens
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase
+        .from('fitbit_tokens')
+        .select('last_synced_at')
+        .eq('user_id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (!data) return
+          const lastSync = data.last_synced_at ? new Date(data.last_synced_at) : null
+          const hoursSince = lastSync ? (Date.now() - lastSync.getTime()) / 3_600_000 : Infinity
+          if (hoursSince >= 20) {
+            fetch('/api/fitbit/sync', { method: 'POST' })
+              .then(() => mutate('health-gezondheid'))
+          }
+        })
+    })
   }, [searchParams, router])
+
   return null
 }
 
@@ -74,7 +97,7 @@ export default function HealthPage() {
     <PremiumScreen title="Health" subtitle="Recovery foundation" contentGap={18}>
 
       <Suspense>
-        <FitbitConnectHandler />
+        <FitbitSyncHandler />
       </Suspense>
 
       {/* Category strip */}

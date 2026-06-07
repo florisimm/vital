@@ -9,7 +9,7 @@ export async function healthFetcher(): Promise<GezondheidsRow[]> {
   if (!user) throw new Error('unauthenticated')
   const { data } = await supabase
     .from('gezondheid')
-    .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem')
+    .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,spo2,ademhalingsfrequentie')
     .eq('user_id', user.id).order('datum', { ascending: false }).limit(30)
   return (data ?? []) as GezondheidsRow[]
 }

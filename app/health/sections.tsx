@@ -17,6 +17,9 @@ export type GezondheidsRow = {
   slaap_diep: number | null
   slaap_licht: number | null
   slaap_rem: number | null
+  wakker_minuten: number | null
+  spo2: number | null
+  ademhalingsfrequentie: number | null
 }
 
 const SWR_OPTS = { revalidateOnFocus: false, dedupingInterval: 60_000 }
@@ -134,8 +137,11 @@ export function SleepSection() {
   const deep = latest?.slaap_diep ?? null
   const light = latest?.slaap_licht ?? null
   const rem = latest?.slaap_rem ?? null
-  const wake = totalMin && deep && light && rem ? Math.max(0, totalMin - deep - light - rem) : null
-  const total = totalMin ?? 1
+  const wake = latest?.wakker_minuten ?? null
+  const spo2 = latest?.spo2 ?? null
+  const resp = latest?.ademhalingsfrequentie ?? null
+  const bedTotal = (totalMin ?? 0) + (wake ?? 0)
+  const stagesTotal = bedTotal || 1
 
   const avgMin = sleepRows.length
     ? Math.round(sleepRows.reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / sleepRows.length)
@@ -143,31 +149,29 @@ export function SleepSection() {
 
   const trendHeights = sleepRows.map(r => r.slaap_minuten ?? 0)
   const maxH = trendHeights.length ? Math.max(...trendHeights, 1) : 1
-
-  const days = sleepRows.map(r => {
-    const d = new Date(r.datum)
-    return ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][d.getDay()]
-  }).reverse()
+  const days = sleepRows.map(r => ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(r.datum).getDay()]).reverse()
   const trendRev = [...trendHeights].reverse()
 
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text={totalMin ? `Last night: ${fmtMin(totalMin)} sleep, score ${score ?? '–'}.` : 'Connect Fitbit to see sleep data.'} />
+      <AiInsight text={totalMin ? `Last night: ${fmtMin(totalMin)} sleep, score ${score ?? '–'}.${spo2 ? ` SpO₂ ${spo2}%.` : ''}` : 'Connect Fitbit to see sleep data.'} />
       <HeroMetric value={score ? String(score) : '–'} label="Sleep Score" note={totalMin ? fmtMin(totalMin) : '–'} Icon={BedDouble} tint="text-indigo-400" />
       <Card>
         <div className="flex flex-col gap-4">
           <span className="text-[15px] font-semibold text-white/50">Sleep Stages</span>
-          <StageBar label="Deep"  duration={fmtMin(deep)}  percent={deep  ? deep  / total : 0} tint="text-indigo-400" />
-          <StageBar label="REM"   duration={fmtMin(rem)}   percent={rem   ? rem   / total : 0} tint="text-purple-400" />
-          <StageBar label="Light" duration={fmtMin(light)} percent={light ? light / total : 0} tint="text-blue-400"   />
-          <StageBar label="Awake" duration={fmtMin(wake)}  percent={wake  ? wake  / total : 0} tint="text-white/40"   />
+          <StageBar label="Deep"  duration={fmtMin(deep)}  percent={deep  ? deep  / stagesTotal : 0} tint="text-indigo-400" />
+          <StageBar label="REM"   duration={fmtMin(rem)}   percent={rem   ? rem   / stagesTotal : 0} tint="text-purple-400" />
+          <StageBar label="Light" duration={fmtMin(light)} percent={light ? light / stagesTotal : 0} tint="text-blue-400"   />
+          <StageBar label="Awake" duration={fmtMin(wake)}  percent={wake  ? wake  / stagesTotal : 0} tint="text-white/40"   />
         </div>
       </Card>
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Duration"  value={totalMin ? `${Math.floor(total / 60)}h` : '–'} unit={totalMin ? `${total % 60}m` : ''} detail="Last night" Icon={Timer} tint="text-blue-400" />
-        <SmallCard title="Deep"      value={deep ? `${deep}` : '–'} unit="min" detail="Deep sleep" Icon={Moon}     tint="text-indigo-400" />
-        <SmallCard title="REM"       value={rem ? `${rem}` : '–'} unit="min" detail="REM sleep"  Icon={Activity} tint="text-purple-400" />
-        <SmallCard title="7-day avg" value={avgMin ? `${Math.floor(avgMin / 60)}h` : '–'} unit={avgMin ? `${avgMin % 60}m` : ''} detail="Average" Icon={Zap} tint="text-teal-400" />
+        <SmallCard title="Duration"    value={totalMin ? `${Math.floor(totalMin / 60)}h` : '–'} unit={totalMin ? `${totalMin % 60}m` : ''} detail="Asleep" Icon={Timer} tint="text-blue-400" />
+        <SmallCard title="Awake"       value={wake ? `${wake}` : '–'} unit={wake ? 'min' : ''} detail="During night" Icon={Moon} tint="text-orange-400" />
+        <SmallCard title="SpO₂"        value={spo2 ? `${spo2}` : '–'} unit={spo2 ? '%' : ''} detail="Oxygen saturation" Icon={Activity} tint="text-teal-400" />
+        <SmallCard title="Breathing"   value={resp ? `${resp}` : '–'} unit={resp ? '/min' : ''} detail="Respiratory rate" Icon={Zap} tint="text-cyan-400" />
+        <SmallCard title="Deep sleep"  value={deep ? `${deep}` : '–'} unit={deep ? 'min' : ''} detail={deep && totalMin ? `${Math.round(deep / totalMin * 100)}% of sleep` : '–'} Icon={BedDouble} tint="text-indigo-400" />
+        <SmallCard title="7-day avg"   value={avgMin ? `${Math.floor(avgMin / 60)}h` : '–'} unit={avgMin ? `${avgMin % 60}m` : ''} detail="Average sleep" Icon={Zap} tint="text-teal-400" />
       </div>
       {trendRev.length > 1 && (
         <Card>
