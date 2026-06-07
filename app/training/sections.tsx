@@ -1073,46 +1073,117 @@ function MuscleDistributionCard({ distribution }: { distribution: { label: strin
   )
 }
 
-function LastStrengthWorkoutCard({ workout }: { workout: HevyWorkout }) {
-  const exList = (workout.exercises ?? []).slice(0, 5)
+function WorkoutListItem({ w, isLast }: { w: HevyWorkout; isLast: boolean }) {
+  const [open, setOpen] = useState(false)
+  const exList = w.exercises ?? []
   return (
-    <Card>
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Workout</span>
-        <span className="text-[17px] font-semibold text-white leading-snug">{workout.title}</span>
-        <span className="text-[12px] text-white/40">{formatDate(workout.start_time)}</span>
-        <div className="flex gap-5 mt-1">
-          {(workout.duration ?? 0) > 0 && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[20px] font-bold text-white leading-none">{formatDuration(workout.duration!)}</span>
-              <span className="text-[11px] text-white/40">Duration</span>
-            </div>
-          )}
-          {(workout.volume_kg ?? 0) > 0 && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[20px] font-bold text-orange-400 leading-none">{Math.round(workout.volume_kg!).toLocaleString('en-US')} kg</span>
-              <span className="text-[11px] text-white/40">Volume</span>
-            </div>
-          )}
-          {(workout.sets ?? 0) > 0 && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[20px] font-bold text-white leading-none">{workout.sets}</span>
-              <span className="text-[11px] text-white/40">Sets</span>
-            </div>
+    <div style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+      <button className="w-full text-left py-4 flex flex-col gap-2" onClick={() => exList.length > 0 && setOpen(o => !o)}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span className="text-[16px] font-semibold text-white leading-tight truncate">{w.title}</span>
+            <span className="text-[12px] text-white/40">{formatDate(w.start_time)}</span>
+          </div>
+          {exList.length > 0 && (
+            <span className="text-white/30 text-[13px] shrink-0 mt-0.5">{open ? '▲' : '▼'}</span>
           )}
         </div>
-        {exList.length > 0 && (
-          <div className="pt-2 border-t border-white/[0.06] flex flex-wrap gap-1.5">
-            {exList.map(ex => (
-              <span key={ex.title} className="text-[12px] font-medium px-2 py-0.5 rounded-full"
-                style={{ color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.07)' }}>
-                {ex.title}
-              </span>
+        <div className="flex gap-4">
+          {(w.duration ?? 0) > 0 && <span className="text-[13px] text-white/60">{formatDuration(w.duration!)}</span>}
+          {(w.volume_kg ?? 0) > 0 && <span className="text-[13px] font-semibold text-orange-400">{Math.round(w.volume_kg!).toLocaleString('en-US')} kg</span>}
+          {(w.sets ?? 0) > 0 && <span className="text-[13px] text-white/60">{w.sets} sets</span>}
+        </div>
+      </button>
+      {open && exList.length > 0 && (
+        <div className="pb-4 flex flex-col gap-3">
+          {exList.map(ex => (
+            <div key={ex.title} className="flex flex-col gap-1">
+              <span className="text-[13px] font-semibold text-white/80">{ex.title}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {ex.sets.map((s, i) => (
+                  <span key={i} className="text-[12px] px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}>
+                    {s.weight_kg > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkout; allWorkouts: HevyWorkout[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const exList = (workout.exercises ?? []).slice(0, 5)
+
+  return (
+    <>
+      {showAll && (
+        <div className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
+            <button onClick={() => setShowAll(false)}
+              className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+              style={{ background: 'rgba(255,255,255,0.10)' }}>
+              Terug
+            </button>
+            <span className="text-[17px] font-semibold text-white">Workouts</span>
+            <div className="w-[70px]" />
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+            {allWorkouts.map((w, i) => (
+              <WorkoutListItem key={w.id} w={w} isLast={i === allWorkouts.length - 1} />
             ))}
           </div>
-        )}
-      </div>
-    </Card>
+        </div>
+      )}
+
+      <button className="w-full text-left" onClick={() => setShowAll(true)}>
+        <Card>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Workout</span>
+              <span className="text-[12px] text-white/30">Tap to see all →</span>
+            </div>
+            <span className="text-[17px] font-semibold text-white leading-snug">{workout.title}</span>
+            <span className="text-[12px] text-white/40">{formatDate(workout.start_time)}</span>
+            <div className="flex gap-5 mt-1">
+              {(workout.duration ?? 0) > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[20px] font-bold text-white leading-none">{formatDuration(workout.duration!)}</span>
+                  <span className="text-[11px] text-white/40">Duration</span>
+                </div>
+              )}
+              {(workout.volume_kg ?? 0) > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[20px] font-bold text-orange-400 leading-none">{Math.round(workout.volume_kg!).toLocaleString('en-US')} kg</span>
+                  <span className="text-[11px] text-white/40">Volume</span>
+                </div>
+              )}
+              {(workout.sets ?? 0) > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[20px] font-bold text-white leading-none">{workout.sets}</span>
+                  <span className="text-[11px] text-white/40">Sets</span>
+                </div>
+              )}
+            </div>
+            {exList.length > 0 && (
+              <div className="pt-2 border-t border-white/[0.06] flex flex-wrap gap-1.5">
+                {exList.map(ex => (
+                  <span key={ex.title} className="text-[12px] font-medium px-2 py-0.5 rounded-full"
+                    style={{ color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.07)' }}>
+                    {ex.title}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      </button>
+    </>
   )
 }
 
@@ -1977,7 +2048,7 @@ export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
     <div className="flex flex-col gap-6">
       <AiInsight text={buildStrengthInsight(hevy)} />
 
-      {lastWorkout && <LastStrengthWorkoutCard workout={lastWorkout} />}
+      {lastWorkout && <LastStrengthWorkoutCard workout={lastWorkout} allWorkouts={hevy} />}
 
       <StrengthProgressCard progress={progress} />
 
