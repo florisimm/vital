@@ -37,7 +37,7 @@ export async function GET() {
             fontSize: '28px', fontWeight: 600, letterSpacing: '0.18em',
             color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase',
           }}>
-            Vital
+            Kern
           </span>
           <span style={{
             fontSize: '72px', fontWeight: 800, lineHeight: 1.05,

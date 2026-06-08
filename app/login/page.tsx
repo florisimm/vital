@@ -69,7 +69,7 @@ export default function LoginPage() {
           >
             Welcome back
           </p>
-          <h1 className="text-[52px] font-bold leading-none text-white tracking-tight">Vital</h1>
+          <h1 className="text-[52px] font-bold leading-none text-white tracking-tight">Kern</h1>
           <p className="text-[17px] text-white/40 mt-2 font-medium">Your AI fitness companion</p>
         </div>
       </div>
@@ -135,7 +135,7 @@ export default function LoginPage() {
         </button>
 
         <p className="text-[13px] text-white/25 text-center mt-1">
-          Vital — AI Fitness & Health Coaching
+          Kern — AI Fitness & Health Coaching
         </p>
       </div>
     </div>

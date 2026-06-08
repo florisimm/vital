@@ -130,7 +130,7 @@ export const ZONE: Record<TrainingType, string> = {
 }
 
 export const TYPE_LABEL: Record<TrainingType, string> = {
-  herstel: 'Herstel', zone2: 'Zone 2', tempo: 'Tempo', interval: 'Interval', lang: 'Lange duur',
+  herstel: 'Recovery', zone2: 'Zone 2', tempo: 'Tempo', interval: 'Interval', lang: 'Long run',
 }
 
 export const TYPE_COLOR: Record<TrainingType, string> = {
@@ -161,7 +161,7 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
   if (wkly > 0 && wkly < 20 && trainingType !== 'herstel') durationMin = Math.round(durationMin * 0.9)
 
   const zone = ZONE[trainingType]
-  const levelLabel = userLevel === 'beginner' ? 'Beginner' : userLevel === 'intermediate' ? 'Gemiddeld' : 'Gevorderd'
+  const levelLabel = userLevel.charAt(0).toUpperCase() + userLevel.slice(1)
 
   let advice: Advice
 

@@ -46,39 +46,55 @@ function orsProfile(sport: SportType, mainRoad: boolean, mtb: boolean): string {
   return 'foot-walking'
 }
 
+function buildOrsOptions(sport: SportType, avoidHills: boolean) {
+  return avoidHills && sport === 'cycling'
+    ? { profile_params: { weightings: { steepness_difficulty: { value: 3 } } } }
+    : {}
+}
+
 async function orsRoundTrip(
   lat: number, lon: number, targetKm: number, sport: SportType, seed: number,
   avoidHills = false, mainRoad = false, mtb = false
 ): Promise<{ coords: [number, number][]; actualKm: number }> {
   const profile = orsProfile(sport, mainRoad, mtb)
-  const avoidFeatures = avoidHills ? ['hills'] : []
-  const res = await fetch('/api/route-plan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      profile,
-      body: {
-        coordinates: [[lon, lat]],
-        options: {
-          ...(avoidFeatures.length ? { avoid_features: avoidFeatures } : {}),
-          round_trip: { length: Math.round(targetKm * 1000), points: 5, seed },
+  const hillOptions = buildOrsOptions(sport, avoidHills)
+
+  async function fetchRoute(km: number) {
+    const res = await fetch('/api/route-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile,
+        body: {
+          coordinates: [[lon, lat]],
+          options: { ...hillOptions, round_trip: { length: Math.round(km * 1000), points: 3, seed } },
         },
-      },
-    }),
-  })
-  const json = await res.json()
-  if (!res.ok) throw new Error(json.error ?? `ORS ${res.status}`)
-  const feature = json.features?.[0]
-  if (!feature) throw new Error('No route')
-  return {
-    coords: (feature.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number]),
-    actualKm: Math.round(feature.properties.summary.distance / 100) / 10,
+      }),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error ?? `ORS ${res.status}`)
+    const feature = json.features?.[0]
+    if (!feature) throw new Error('No route')
+    const actualKm = Math.round(feature.properties.summary.distance / 100) / 10
+    const coords = (feature.geometry.coordinates as [number, number][]).map(([ln, lt]) => [lt, ln] as [number, number])
+    return { coords, actualKm }
   }
+
+  let best = await fetchRoute(targetKm)
+  let adjustedKm = targetKm
+  for (let i = 1; i < 5; i++) {
+    if (Math.abs(best.actualKm - targetKm) / targetKm <= 0.10) break
+    // Keep same seed so route direction stays consistent — only scale the distance
+    adjustedKm = adjustedKm * (targetKm / best.actualKm)
+    const attempt = await fetchRoute(adjustedKm)
+    if (Math.abs(attempt.actualKm - targetKm) < Math.abs(best.actualKm - targetKm)) best = attempt
+  }
+  return best
 }
 
 function buildGpx(coords: [number, number][], name: string): string {
   const pts = coords.map(([lt, ln]) => `    <trkpt lat="${lt.toFixed(6)}" lon="${ln.toFixed(6)}"></trkpt>`).join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Vital">\n  <trk><name>${name}</name><trkseg>\n${pts}\n  </trkseg></trk>\n</gpx>`
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Kern">\n  <trk><name>${name}</name><trkseg>\n${pts}\n  </trkseg></trk>\n</gpx>`
 }
 
 async function orsDirectRoute(
@@ -86,7 +102,7 @@ async function orsDirectRoute(
   sport: SportType, avoidHills = false, mainRoad = false, mtb = false
 ): Promise<{ coords: [number, number][]; actualKm: number }> {
   const profile = orsProfile(sport, mainRoad, mtb)
-  const avoidFeatures = avoidHills ? ['hills'] : []
+  const hillOptions = buildOrsOptions(sport, avoidHills)
   const res = await fetch('/api/route-plan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -94,7 +110,7 @@ async function orsDirectRoute(
       profile,
       body: {
         coordinates: [[startLon, startLat], [endLon, endLat]],
-        ...(avoidFeatures.length ? { options: { avoid_features: avoidFeatures } } : {}),
+        ...(Object.keys(hillOptions).length ? { options: hillOptions } : {}),
       },
     }),
   })
@@ -153,7 +169,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     try {
       const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
       setRouteCoords(result.coords); setActualKm(result.actualKm)
-    } catch (e: any) { setError(e?.message ? `Route fout: ${e.message}` : 'Kon geen route laden') }
+    } catch (e: any) { setError(e?.message ? `Route error: ${e.message}` : 'Could not load route') }
     finally { setLoading(false) }
   }
 
@@ -163,7 +179,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     setLocMode('gps'); setError(null)
     navigator.geolocation.getCurrentPosition(
       pos => generateLoopRef.current!(pos.coords.latitude, pos.coords.longitude),
-      () => { setLocMode('manual'); setError('Locatie toegang geweigerd') }
+      () => { setLocMode('manual'); setError('Location access denied') }
     )
   }
 
@@ -173,7 +189,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     try {
       const coord = await nominatim(fromQuery)
       await generateLoopRef.current!(coord[0], coord[1])
-    } catch { setError('Vertrekpunt niet gevonden') }
+    } catch { setError('Start location not found') }
     finally { setLoading(false) }
   }
 
@@ -212,7 +228,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
               onClick={mode === 'gps' ? triggerGps : () => setLocMode('manual')}
               className="flex-1 h-[36px] rounded-full text-[14px] font-semibold"
               style={locMode === mode ? { background: 'rgba(255,255,255,0.22)', color: 'white' } : { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}>
-              {mode === 'gps' ? 'Huidige locatie' : 'Locatie invoeren'}
+              {mode === 'gps' ? 'Current location' : 'Enter location'}
             </button>
           ))}
         </div>
@@ -220,30 +236,30 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
           <div className="flex gap-2">
             <input value={fromQuery} onChange={e => setFromQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && geocodeFrom()}
-              placeholder="Stad of adres…"
+              placeholder="City or address…"
               className="flex-1 h-[40px] px-3 rounded-[12px] text-white placeholder:text-white/30 outline-none text-[15px] border border-white/[0.09]"
               style={{ background: 'rgba(255,255,255,0.08)' }} />
-            <button onClick={geocodeFrom} className="h-[40px] px-4 rounded-[12px] bg-white text-black text-[14px] font-semibold">Zoek</button>
+            <button onClick={geocodeFrom} className="h-[40px] px-4 rounded-[12px] bg-white text-black text-[14px] font-semibold">Search</button>
           </div>
         )}
 
         {/* Distance */}
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-white/50 shrink-0">Afstand</span>
+          <span className="text-[13px] text-white/50 shrink-0">Distance</span>
           <input type="number" value={distanceInput} onChange={e => setDistanceInput(e.target.value)}
             min={1} max={300} step={0.5}
             className="w-[64px] h-[32px] px-2 rounded-[10px] text-white text-[15px] font-semibold text-center outline-none border border-white/[0.09]"
             style={{ background: 'rgba(255,255,255,0.08)' }} />
           <span className="text-[13px] text-white/50">km</span>
-          <span className="text-[12px] text-white/25 ml-1">(aanbevolen: {advice.targetKm} km)</span>
+          <span className="text-[12px] text-white/25 ml-1">(recommended: {advice.targetKm} km)</span>
         </div>
 
         {/* Route option toggles */}
         <div className="flex flex-wrap gap-2">
-          <RouteToggle active={heuvels} onToggle={() => setHeuvels(v => !v)} label="⛰️ Heuvels" />
+          <RouteToggle active={heuvels} onToggle={() => setHeuvels(v => !v)} label="⛰️ Hills" />
           {sport === 'cycling' && (
             <>
-              <RouteToggle active={groteWeg} onToggle={() => { setGroteWeg(v => !v); setMtb(false) }} label="🛣️ Grote weg" />
+              <RouteToggle active={groteWeg} onToggle={() => { setGroteWeg(v => !v); setMtb(false) }} label="🛣️ Main road" />
               <RouteToggle active={mtb} onToggle={() => { setMtb(v => !v); setGroteWeg(false) }} label="🏔️ MTB" />
             </>
           )}
@@ -266,9 +282,9 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
       {/* Actual route distance */}
       {routeCoords && actualKm !== null && (
         <div className="px-4 pb-2 flex items-center gap-2">
-          <span className="text-[13px] text-white/40">Route afstand:</span>
+          <span className="text-[13px] text-white/40">Route distance:</span>
           <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
-          <span className="text-[13px] text-white/30">· doel {parsedKm()} km</span>
+          <span className="text-[13px] text-white/30">· target {parsedKm()} km</span>
         </div>
       )}
 
@@ -276,7 +292,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
       {routeCoords && (
         <div className="px-4 pb-4 flex gap-2">
           <button onClick={retry} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-            <RefreshCw size={14} />Nieuwe route
+            <RefreshCw size={14} />New route
           </button>
           <button onClick={openGoogleMaps} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold flex-1 justify-center" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
             <Map size={14} />Google Maps
@@ -311,7 +327,7 @@ function SessionContent() {
   const [result, setResult] = useState<ComputeAdviceResult | null>(null)
 
   const timeLabel = time
-    ? new Date(time).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    ? new Date(time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : null
 
   useEffect(() => {
@@ -354,7 +370,7 @@ function SessionContent() {
           {result && <SportIcon sport={result.advice.sport} />}
           <div>
             <h1 className="text-[34px] font-bold text-white leading-tight">{title}</h1>
-            {timeLabel && <p className="text-[15px] text-white/50">Vandaag om {timeLabel}</p>}
+            {timeLabel && <p className="text-[15px] text-white/50">Today at {timeLabel}</p>}
           </div>
         </div>
       </div>
@@ -368,13 +384,13 @@ function SessionContent() {
       ) : sport === 'strength' ? (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="text-[17px] font-semibold text-white">Kracht training</p>
-            <p className="text-white/50 text-[15px] leading-relaxed">Koppel Hevy voor automatisch advies op basis van je trainingshistorie.</p>
+            <p className="text-[17px] font-semibold text-white">Strength training</p>
+            <p className="text-white/50 text-[15px] leading-relaxed">Connect Hevy for automatic advice based on your training history.</p>
           </div>
         </Card>
       ) : sport === 'other' ? (
         <Card>
-          <p className="text-white/50 text-[15px]">Geen specifiek advies beschikbaar voor dit type training.</p>
+          <p className="text-white/50 text-[15px]">No specific advice available for this type of training.</p>
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
@@ -386,9 +402,9 @@ function SessionContent() {
             >
               <span className="text-[20px]">📊</span>
               <div>
-                <p className="text-[14px] font-semibold text-orange-400">Generiek advies</p>
+                <p className="text-[14px] font-semibold text-orange-400">Generic advice</p>
                 <p className="text-[12px] text-white/50 mt-0.5">
-                  Koppel Strava en log minstens 3 activiteiten voor gepersonaliseerd trainingsadvies.
+                  Connect Strava and log at least 3 activities for personalized training advice.
                 </p>
               </div>
             </div>
@@ -397,24 +413,24 @@ function SessionContent() {
           {/* Row 1: training type + duration */}
           <div className="grid grid-cols-2 gap-3">
             <MetricCard label="Type" value={TYPE_LABEL[result.advice.trainingType]} unit="" color={TYPE_COLOR[result.advice.trainingType]} />
-            <MetricCard label="Duur" value={String(result.advice.durationMin)} unit="min" />
+            <MetricCard label="Duration" value={String(result.advice.durationMin)} unit="min" />
           </div>
 
           {/* Row 2: distance + pace/speed */}
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Afstand" value={String(result.advice.targetKm)} unit="km" />
+            <MetricCard label="Distance" value={String(result.advice.targetKm)} unit="km" />
             {result.advice.targetPace !== null && (
-              <MetricCard label="Tempo" value={result.advice.targetPace} unit="/km" />
+              <MetricCard label="Pace" value={result.advice.targetPace} unit="/km" />
             )}
             {result.advice.targetSpeed !== null && (
-              <MetricCard label="Snelheid" value={String(result.advice.targetSpeed)} unit="km/h" />
+              <MetricCard label="Speed" value={String(result.advice.targetSpeed)} unit="km/h" />
             )}
           </div>
 
           {/* Zone */}
           <Card>
             <div className="flex items-center justify-between">
-              <span className="text-[17px] font-semibold text-white">Hart slag zone</span>
+              <span className="text-[17px] font-semibold text-white">Heart rate zone</span>
               <span className="text-[17px] font-semibold text-teal-400">{result.advice.zone}</span>
             </div>
           </Card>

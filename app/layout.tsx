@@ -8,19 +8,19 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vital.app'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: 'Vital',
+  title: 'Kern',
   description: 'AI fitness & health coaching. Track training, nutrition and recovery — all in one place.',
   openGraph: {
-    title: 'Vital — AI Fitness & Health Coaching',
+    title: 'Kern — AI Fitness & Health Coaching',
     description: 'Track training, nutrition and recovery — all in one place.',
     url: siteUrl,
-    siteName: 'Vital',
-    images: [{ url: '/og', width: 1200, height: 630, alt: 'Vital' }],
+    siteName: 'Kern',
+    images: [{ url: '/og', width: 1200, height: 630, alt: 'Kern' }],
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Vital — AI Fitness & Health Coaching',
+    title: 'Kern — AI Fitness & Health Coaching',
     description: 'Track training, nutrition and recovery — all in one place.',
     images: ['/og'],
   },

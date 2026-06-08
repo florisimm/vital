@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     const timeout = setTimeout(() => controller.abort(), OFN_TIMEOUT_MS)
     const res = await fetch(`${OFN_BASE}/${encodeURIComponent(barcode)}.json`, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Vital-App/1.0 (health coaching app)' },
+      headers: { 'User-Agent': 'Kern-App/1.0 (health coaching app)' },
     })
     clearTimeout(timeout)
     ofnData = await res.json() as Record<string, unknown>

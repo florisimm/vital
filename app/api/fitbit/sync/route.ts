@@ -102,12 +102,16 @@ export async function POST(_req: NextRequest) {
   for (const bucket of sleepData?.bucket ?? []) {
     const date = msToDate(parseInt(bucket.startTimeMillis))
     let awake = 0, light = 0, deep = 0, rem = 0
+    let firstStartNs = Infinity, lastEndNs = 0
 
     for (const point of bucket.dataset?.[0]?.point ?? []) {
       const startNs  = parseInt(point.startTimeNanos)
       const endNs    = parseInt(point.endTimeNanos)
       const durationMin = Math.round((endNs - startNs) / 1_000_000 / 60_000)
       const type = point.value?.[0]?.intVal
+
+      if (startNs < firstStartNs) firstStartNs = startNs
+      if (endNs > lastEndNs) lastEndNs = endNs
 
       if (type === SLEEP_AWAKE) awake += durationMin
       else if (type === SLEEP_LIGHT) light += durationMin
@@ -120,6 +124,14 @@ export async function POST(_req: NextRequest) {
 
     const score = asleep > 0 ? Math.round((asleep / (asleep + awake)) * 100) : null
 
+    // Bedtime + wake time as minutes since midnight UTC
+    const slaap_start_min = firstStartNs < Infinity
+      ? (() => { const d = new Date(firstStartNs / 1_000_000); return d.getUTCHours() * 60 + d.getUTCMinutes() })()
+      : null
+    const slaap_einde_min = lastEndNs > 0
+      ? (() => { const d = new Date(lastEndNs / 1_000_000); return d.getUTCHours() * 60 + d.getUTCMinutes() })()
+      : null
+
     rows[date] = {
       ...rows[date],
       datum: date,
@@ -129,6 +141,8 @@ export async function POST(_req: NextRequest) {
       slaap_diep:     deep,
       slaap_rem:      rem,
       slaap_score:    score,
+      slaap_start_min,
+      slaap_einde_min,
     }
   }
 

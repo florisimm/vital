@@ -511,18 +511,23 @@ function DailyBriefingCard({ text }: { text: string }) {
 
 const STRAVA_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
 
-function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, proteinLeft }: {
+function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, proteinLeft, workoutTimePassed = false, isTomorrow = false }: {
   todayWorkout: { title: string; start_datetime: string | null } | null
   todayWorkoutDone: boolean
   tomorrowWorkout: { title: string } | null
   proteinLeft: number
+  workoutTimePassed?: boolean
+  isTomorrow?: boolean
 }) {
   const workoutLabel = todayWorkout
     ? (() => {
         const t = todayWorkout.start_datetime ? new Date(todayWorkout.start_datetime) : null
         const time = t ? t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null
         const base = time ? `${todayWorkout.title} at ${time}` : todayWorkout.title
-        return todayWorkoutDone ? `${base} ✓` : base
+        if (todayWorkoutDone) return `${base} ✓`
+        if (workoutTimePassed) return `Still to do — ${todayWorkout.title}`
+        if (isTomorrow) return `Tomorrow: ${base}`
+        return base
       })()
     : 'No workout planned today'
 
@@ -532,11 +537,12 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, prote
 
   const showTomorrow = tomorrowWorkout && (todayWorkoutDone || !todayWorkout)
 
+  const isOverdue = workoutTimePassed && !todayWorkoutDone && !!todayWorkout
   const actions = [
-    { label: workoutLabel, done: todayWorkoutDone && !!todayWorkout, isWorkout: true },
-    ...(showTomorrow ? [{ label: `Tomorrow: ${tomorrowWorkout!.title}`, done: false, isWorkout: false }] : []),
-    { label: proteinLeft > 10 ? `Eat ${Math.round(proteinLeft)}g protein to support recovery` : 'Protein goal reached ✓', done: false, isWorkout: false },
-    { label: sleepAction, done: false, isWorkout: false },
+    { label: workoutLabel, done: todayWorkoutDone && !!todayWorkout, overdue: isOverdue, isWorkout: true },
+    ...(showTomorrow ? [{ label: `Tomorrow: ${tomorrowWorkout!.title}`, done: false, overdue: false, isWorkout: false }] : []),
+    { label: proteinLeft > 10 ? `Eat ${Math.round(proteinLeft)}g protein to support recovery` : 'Protein goal reached ✓', done: false, overdue: false, isWorkout: false },
+    { label: sleepAction, done: false, overdue: false, isWorkout: false },
   ]
 
   const showTrainingLink = todayWorkout !== null && !todayWorkoutDone &&
@@ -556,7 +562,7 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, prote
         {actions.map((a, i) => (
           <div key={i} className="flex flex-col gap-1">
             <div className="flex items-center gap-3.5">
-              <div className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.done ? 'bg-teal-400' : 'bg-white'}`} />
+              <div className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.done ? 'bg-teal-400' : a.overdue ? 'bg-orange-400' : 'bg-white'}`} />
               <span className={`text-[20px] font-semibold ${a.done ? 'text-white/50' : 'text-white'}`}>{a.label}</span>
             </div>
             {i === 0 && showTrainingLink && (
@@ -585,8 +591,9 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, prote
 
 export default function TodayPage() {
   const { data } = useSWR('today', fetchTodayData, {
-    revalidateOnFocus: false,
-    dedupingInterval: 30_000,
+    revalidateOnFocus: true,
+    revalidateOnMount: true,
+    dedupingInterval: 60_000,
   })
 
   const { data: gezondheid } = useSWR<any[]>('health-gezondheid', null)
@@ -601,22 +608,49 @@ export default function TodayPage() {
   const todayEvents = calendarEvents.filter((e: any) => { const d = parseDate(e); return d >= todayStart && d < tomorrowStart })
   const tomorrowEvents = calendarEvents.filter((e: any) => parseDate(e) >= tomorrowStart)
 
-  const todayWorkout = todayEvents[0] ?? null
   const tomorrowWorkout = tomorrowEvents[0] ?? null
 
-  // Check if today's workout is done (same logic as calendarInsight)
   const strengthKw = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower']
   const cardioKw = ['run', 'loop', 'fietsen', 'zwemmen', 'swim', 'ride', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval']
-  const todayWorkoutDone = todayWorkout ? (() => {
-    const t = todayWorkout.title.toLowerCase()
+
+  const CARDIO_SPORT_TYPES = ['run', 'ride', 'swim', 'walk', 'hike', 'virtual_run', 'virtual_ride', 'rowing', 'kayaking', 'crossfit', 'elliptical']
+
+  function isEventDone(title: string): boolean {
+    const t = title.toLowerCase()
     const isStrength = strengthKw.some(kw => t.includes(kw))
     const isCardio = cardioKw.some(kw => t.includes(kw))
     const hevy = data?.todayHevy ?? []
     const acts = data?.todayActivities ?? []
+    // Only count Strava activities with actual cardio sport types — WeightTraining/strength
+    // activities must not falsely mark a run/ride/swim event as done
+    const cardioActs = acts.filter((a: any) =>
+      CARDIO_SPORT_TYPES.some(ct => (a.sport_type ?? '').toLowerCase().includes(ct))
+    )
     if (isStrength && !isCardio) return hevy.length > 0
-    if (isCardio && !isStrength) return acts.length > 0
-    return hevy.length > 0 || acts.length > 0
-  })() : false
+    if (isCardio && !isStrength) return cardioActs.length > 0
+    return hevy.length > 0 || cardioActs.length > 0
+  }
+
+  // Find the first undone event today; check if all events are done
+  const firstUndone = todayEvents.find((e: any) => !isEventDone(e.title)) ?? null
+  const allTodayDone = todayEvents.length > 0 && firstUndone === null
+
+  // No calendar events at all → fall back to actual Hevy/Strava data
+  const actualToday = todayEvents.length === 0
+    ? ((data?.todayHevy ?? []).length > 0
+        ? { title: (data!.todayHevy as any[])[0].title as string, start_datetime: (data!.todayHevy as any[])[0].start_time as string }
+        : (data?.todayActivities ?? []).length > 0
+          ? { title: (data!.todayActivities as any[])[0].name as string, start_datetime: (data!.todayActivities as any[])[0].start_date as string }
+          : null)
+    : null
+
+  const workoutTimePassed = firstUndone?.start_datetime ? new Date(firstUndone.start_datetime) < now : false
+
+  // Display logic: first undone → (if all done) tomorrow → actual fallback
+  const displayWorkout = firstUndone ?? (allTodayDone ? tomorrowWorkout : actualToday)
+  const displayWorkoutDone = !firstUndone && !allTodayDone && actualToday !== null
+  const displayTomorrow = allTodayDone ? null : tomorrowWorkout
+  const displayIsTomorrow = allTodayDone && !!tomorrowWorkout
 
   const totalProtein = (data?.foodLog ?? []).reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
   const targetProtein = Number(data?.settings?.macro_protein ?? 180)
@@ -629,10 +663,12 @@ export default function TodayPage() {
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
 
       <HeroActionCard
-        todayWorkout={todayWorkout}
-        todayWorkoutDone={todayWorkoutDone}
-        tomorrowWorkout={tomorrowWorkout}
+        todayWorkout={displayWorkout}
+        todayWorkoutDone={displayWorkoutDone}
+        tomorrowWorkout={displayTomorrow}
         proteinLeft={proteinLeft}
+        workoutTimePassed={workoutTimePassed}
+        isTomorrow={displayIsTomorrow}
       />
 
       {briefing && <DailyBriefingCard text={briefing} />}
