@@ -76,6 +76,11 @@ function dateStr(d: { year: number; month: number; day: number }): string {
 function avg(arr: number[]): number {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
+function nextDay(d: string): string {
+  const dt = new Date(d + 'T12:00:00Z')
+  dt.setUTCDate(dt.getUTCDate() + 1)
+  return dt.toISOString().split('T')[0]
+}
 function median(arr: number[]): number {
   const s = [...arr].sort((a, b) => a - b)
   const m = Math.floor(s.length / 2)
@@ -167,8 +172,9 @@ export async function POST(_req: NextRequest) {
   }
 
   // ── HRV (intraday RMSSD → nightly median, sleep hours only) ──
-  // Filter to 22:00–10:00 local time so all-day wearers don't have daytime
-  // activity samples pollute the nightly readout. Night-only wearers are unaffected.
+  // Skip 10:00–22:00 (daytime) so all-day wearers don't pollute the nightly value.
+  // Evening samples (22:00–23:59) are attributed to the NEXT day when that day
+  // has sleep data — keeps all metrics from one night in one row.
   const hrvAgg: Record<string, number[]> = {}
   for (const p of hrvPoints) {
     const h = p.heartRateVariability
@@ -176,14 +182,15 @@ export async function POST(_req: NextRequest) {
     if (typeof v !== 'number') continue
     const physTime = h.sampleTime?.physicalTime
     const utcOff   = h.sampleTime?.utcOffset
-    if (physTime) {
-      const min = localMinutes(physTime, utcOff)
-      if (min >= 10 * 60 && min < 22 * 60) continue  // skip 10:00–22:00
-    }
-    const date = h.sampleTime?.civilTime?.date
+    const min      = physTime ? localMinutes(physTime, utcOff) : -1
+    if (min >= 10 * 60 && min < 22 * 60) continue  // skip 10:00–22:00
+    const rawDate = h.sampleTime?.civilTime?.date
       ? dateStr(h.sampleTime.civilTime.date)
       : physTime ? localDate(physTime, utcOff) : null
-    if (!date) continue
+    if (!rawDate) continue
+    // Evening samples belong to the next day's sleep session
+    const date = (min >= 22 * 60 && rows[nextDay(rawDate)]?.slaap_minuten)
+      ? nextDay(rawDate) : rawDate
     ;(hrvAgg[date] ??= []).push(v)
   }
   for (const [date, vals] of Object.entries(hrvAgg)) {
@@ -196,7 +203,15 @@ export async function POST(_req: NextRequest) {
     const o = p.oxygenSaturation
     const v = o?.percentage
     if (typeof v !== 'number' || v < 70 || v > 100) continue
-    const date = o.sampleTime?.civilTime?.date ? dateStr(o.sampleTime.civilTime.date) : localDate(o.sampleTime.physicalTime, o.sampleTime.utcOffset)
+    const physTime2 = o.sampleTime?.physicalTime
+    const utcOff2   = o.sampleTime?.utcOffset
+    const min2      = physTime2 ? localMinutes(physTime2, utcOff2) : -1
+    const rawDate = o.sampleTime?.civilTime?.date
+      ? dateStr(o.sampleTime.civilTime.date)
+      : physTime2 ? localDate(physTime2, utcOff2) : null
+    if (!rawDate) continue
+    const date = (min2 >= 22 * 60 && rows[nextDay(rawDate)]?.slaap_minuten)
+      ? nextDay(rawDate) : rawDate
     ;(spo2Agg[date] ??= []).push(v)
   }
   for (const [date, vals] of Object.entries(spo2Agg)) {
