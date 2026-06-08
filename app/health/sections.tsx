@@ -18,6 +18,7 @@ export type GezondheidsRow = {
   slaap_licht: number | null
   slaap_rem: number | null
   wakker_minuten: number | null
+  wakker_count: number | null
   spo2: number | null
   ademhalingsfrequentie: number | null
   slaap_start_min: number | null
@@ -218,18 +219,31 @@ function RingChart({ progress, color, label, value }: { progress: number; color:
 
 // ─── Sleep ────────────────────────────────────────────────────────────────────
 
-// Composite sleep score (0–100), approximating Fitbit's: 50% duration, 25% efficiency,
-// 25% restoration (deep + REM). Computed from raw stage minutes so every night is consistent.
+// Composite sleep score (0–100) calibrated to approximate Fitbit's score.
+// Fitbit's real score also uses sleeping heart rate (which the Google Health API
+// does not expose), so this is an approximation from the data we do have:
+// duration (convex penalty for short sleep), deep+REM composition (55% target),
+// efficiency (rescaled 75–100%), and restlessness (number of awakenings).
 export function computeSleepScore(r: GezondheidsRow): number | null {
   const asleep = r.slaap_minuten
   if (!asleep) return null
   const awake = r.wakker_minuten ?? 0
   const deep  = r.slaap_diep ?? 0
   const rem   = r.slaap_rem ?? 0
-  const duration    = Math.min(asleep / 480, 1)            // 8h target
-  const efficiency  = asleep / (asleep + awake)
-  const restoration = Math.min((deep + rem) / asleep / 0.40, 1) // ~40% deep+REM target
-  return Math.round((0.5 * duration + 0.25 * efficiency + 0.25 * restoration) * 100)
+  const duration    = Math.min(asleep / 480, 1) ** 2                       // 8h target, convex
+  const composition = Math.min((deep + rem) / asleep / 0.55, 1)            // 55% deep+REM target
+  const efficiency  = Math.max(0, Math.min((asleep / (asleep + awake) - 0.75) / 0.25, 1)) // 75→100%
+
+  const parts: [number, number][] = [[duration, 0.5], [composition, 0.35], [efficiency, 0.15]]
+  if (r.wakker_count != null) {
+    // Restlessness: fewer awakenings = better (1 awakening → 1.0, 13+ → 0.0)
+    const restlessness = Math.max(0, Math.min(1 - (r.wakker_count - 1) / 12, 1))
+    parts[0][1] = 0.45; parts[1][1] = 0.30; parts[2][1] = 0.10
+    parts.push([restlessness, 0.15])
+  }
+  const totalWeight = parts.reduce((s, [, w]) => s + w, 0)
+  const weighted = parts.reduce((s, [v, w]) => s + v * w, 0)
+  return Math.round((weighted / totalWeight) * 100)
 }
 
 function nightLabel(datum: string, idx: number): string {
@@ -410,10 +424,10 @@ export function SleepSection() {
           </div>
 
           {/* Stacked composition bar (segments sum to total time in bed) */}
-          <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <div className="flex h-3.5 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
             {stageSegments.filter(s => s.min > 0).map(s => (
-              <div key={s.label} title={`${s.label} ${fmtMin(s.min)}`}
-                style={{ width: `${(s.min / stagesTotal) * 100}%`, background: s.color }} />
+              <div key={s.label} className="h-full" title={`${s.label} ${fmtMin(s.min)}`}
+                style={{ width: `${(s.min / stagesTotal) * 100}%`, flexShrink: 0, background: s.color }} />
             ))}
           </div>
 
@@ -422,7 +436,7 @@ export function SleepSection() {
             <StageLegend label="Deep"  color="#818cf8"                 duration={fmtMin(deep)}  pct={deepPct}  />
             <StageLegend label="REM"   color="#c084fc"                 duration={fmtMin(rem)}   pct={remPct}   />
             <StageLegend label="Light" color="#60a5fa"                 duration={fmtMin(light)} pct={lightPct} />
-            <StageLegend label="Awake" color="rgba(255,255,255,0.30)"  duration={fmtMin(wake)}  pct={wakePct}  />
+            <StageLegend label={selected?.wakker_count != null ? `Awake · woke ${selected.wakker_count}×` : 'Awake'} color="rgba(255,255,255,0.30)"  duration={fmtMin(wake)}  pct={wakePct}  />
           </div>
         </div>
       </Card>

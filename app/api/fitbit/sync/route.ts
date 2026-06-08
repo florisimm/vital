@@ -113,22 +113,36 @@ export async function POST(_req: NextRequest) {
     sleepBest[date] = asleep
 
     const stages: Record<string, number> = {}
-    for (const st of s.summary.stagesSummary ?? []) stages[st.type] = parseInt(st.minutes ?? '0')
+    let awakeCount: number | null = null
+    for (const st of s.summary.stagesSummary ?? []) {
+      stages[st.type] = parseInt(st.minutes ?? '0')
+      if (st.type === 'AWAKE') awakeCount = parseInt(st.count ?? '0') || null
+    }
     const awake = parseInt(s.summary.minutesAwake ?? '0')
     const deepMin = stages.DEEP ?? 0
     const remMin  = stages.REM ?? 0
 
-    // Composite sleep score (0–100): 50% duration, 25% efficiency, 25% restoration
-    const durationScore    = Math.min(asleep / 480, 1)
-    const efficiencyScore  = asleep + awake > 0 ? asleep / (asleep + awake) : 0
-    const restorationScore = asleep > 0 ? Math.min((deepMin + remMin) / asleep / 0.40, 1) : 0
+    // Composite sleep score (0–100), calibrated to approximate Fitbit (which also
+    // uses sleeping HR we can't access): duration (convex), deep+REM composition
+    // (55% target), efficiency (75–100%), and restlessness (awakenings count).
+    const durationScore    = Math.min(asleep / 480, 1) ** 2
+    const compositionScore = asleep > 0 ? Math.min((deepMin + remMin) / asleep / 0.55, 1) : 0
+    const efficiencyScore  = asleep + awake > 0 ? Math.max(0, Math.min((asleep / (asleep + awake) - 0.75) / 0.25, 1)) : 0
+    const parts: [number, number][] = [[durationScore, 0.5], [compositionScore, 0.35], [efficiencyScore, 0.15]]
+    if (awakeCount != null) {
+      const restlessness = Math.max(0, Math.min(1 - (awakeCount - 1) / 12, 1))
+      parts[0][1] = 0.45; parts[1][1] = 0.30; parts[2][1] = 0.10
+      parts.push([restlessness, 0.15])
+    }
+    const totalW = parts.reduce((a, [, w]) => a + w, 0)
     const sleepScore = asleep > 0
-      ? Math.round((0.5 * durationScore + 0.25 * efficiencyScore + 0.25 * restorationScore) * 100)
+      ? Math.round((parts.reduce((a, [v, w]) => a + v * w, 0) / totalW) * 100)
       : null
 
     Object.assign(ensure(date), {
       slaap_minuten:   asleep,
       wakker_minuten:  awake,
+      wakker_count:    awakeCount,
       slaap_diep:      deepMin,
       slaap_licht:     stages.LIGHT ?? 0,
       slaap_rem:       remMin,
