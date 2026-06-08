@@ -16,7 +16,6 @@ export async function GET(req: NextRequest) {
   const clientId = process.env.FITBIT_CLIENT_ID!
   const clientSecret = process.env.FITBIT_CLIENT_SECRET!
 
-  // Google OAuth token exchange
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -171,6 +171,17 @@ function StageBar({ label, duration, percent, pct, tint }: { label: string; dura
   )
 }
 
+function StageLegend({ label, color, duration, pct }: { label: string; color: string; duration: string; pct: number | null }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+      <span className="text-[14px] font-medium text-white">{label}</span>
+      <span className="ml-auto text-[14px] font-semibold text-white/80">{duration}</span>
+      <span className="text-[13px] text-white/40 w-9 text-right">{pct != null ? `${pct}%` : '–'}</span>
+    </div>
+  )
+}
+
 function ZoneBar({ label, percent, color }: { label: string; percent: number; color: string }) {
   return (
     <div className="flex flex-col gap-1">
@@ -207,29 +218,51 @@ function RingChart({ progress, color, label, value }: { progress: number; color:
 
 // ─── Sleep ────────────────────────────────────────────────────────────────────
 
+// Composite sleep score (0–100), approximating Fitbit's: 50% duration, 25% efficiency,
+// 25% restoration (deep + REM). Computed from raw stage minutes so every night is consistent.
+export function computeSleepScore(r: GezondheidsRow): number | null {
+  const asleep = r.slaap_minuten
+  if (!asleep) return null
+  const awake = r.wakker_minuten ?? 0
+  const deep  = r.slaap_diep ?? 0
+  const rem   = r.slaap_rem ?? 0
+  const duration    = Math.min(asleep / 480, 1)            // 8h target
+  const efficiency  = asleep / (asleep + awake)
+  const restoration = Math.min((deep + rem) / asleep / 0.40, 1) // ~40% deep+REM target
+  return Math.round((0.5 * duration + 0.25 * efficiency + 0.25 * restoration) * 100)
+}
+
+function nightLabel(datum: string, idx: number): string {
+  if (idx === 0) return 'Last night'
+  const d = new Date(datum + 'T00:00:00')
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
 export function SleepSection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
 
   const sleepRows = rows.filter(r => r.slaap_minuten != null)
-  const latest = sleepRows[0]
+  const [selectedIdx, setSelectedIdx] = useState(0)
+  const idx = Math.min(selectedIdx, Math.max(0, sleepRows.length - 1))
+  const selected = sleepRows[idx]
 
-  const totalMin    = latest?.slaap_minuten ?? null
-  const score       = latest?.slaap_score ?? null
-  const deep        = latest?.slaap_diep ?? null
-  const light       = latest?.slaap_licht ?? null
-  const rem         = latest?.slaap_rem ?? null
-  const wake        = latest?.wakker_minuten ?? null
-  const spo2        = latest?.spo2 ?? null
-  const resp        = latest?.ademhalingsfrequentie ?? null
-  const bedtimeMin  = latest?.slaap_start_min ?? null
-  const wakeTimeMin = latest?.slaap_einde_min ?? null
+  const totalMin    = selected?.slaap_minuten ?? null
+  const score       = selected ? computeSleepScore(selected) : null
+  const deep        = selected?.slaap_diep ?? null
+  const light       = selected?.slaap_licht ?? null
+  const rem         = selected?.slaap_rem ?? null
+  const wake        = selected?.wakker_minuten ?? null
+  const spo2        = selected?.spo2 ?? null
+  const resp        = selected?.ademhalingsfrequentie ?? null
+  const bedtimeMin  = selected?.slaap_start_min ?? null
+  const wakeTimeMin = selected?.slaap_einde_min ?? null
 
   const last30 = sleepRows.slice(0, 30)
   const last7  = sleepRows.slice(0, 7)
 
-  const avg30Score = avg(last30.map(r => r.slaap_score))
+  const avg30Score = avg(last30.map(computeSleepScore))
   const avg30Min   = avg(last30.map(r => r.slaap_minuten))
-  const avg7Score  = avg(last7.map(r => r.slaap_score))
+  const avg7Score  = avg(last7.map(computeSleepScore))
   const avg7Min    = avg(last7.map(r => r.slaap_minuten))
 
   const scoreDiff    = score !== null && avg30Score !== null ? score - avg30Score : null
@@ -241,10 +274,19 @@ export function SleepSection() {
   const efficiency = asleepTotal > 0 && stagesTotal > 0
     ? Math.round((asleepTotal / stagesTotal) * 100) : null
 
+  // Stage percentages relative to time asleep (deep+rem+light ≈ 100%), like Fitbit
   const deepPct  = deep  && asleepTotal ? Math.round(deep  / asleepTotal * 100) : null
   const remPct   = rem   && asleepTotal ? Math.round(rem   / asleepTotal * 100) : null
   const lightPct = light && asleepTotal ? Math.round(light / asleepTotal * 100) : null
   const wakePct  = wake  && stagesTotal ? Math.round(wake  / stagesTotal * 100) : null
+
+  // Stacked-bar segment widths relative to total time in bed (sum to 100%)
+  const stageSegments = [
+    { label: 'Deep',  min: deep  ?? 0, color: '#818cf8' },
+    { label: 'REM',   min: rem   ?? 0, color: '#c084fc' },
+    { label: 'Light', min: light ?? 0, color: '#60a5fa' },
+    { label: 'Awake', min: wake  ?? 0, color: 'rgba(255,255,255,0.30)' },
+  ]
 
   // Consistency: lower stddev of wake times = more consistent; score 0–100%
   const wakeTimes = last7.map(r => r.slaap_einde_min).filter((v): v is number => v !== null)
@@ -256,7 +298,7 @@ export function SleepSection() {
   }
 
   // Trend arrays oldest→newest
-  const scoreValues    = [...last30].reverse().map(r => r.slaap_score)
+  const scoreValues    = [...last30].reverse().map(computeSleepScore)
   const durationValues = [...last30].reverse().map(r => r.slaap_minuten)
 
   // AI quality
@@ -284,6 +326,32 @@ export function SleepSection() {
 
   return (
     <div className="flex flex-col gap-5">
+
+      {/* Night selector — tap to view other nights */}
+      {sleepRows.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          {sleepRows.slice(0, 14).map((r, i) => {
+            const s = computeSleepScore(r)
+            const active = i === idx
+            return (
+              <button
+                key={r.datum}
+                onClick={() => setSelectedIdx(i)}
+                className="shrink-0 rounded-[14px] px-3.5 py-2 flex flex-col items-start gap-0.5 transition-all"
+                style={{
+                  background: active ? 'rgba(129,140,248,0.18)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${active ? 'rgba(129,140,248,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                }}
+              >
+                <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: active ? '#a5b4fc' : 'rgba(255,255,255,0.5)' }}>
+                  {nightLabel(r.datum, i)}
+                </span>
+                <span className="text-[15px] font-bold text-white">{s ?? '–'}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Hero 4 metrics */}
       <div className="grid grid-cols-2 gap-3">
@@ -336,11 +404,26 @@ export function SleepSection() {
       {/* Sleep Stages */}
       <Card>
         <div className="flex flex-col gap-4">
-          <span className="text-[15px] font-semibold text-white/50">Sleep Stages</span>
-          <StageBar label="Deep"  pct={deepPct}  duration={fmtMin(deep)}  percent={deep  ? deep  / stagesTotal : 0} tint="text-indigo-400" />
-          <StageBar label="REM"   pct={remPct}   duration={fmtMin(rem)}   percent={rem   ? rem   / stagesTotal : 0} tint="text-purple-400" />
-          <StageBar label="Light" pct={lightPct} duration={fmtMin(light)} percent={light ? light / stagesTotal : 0} tint="text-blue-400"   />
-          <StageBar label="Awake" pct={wakePct}  duration={fmtMin(wake)}  percent={wake  ? wake  / stagesTotal : 0} tint="text-white/40"   />
+          <div className="flex items-center justify-between">
+            <span className="text-[15px] font-semibold text-white/50">Sleep Stages</span>
+            <span className="text-[13px] font-medium text-white/35">{fmtMin(totalMin)} asleep</span>
+          </div>
+
+          {/* Stacked composition bar (segments sum to total time in bed) */}
+          <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            {stageSegments.filter(s => s.min > 0).map(s => (
+              <div key={s.label} title={`${s.label} ${fmtMin(s.min)}`}
+                style={{ width: `${(s.min / stagesTotal) * 100}%`, background: s.color }} />
+            ))}
+          </div>
+
+          {/* Legend rows */}
+          <div className="flex flex-col gap-2.5 pt-1">
+            <StageLegend label="Deep"  color="#818cf8"                 duration={fmtMin(deep)}  pct={deepPct}  />
+            <StageLegend label="REM"   color="#c084fc"                 duration={fmtMin(rem)}   pct={remPct}   />
+            <StageLegend label="Light" color="#60a5fa"                 duration={fmtMin(light)} pct={lightPct} />
+            <StageLegend label="Awake" color="rgba(255,255,255,0.30)"  duration={fmtMin(wake)}  pct={wakePct}  />
+          </div>
         </div>
       </Card>
 
@@ -394,7 +477,7 @@ export function SleepSection() {
 
       {/* Secondary: SpO₂ / Resp / Awake */}
       <div className="flex flex-col gap-3">
-        <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also last night</span>
+        <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also this night</span>
         <div className="grid grid-cols-3 gap-2">
           <MiniCard title="SpO₂"      value={spo2 !== null ? `${spo2}%` : '–'}   tint="text-teal-400" />
           <MiniCard title="Resp rate" value={resp !== null ? `${resp}/min` : '–'} tint="text-cyan-400" />
@@ -414,7 +497,7 @@ export function RecoverySection() {
   const latest = rows[0]
   const hrv = latest?.hrv_rmssd ?? null
   const restingHR = latest?.hartslag_rust ?? null
-  const sleepScore = latest?.slaap_score ?? null
+  const sleepScore = latest ? computeSleepScore(latest) : null
   const sleepMin = latest?.slaap_minuten ?? null
 
   // Simple readiness score: HRV 40% + resting HR 30% + sleep 30%
