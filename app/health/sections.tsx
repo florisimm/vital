@@ -514,13 +514,16 @@ export function RecoverySection() {
   const sleepScore = latest ? computeSleepScore(latest) : null
   const sleepMin = latest?.slaap_minuten ?? null
 
-  // Simple readiness score: HRV 40% + resting HR 30% + sleep 30%
+  // Readiness score: sleep 40% (most actionable) + HRV 35% + resting HR 25%.
+  // HRV uses a hyperbolic curve (half-saturation at 50ms) instead of a hard cap
+  // so abnormally high values (>100ms) still improve the score but with diminishing
+  // returns — preventing poor sleep from being fully masked by great cardiovascular metrics.
   let recoveryScore: number | null = null
   if (hrv || restingHR || sleepScore) {
     let score = 0, weight = 0
-    if (hrv) { score += Math.min(hrv / 80, 1) * 40; weight += 40 }
-    if (restingHR) { score += Math.max(0, (100 - restingHR) / 50) * 30; weight += 30 }
-    if (sleepScore) { score += (sleepScore / 100) * 30; weight += 30 }
+    if (hrv)        { score += (hrv / (hrv + 50)) * 35; weight += 35 }
+    if (restingHR)  { score += Math.max(0, Math.min((100 - restingHR) / 50, 1)) * 25; weight += 25 }
+    if (sleepScore) { score += (sleepScore / 100) * 40; weight += 40 }
     recoveryScore = weight > 0 ? Math.round((score / weight) * 100) : null
   }
 

@@ -1484,6 +1484,16 @@ function computeTodaysFocus(
   return { emoji: '🏃', label: 'Easy Run', sub: 'Recovery in progress · keep the pace easy' }
 }
 
+// Strength effort derived from volume and sets — replaces the fixed 0.85 guess.
+// Light day (1000kg/15 sets) → ~0.55, medium (3000kg/20 sets) → ~0.70, heavy (6000kg/30 sets) → ~0.90
+function computeStrengthEffort(h: HevyWorkout): number {
+  const sets = h.sets ?? 0
+  const vol  = h.volume_kg ?? 0
+  const setsFactor = Math.min(1, sets / 25)
+  const volFactor  = vol > 0 ? Math.min(1, vol / 6000) : setsFactor
+  return 0.5 + ((setsFactor + volFactor) / 2) * 0.45
+}
+
 function computeActivityEffort(a: Activity): number {
   const durationH = (a.moving_time ?? 0) / 3600
   let intensity = 0.4 // default lean easy when no data
@@ -1513,44 +1523,52 @@ function computeRecoveryDetail(
   activities: Activity[],
   hevy: HevyWorkout[]
 ): { pct: number; label: string; factors: string[] } {
+  const now = Date.now()
+  const sevenDaysAgo = now - 7 * 86400000
+
+  // Combine all workouts from the last 7 days with their effort scores.
+  // Strength uses volume+sets to estimate effort; cardio uses HR or pace.
   const workouts = [
-    ...activities.map(a => ({ time: new Date(a.start_date).getTime(), effort: computeActivityEffort(a) })),
-    ...hevy.map(h => ({ time: new Date(h.start_time).getTime(), effort: 0.85 })),
+    ...activities
+      .filter(a => new Date(a.start_date).getTime() >= sevenDaysAgo)
+      .map(a => ({ time: new Date(a.start_date).getTime(), effort: computeActivityEffort(a), type: 'cardio' as const })),
+    ...hevy
+      .filter(h => new Date(h.start_time).getTime() >= sevenDaysAgo)
+      .map(h => ({ time: new Date(h.start_time).getTime(), effort: computeStrengthEffort(h), type: 'strength' as const })),
   ].sort((a, b) => b.time - a.time)
 
   if (workouts.length === 0) {
     return { pct: 95, label: 'Fully recovered', factors: ['No recent workouts found'] }
   }
 
-  const last = workouts[0]
-  const hoursSinceLast = (Date.now() - last.time) / 3600000
-
-  // Add a recovery bonus based on how easy the workout was:
-  // easy (zone 2, effort=0.2) adds +16h, hard (effort=0.9) adds only +2h
-  const effectiveHours = hoursSinceLast + (1 - last.effort) * 20
-  let pct = effectiveHours < 12 ? 45 : effectiveHours < 24 ? 65 : effectiveHours < 48 ? 82 : 95
-
-  const weekStartMs = new Date(startOfWeek()).getTime()
-  const weekStrength = hevy.filter(h => new Date(h.start_time).getTime() >= weekStartMs).length
-  const weekActivity = activities.filter(a => new Date(a.start_date).getTime() >= weekStartMs).length
-  const weekTotal = weekStrength + weekActivity
-
-  const factors: string[] = []
-  const h = Math.round(hoursSinceLast)
-  const effortLabel = last.effort < 0.35 ? ' · easy' : last.effort < 0.65 ? ' · moderate' : ' · hard'
-  factors.push(h < 24 ? `Last workout: ${h}h ago${effortLabel}` : `Last workout: ${Math.round(hoursSinceLast / 24)}d ago${effortLabel}`)
-
-  if (weekStrength >= 4) {
-    pct = Math.round(pct * 0.85)
-    factors.push(`${weekStrength} strength sessions this week`)
-  } else if (weekTotal >= 6) {
-    pct = Math.round(pct * 0.90)
-    factors.push(`High training frequency: ${weekTotal} sessions this week`)
-  } else {
-    factors.push(`${weekTotal} session${weekTotal !== 1 ? 's' : ''} this week`)
+  // Cumulative fatigue with 36h half-life exponential decay.
+  // Each workout contributes effort × e^(-h × ln2 / 36).
+  // Zone 2 (effort≈0.2) adds minimal fatigue; a heavy session (effort≈0.9) adds much more.
+  let fatigue = 0
+  for (const w of workouts) {
+    const hoursAgo = (now - w.time) / 3600000
+    const decay = Math.exp(-hoursAgo * Math.LN2 / 36)
+    fatigue += w.effort * decay
   }
 
-  pct = Math.min(95, Math.max(15, pct))
+  // fatigue 0 → 95%, 0.5 → 81%, 1.0 → 67%, 1.5 → 53%, 2.0+ → ~25%
+  const pct = Math.min(95, Math.max(20, Math.round(95 - fatigue * 28)))
+
+  const factors: string[] = []
+  const last = workouts[0]
+  const hoursAgo = (now - last.time) / 3600000
+  const timeLabel = hoursAgo < 24 ? `${Math.round(hoursAgo)}h ago` : `${Math.round(hoursAgo / 24)}d ago`
+  const effortLabel = last.effort < 0.35 ? 'zone 2' : last.effort < 0.60 ? 'moderate' : 'hard'
+  factors.push(`Last workout: ${timeLabel} · ${effortLabel}`)
+  if (last.type === 'cardio' && last.effort < 0.35) factors.push('Zone 2 — low fatigue impact')
+
+  const weekStrength = workouts.filter(w => w.type === 'strength').length
+  const weekCardio   = workouts.filter(w => w.type === 'cardio').length
+  const parts: string[] = []
+  if (weekStrength > 0) parts.push(`${weekStrength} strength`)
+  if (weekCardio > 0)   parts.push(`${weekCardio} cardio`)
+  if (parts.length > 0) factors.push(`This week: ${parts.join(', ')}`)
+
   const label = pct >= 70 ? 'Ready to train' : pct >= 45 ? 'Light recovery recommended' : 'High fatigue'
   return { pct, label, factors }
 }

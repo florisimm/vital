@@ -76,6 +76,11 @@ function dateStr(d: { year: number; month: number; day: number }): string {
 function avg(arr: number[]): number {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
+function median(arr: number[]): number {
+  const s = [...arr].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 !== 0 ? s[m] : (s[m - 1] + s[m]) / 2
+}
 
 export async function POST(_req: NextRequest) {
   const supabase = await createServerSupabaseClient()
@@ -161,17 +166,25 @@ export async function POST(_req: NextRequest) {
     ensure(date).hartslag_rust = parseInt(r.beatsPerMinute ?? '0') || null
   }
 
-  // ── HRV (intraday RMSSD → nightly average) ──
+  // ── HRV (intraday RMSSD → nightly median, sleep hours only) ──
+  // Filter to 22:00–10:00 local time so all-day wearers don't have daytime
+  // activity samples pollute the nightly readout. Night-only wearers are unaffected.
   const hrvAgg: Record<string, number[]> = {}
   for (const p of hrvPoints) {
     const h = p.heartRateVariability
     const v = h?.rootMeanSquareOfSuccessiveDifferencesMilliseconds
     if (typeof v !== 'number') continue
-    const date = h.sampleTime?.civilTime?.date ? dateStr(h.sampleTime.civilTime.date) : localDate(h.sampleTime.physicalTime, h.sampleTime.utcOffset)
+    const physTime = h.sampleTime?.physicalTime
+    const utcOff   = h.sampleTime?.utcOffset
+    if (physTime) {
+      const min = localMinutes(physTime, utcOff)
+      if (min >= 10 * 60 && min < 22 * 60) continue  // skip 10:00–22:00
+    }
+    const date = h.sampleTime?.civilTime?.date ? dateStr(h.sampleTime.civilTime.date) : localDate(physTime ?? '', utcOff)
     ;(hrvAgg[date] ??= []).push(v)
   }
   for (const [date, vals] of Object.entries(hrvAgg)) {
-    ensure(date).hrv_rmssd = Math.round(avg(vals) * 10) / 10
+    ensure(date).hrv_rmssd = Math.round(median(vals) * 10) / 10
   }
 
   // ── SpO2 (intraday %, filter sensor errors, nightly average) ──
