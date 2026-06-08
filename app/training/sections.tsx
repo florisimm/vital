@@ -4,6 +4,7 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
+import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1625,19 +1626,35 @@ function PerformanceHeroCard({ perf }: { perf: ReturnType<typeof computePerforma
   )
 }
 
-function RecoveryDetailCard({ recovery }: { recovery: { pct: number; label: string; factors: string[] } }) {
-  const c = recovery.pct >= 70 ? '#4ade80' : recovery.pct >= 45 ? '#fb923c' : '#f87171'
+function RecoveryDetailCard({
+  recovery,
+  physiology,
+}: {
+  recovery: { pct: number; label: string; factors: string[] }
+  physiology: { score: number | null; label: string; color: string }
+}) {
+  const unified = physiology.score !== null
+    ? Math.round(physiology.score * 0.65 + recovery.pct * 0.35)
+    : recovery.pct
+  const label = physiology.score !== null ? physiology.label : recovery.label
+  const c = unified >= 70 ? '#4ade80' : unified >= 45 ? '#fb923c' : '#f87171'
+
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Recovery</span>
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Readiness</span>
         <div className="flex items-end justify-between">
-          <span className="text-[40px] font-bold text-white leading-none">{recovery.pct}%</span>
-          <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{recovery.label}</span>
+          <span className="text-[40px] font-bold text-white leading-none">{unified}%</span>
+          <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{label}</span>
         </div>
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div className="h-full rounded-full" style={{ width: `${recovery.pct}%`, background: c }} />
+          <div className="h-full rounded-full" style={{ width: `${unified}%`, background: c }} />
         </div>
+        {physiology.score !== null && (
+          <span className="text-[12px] text-white/35 pt-0.5">
+            Physiology {physiology.score}% · Training load {recovery.pct}%
+          </span>
+        )}
         <div className="flex flex-col gap-1.5 pt-1">
           {recovery.factors.map((f, i) => (
             <span key={i} className="text-[13px] text-white/50">· {f}</span>
@@ -1648,9 +1665,9 @@ function RecoveryDetailCard({ recovery }: { recovery: { pct: number; label: stri
   )
 }
 
-function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, earlyKj, loadTrend }: {
+function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, earlyKj, loadTrend, acwr }: {
   weekCompleted: number; weekPlanned: number; weekKm: number; weekDurationSecs: number
-  weekVolume: number; earlyKj: number; loadTrend: number
+  weekVolume: number; earlyKj: number; loadTrend: number; acwr: number | null
 }) {
   const trendSign = loadTrend > 0 ? '+' : ''
   const trendColor = loadTrend > 10 ? '#4ade80' : loadTrend < -10 ? '#f87171' : 'rgba(255,255,255,0.5)'
@@ -1680,6 +1697,17 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
             <span className="text-[13px] text-white/40">vs last 14 days —</span>
             <span className="text-[13px] text-white/40">
               {Math.abs(loadTrend) <= 10 ? 'stable' : loadTrend > 10 ? 'increasing' : 'declining'}
+            </span>
+          </div>
+        )}
+        {acwr !== null && (
+          <div className="flex items-center gap-2 pt-1 border-t border-white/[0.06]">
+            <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">ACWR</span>
+            <span className="text-[15px] font-bold" style={{ color: acwr > 1.4 ? '#f87171' : acwr > 1.3 ? '#fb923c' : acwr < 0.8 ? '#60a5fa' : '#4ade80' }}>
+              {acwr.toFixed(2)}
+            </span>
+            <span className="text-[13px] text-white/40">
+              {acwr > 1.4 ? '— high injury risk' : acwr > 1.3 ? '— caution' : acwr < 0.8 ? '— undertraining' : '— optimal load'}
             </span>
           </div>
         )}
@@ -1757,11 +1785,12 @@ function NextWorkoutCard({ calendarEvents }: {
 export function OverviewSection({ activities, hevy, calendarEvents }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
 }) {
-  const { data: gezondheid } = useSWR<{ datum: string; stappen: number; gewicht: number }[]>('health-gezondheid', null)
+  const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const { data: foodData } = useSWR<{ foodLog: any[]; targets: any }>('food-log', null)
 
   const perf = computePerformanceScore(activities, hevy)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
+  const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
 
   const now = Date.now()
   const weekStart = startOfWeek()
@@ -1788,8 +1817,17 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const weekDurationSecs = [...weekActivities, ...weekHevy].reduce((s: number, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
   const weekVolume = weekHevy.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
 
-  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, recoveryDetail.pct, perf)
-  const topInsights = buildTopInsights(activities, hevy, gezondheid ?? null, foodData ?? null)
+  const unifiedReadinessPct = physiologyReadiness.score !== null
+    ? Math.round(physiologyReadiness.score * 0.65 + recoveryDetail.pct * 0.35)
+    : recoveryDetail.pct
+  const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
+  const twentyEightDaysAgo = new Date(now - 28 * 86400000).toISOString()
+  const acute7kj   = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? (a.moving_time ?? 0) / 60), 0)
+  const chronic28kj = activities.filter(a => a.start_date >= twentyEightDaysAgo).reduce((s, a) => s + (a.kilojoules ?? (a.moving_time ?? 0) / 60), 0)
+  const acwr = chronic28kj / 4 > 5 ? Math.round((acute7kj / (chronic28kj / 4)) * 10) / 10 : null
+
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
+  const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null, foodData ?? null)
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -1803,7 +1841,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
       <PerformanceHeroCard perf={perf} />
 
       {/* 4. Recovery */}
-      <RecoveryDetailCard recovery={recoveryDetail} />
+      <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
 
       {/* 5. Training Load */}
       <TrainingLoadCard
@@ -1814,6 +1852,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
         weekVolume={weekVolume}
         earlyKj={earlyKj}
         loadTrend={loadTrend}
+        acwr={acwr}
       />
 
       {/* 6. Top Insights */}

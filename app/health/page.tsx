@@ -1,14 +1,16 @@
 'use client'
 
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import useSWR, { mutate } from 'swr'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { BedDouble, Activity, Heart, Scale, Footprints } from 'lucide-react'
+import { BedDouble, Activity, Heart, Scale, Footprints, RefreshCw } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import { computeSleepScore, type GezondheidsRow } from './sections'
+
+type SyncMessage = { type: 'ok' | 'err'; text: string }
 
 async function fetchHealth() {
   const supabase = createClient()
@@ -19,6 +21,13 @@ async function fetchHealth() {
     .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min')
     .eq('user_id', user.id).order('datum', { ascending: false }).limit(30)
   return (data ?? []) as GezondheidsRow[]
+}
+
+async function refreshHealthCache() {
+  const rows = await fetchHealth()
+  mutate('health-gezondheid', rows, false)
+  mutate('today', (current: any) => current ? { ...current, latestGezondheid: rows[0] ?? null } : current, false)
+  return rows
 }
 
 const CATEGORIES = [
@@ -35,12 +44,21 @@ function FitbitSyncHandler() {
   const router = useRouter()
 
   useEffect(() => {
-    // Sync immediately after OAuth connect; periodic auto-sync lives in DataProvider
-    if (searchParams.get('fitbit') === 'connected') {
-      fetch('/api/fitbit/sync', { method: 'POST' })
-        .then(() => mutate('health-gezondheid'))
-      router.replace('/health')
+    if (searchParams.get('fitbit') !== 'connected') return
+
+    let cancelled = false
+
+    async function syncConnectedFitbit() {
+      try {
+        await fetch('/api/fitbit/sync', { method: 'POST' })
+        if (!cancelled) await refreshHealthCache()
+      } finally {
+        if (!cancelled) router.replace('/health')
+      }
     }
+
+    syncConnectedFitbit()
+    return () => { cancelled = true }
   }, [searchParams, router])
 
   return null
@@ -50,10 +68,10 @@ export default function HealthPage() {
   const { data: rows = [] } = useSWR('health-gezondheid', fetchHealth, {
     revalidateOnFocus: false, dedupingInterval: 60_000,
   })
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<SyncMessage | null>(null)
 
-  const latest = rows[0]
-  // Use the most recent row that actually has each metric — today's row may exist
-  // but be incomplete (e.g. no sleep yet, RHR not computed until end of day).
+  const latest          = rows[0]
   const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
   const latestWithHR    = rows.find(r => r.hartslag_rust  != null) ?? null
   const latestWithHRV   = rows.find(r => r.hrv_rmssd      != null) ?? null
@@ -64,19 +82,67 @@ export default function HealthPage() {
   const hrv        = latestWithHRV?.hrv_rmssd ?? null
   const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
 
-  const weightRows = rows.filter(r => r.gewicht != null)
+  const weightRows   = rows.filter(r => r.gewicht != null)
   const latestWeight = weightRows[0] ? Number(weightRows[0].gewicht) : null
-  const oldWeight = weightRows[6] ? Number(weightRows[6].gewicht) : null
+  const oldWeight    = weightRows[6] ? Number(weightRows[6].gewicht) : null
   const weightChange = latestWeight && oldWeight ? latestWeight - oldWeight : null
   const weightDetail = weightChange !== null
     ? `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg vs 7 dagen`
     : '–'
 
-  const stepRows = rows.filter(r => r.stappen != null).slice(0, 7)
-  const avgSteps = stepRows.length
+  const stepRows  = rows.filter(r => r.stappen != null).slice(0, 7)
+  const avgSteps  = stepRows.length
     ? Math.round(stepRows.reduce((s, r) => s + Number(r.stappen), 0) / stepRows.length)
     : null
   const stepsDetail = avgSteps ? `avg ${avgSteps.toLocaleString('nl-NL')} / day` : '–'
+
+  const recommendation = (() => {
+    if (!sleepScore && !hrv && !restingHR)
+      return 'Connect Fitbit to see personalised health recommendations.'
+    if (restingHR !== null && restingHR > 70 && sleepScore !== null && sleepScore < 55)
+      return 'Multiple recovery markers are low. Rest or gentle movement only today.'
+    if (hrv !== null && hrv < 25)
+      return 'HRV is suppressed. Avoid high intensity and prioritise sleep tonight.'
+    if ((sleepScore === null || sleepScore >= 75) && (restingHR === null || restingHR <= 58))
+      return 'Recovery looks strong. A quality training session is well-supported today.'
+    if (sleepScore !== null && sleepScore >= 65)
+      return 'Recovery is moderate. Zone 2 training and good nutrition will bring you to full readiness.'
+    if (sleepScore !== null && sleepScore < 55)
+      return 'Sleep quality is below par. Keep intensity low and target 8 hours tonight.'
+    return 'Physiological signals support moderate training today.'
+  })()
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      setSyncMessage(null)
+      const res = await fetch('/api/fitbit/sync', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.ok) {
+        const apiError = Array.isArray(data?.errors) && data.errors.length ? String(data.errors[0]) : null
+        const text = data?.error === 'not connected'
+          ? 'Fitbit is nog niet gekoppeld.'
+          : apiError
+            ? `Fitbit sync fout: ${apiError}`
+          : 'Fitbit sync mislukt.'
+        setSyncMessage({ type: 'err', text })
+        return
+      }
+
+      await refreshHealthCache()
+
+      const errorCount = Array.isArray(data.errors) ? data.errors.length : 0
+      setSyncMessage({
+        type: errorCount ? 'err' : 'ok',
+        text: errorCount
+          ? `Sync voltooid met ${errorCount} fout${errorCount === 1 ? '' : 'en'}: ${String(data.errors[0])}`
+          : `Fitbit bijgewerkt: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+      })
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <PremiumScreen title="Health" subtitle="Recovery foundation" contentGap={18}>
@@ -132,12 +198,27 @@ export default function HealthPage() {
       {/* Recommendation card */}
       <Card>
         <div className="flex flex-col gap-2.5">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">
-            Recommendation
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">
+              Recommendation
+            </span>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-1.5 text-[12px] text-white/30 hover:text-teal-400 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing…' : 'Sync'}
+            </button>
+          </div>
           <p className="text-[22px] font-bold text-white leading-snug">
-            Recovery supports aerobic training today. Do not add intensity.
+            {recommendation}
           </p>
+          {syncMessage && (
+            <p className={`text-[13px] font-medium ${syncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
+              {syncMessage.text}
+            </p>
+          )}
         </div>
       </Card>
 

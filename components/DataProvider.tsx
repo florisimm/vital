@@ -94,21 +94,38 @@ export function DataProvider() {
     const supabase = createClient()
     let cancelled = false
 
-    async function autoSync() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || cancelled) return
-      const { data: tok } = await supabase.from('fitbit_tokens').select('last_synced_at').eq('user_id', user.id).maybeSingle()
-      if (!tok || cancelled) return // not connected
-      const last = tok.last_synced_at ? new Date(tok.last_synced_at).getTime() : 0
-      if ((Date.now() - last) / 3_600_000 < 3) return // synced within the last 3h
-
-      await fetch('/api/fitbit/sync', { method: 'POST' }).catch(() => {/* silent */})
-      if (cancelled) return
+    async function refreshHealthCache(userId: string) {
       const { data: rows } = await supabase
         .from('gezondheid')
         .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min')
-        .eq('user_id', user.id).order('datum', { ascending: false }).limit(30)
-      if (!cancelled) mutate('health-gezondheid', rows ?? [], false)
+        .eq('user_id', userId)
+        .order('datum', { ascending: false })
+        .limit(30)
+
+      if (!cancelled) {
+        mutate('health-gezondheid', rows ?? [], false)
+        mutate('today', (current: any) => current ? { ...current, latestGezondheid: rows?.[0] ?? null } : current, false)
+      }
+    }
+
+    async function autoSync() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+      const today = new Date().toISOString().split('T')[0]
+      const [{ data: tok }, { data: latestRow }] = await Promise.all([
+        supabase.from('fitbit_tokens').select('last_synced_at').eq('user_id', user.id).maybeSingle(),
+        supabase.from('gezondheid').select('datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
+      ])
+      if (!tok || cancelled) return // not connected
+
+      const last = tok.last_synced_at ? new Date(tok.last_synced_at).getTime() : 0
+      const syncedRecently = (Date.now() - last) / 3_600_000 < 3
+      const hasTodayRow = latestRow?.datum === today
+      if (syncedRecently && hasTodayRow) return
+
+      await fetch('/api/fitbit/sync', { method: 'POST' }).catch(() => {/* silent */})
+      if (cancelled) return
+      await refreshHealthCache(user.id)
     }
 
     autoSync()

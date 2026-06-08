@@ -20,9 +20,9 @@ Copy `.env.local.example` to `.env.local` and fill in:
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ORS_API_KEY=...                  # Required for route generation on /training/session (server-only, never NEXT_PUBLIC)
-NEXT_PUBLIC_SITE_URL=...         # Used for OG metadata base URL and Fitbit OAuth redirect URI
-FITBIT_CLIENT_ID=...             # From dev.fitbit.com — server-only
-FITBIT_CLIENT_SECRET=...         # From dev.fitbit.com — server-only
+NEXT_PUBLIC_SITE_URL=...         # Used for OG metadata base URL and Google OAuth redirect URI
+GOOGLE_CLIENT_ID=...             # From Google Cloud Console (OAuth 2.0 client) — server-only
+GOOGLE_CLIENT_SECRET=...         # From Google Cloud Console (OAuth 2.0 client) — server-only
 ```
 
 ## Architecture
@@ -115,7 +115,7 @@ Dutch keys used in `food_log.meal_category` (in order): `ontbijt`, `snack_ochten
 
 Three API routes handle Fitbit Sense 2 connectivity:
 
-- `GET /api/fitbit/connect?user_id=` — redirects to Fitbit OAuth (requires `FITBIT_CLIENT_ID`)
+- `GET /api/fitbit/connect?user_id=` — redirects to Google OAuth (requires `GOOGLE_CLIENT_ID`)
 - `GET /api/fitbit/callback` — exchanges auth code for tokens, stores in `fitbit_tokens`, redirects to `/health?fitbit=connected`
 - `POST /api/fitbit/sync` — fetches 7 days of steps, resting HR, HRV, and today's sleep from Fitbit API; upserts into `gezondheid`
 
@@ -145,7 +145,7 @@ ALTER TABLE gezondheid
 ALTER TABLE gezondheid ADD CONSTRAINT gezondheid_user_datum_unique UNIQUE (user_id, datum);
 ```
 
-After connecting, health sub-pages (Sleep, Recovery, Heart) show real Fitbit data via the `health-gezondheid` SWR key. Connect flow: user taps Fitbit in ProfileButton → OAuth → callback → auto-sync → redirect to `/health`. Registered redirect URI in dev.fitbit.com must match `{NEXT_PUBLIC_SITE_URL}/api/fitbit/callback`.
+After connecting, health sub-pages (Sleep, Recovery, Heart) show real data via the `health-gezondheid` SWR key. Connect flow: user taps Fitbit in ProfileButton → Google OAuth → callback → auto-sync → redirect to `/health`. Registered redirect URI in Google Cloud Console must match `{NEXT_PUBLIC_SITE_URL}/api/fitbit/callback`.
 
 ### Food scanning
 

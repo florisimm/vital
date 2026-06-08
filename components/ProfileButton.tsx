@@ -53,6 +53,8 @@ export function ProfileButton() {
   const [editingPages, setEditingPages] = useState(false)
   const [hiddenPages, setHiddenPages] = useState<string[]>([])
   const [pagesSaving, setPagesSaving] = useState(false)
+  const [fitbitSyncing, setFitbitSyncing] = useState(false)
+  const [fitbitSyncMessage, setFitbitSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -154,6 +156,41 @@ export function ProfileButton() {
   function connectFitbit() {
     if (!userId) return
     window.location.href = `/api/fitbit/connect?user_id=${userId}`
+  }
+
+  async function syncFitbit() {
+    setFitbitSyncing(true)
+    setFitbitSyncMessage(null)
+    try {
+      const res = await fetch('/api/fitbit/sync', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.ok) {
+        const apiError = Array.isArray(data?.errors) && data.errors.length ? String(data.errors[0]) : null
+        setFitbitSyncMessage({
+          type: 'err',
+          text: data?.error === 'not connected'
+            ? 'Fitbit is nog niet gekoppeld.'
+            : apiError
+              ? `Sync fout: ${apiError}`
+              : 'Fitbit sync mislukt.',
+        })
+        return
+      }
+
+      mutate('health-gezondheid')
+      mutate('today')
+
+      const errorCount = Array.isArray(data.errors) ? data.errors.length : 0
+      setFitbitSyncMessage({
+        type: errorCount ? 'err' : 'ok',
+        text: errorCount
+          ? `Sync met ${errorCount} fout${errorCount === 1 ? '' : 'en'}.`
+          : `Fitbit bijgewerkt: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+      })
+    } finally {
+      setFitbitSyncing(false)
+    }
   }
 
   async function handleDisconnect() {
@@ -538,9 +575,18 @@ export function ProfileButton() {
                     </button>
                   )}
                   {services?.fitbit === true && (
-                    <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[15px] font-semibold text-green-400 active:opacity-60">
-                      Connected
-                    </button>
+                    <>
+                      <button
+                        onClick={syncFitbit}
+                        disabled={fitbitSyncing}
+                        className="text-[15px] font-semibold text-teal-400 active:opacity-60 disabled:opacity-50"
+                      >
+                        {fitbitSyncing ? 'Syncing…' : 'Sync'}
+                      </button>
+                      <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[15px] font-semibold text-green-400 active:opacity-60">
+                        Connected
+                      </button>
+                    </>
                   )}
                   {services?.fitbit === undefined && (
                     <span className="text-[15px] text-white/30">…</span>
@@ -548,6 +594,11 @@ export function ProfileButton() {
                 </div>
               </ProfileRow>
             </ProfileSection>
+            {fitbitSyncMessage && (
+              <p className={`-mt-3 px-1 text-[13px] ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
+                {fitbitSyncMessage.text}
+              </p>
+            )}
 
             {/* Preferences */}
             <ProfileSection title="Preferences">

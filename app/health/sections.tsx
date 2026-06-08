@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight } from 'lucide-react'
 import { Card, SectionHeader, MetricTile } from '@/components/ui'
 import { healthFetcher } from './fetcher'
+import { computePhysiologyReadiness, computeHRVBaseline, computeIllnessFlag } from '@/lib/readiness'
 
 export type GezondheidsRow = {
   datum: string
@@ -338,6 +339,20 @@ export function SleepSection() {
         return lines.join(' ') || 'Sleep data loaded.'
       })()
 
+  // Sleep → next-day HRV correlation pairs
+  const correlationPairs: { sleep: number; hrv: number }[] = []
+  for (const r of sleepRows.slice(0, 14)) {
+    const s = computeSleepScore(r)
+    if (!s) continue
+    const next = new Date(r.datum + 'T00:00:00')
+    next.setDate(next.getDate() + 1)
+    const nextRow = rows.find(x => x.datum === next.toISOString().slice(0, 10))
+    if (nextRow?.hrv_rmssd != null) correlationPairs.push({ sleep: s, hrv: nextRow.hrv_rmssd })
+  }
+  correlationPairs.reverse()
+  const corrMaxSleep = Math.max(...correlationPairs.map(p => p.sleep), 1)
+  const corrMaxHRV   = Math.max(...correlationPairs.map(p => p.hrv), 1)
+
   return (
     <div className="flex flex-col gap-5">
 
@@ -489,6 +504,35 @@ export function SleepSection() {
         </Card>
       )}
 
+      {correlationPairs.length >= 4 && (
+        <Card>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-white/50">Sleep → Next-Day HRV</span>
+              <span className="text-[11px] text-white/30">{correlationPairs.length} nights</span>
+            </div>
+            <div>
+              <span className="text-[11px] text-indigo-400 font-medium">Sleep score</span>
+              <div className="flex items-end gap-[2px] h-10 mt-1.5">
+                {correlationPairs.map((p, i) => (
+                  <div key={i} className="flex-1 rounded-sm"
+                    style={{ height: `${Math.max((p.sleep / corrMaxSleep) * 40, 4)}px`, background: i === correlationPairs.length - 1 ? '#818cf8' : '#818cf855' }} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-[11px] text-green-400 font-medium">Next-day HRV (ms)</span>
+              <div className="flex items-end gap-[2px] h-10 mt-1.5">
+                {correlationPairs.map((p, i) => (
+                  <div key={i} className="flex-1 rounded-sm"
+                    style={{ height: `${Math.max((p.hrv / corrMaxHRV) * 40, 4)}px`, background: i === correlationPairs.length - 1 ? '#4ade80' : '#4ade8055' }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Secondary: SpO₂ / Resp / Awake */}
       <div className="flex flex-col gap-3">
         <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also this night</span>
@@ -517,39 +561,50 @@ export function RecoverySection() {
   const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
   const sleepMin   = latestWithSleep?.slaap_minuten ?? null
 
-  // Readiness score: sleep 40% (most actionable) + HRV 35% + resting HR 25%.
-  // HRV uses a hyperbolic curve (half-saturation at 50ms) instead of a hard cap
-  // so abnormally high values (>100ms) still improve the score but with diminishing
-  // returns — preventing poor sleep from being fully masked by great cardiovascular metrics.
-  let recoveryScore: number | null = null
-  if (hrv || restingHR || sleepScore) {
-    let score = 0, weight = 0
-    if (hrv)        { score += (hrv / (hrv + 50)) * 35; weight += 35 }
-    if (restingHR)  { score += Math.max(0, Math.min((100 - restingHR) / 50, 1)) * 25; weight += 25 }
-    if (sleepScore) { score += (sleepScore / 100) * 40; weight += 40 }
-    recoveryScore = weight > 0 ? Math.round((score / weight) * 100) : null
-  }
+  const readiness   = computePhysiologyReadiness(rows)
+  const illnessFlag = computeIllnessFlag(rows)
 
-  const hrvOk = hrv ? hrv >= 35 : null
-  const hrOk = restingHR ? restingHR <= 65 : null
-  const sleepOk = sleepMin ? sleepMin >= 420 : null
+  const hrvOk   = hrv       ? hrv >= 35       : null
+  const hrOk    = restingHR ? restingHR <= 65 : null
+  const sleepOk = sleepMin  ? sleepMin >= 420  : null
 
   const factors = [
-    { label: 'HRV',             status: hrv ? `${Math.round(hrv)} ms` : '–',            ok: hrvOk  },
-    { label: 'Resting HR',      status: restingHR ? `${restingHR} bpm` : '–',           ok: hrOk   },
-    { label: 'Sleep quality',   status: sleepScore ? `${sleepScore}%` : '–',            ok: sleepOk },
-    { label: 'Sleep duration',  status: sleepMin ? fmtMin(sleepMin) : '–',              ok: sleepOk },
+    { label: 'HRV',            status: hrv       ? `${Math.round(hrv)} ms` : '–', ok: hrvOk   },
+    { label: 'Resting HR',     status: restingHR ? `${restingHR} bpm`      : '–', ok: hrOk    },
+    { label: 'Sleep quality',  status: sleepScore ? `${sleepScore}%`       : '–', ok: sleepOk },
+    { label: 'Sleep duration', status: sleepMin  ? fmtMin(sleepMin)        : '–', ok: sleepOk },
   ]
+
+  const aiText = readiness.score
+    ? `Readiness ${readiness.score} (${readiness.label}) — based on HRV, resting HR, and sleep.`
+    : 'Connect Fitbit to see readiness data.'
 
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text={recoveryScore ? `Recovery score ${recoveryScore} — based on HRV, resting HR, and sleep quality.` : 'Connect Fitbit to see recovery data.'} />
-      <HeroMetric value={recoveryScore ? String(recoveryScore) : '–'} label="Recovery Score" note={recoveryScore ? (recoveryScore >= 70 ? 'Good to train' : recoveryScore >= 50 ? 'Moderate' : 'Rest recommended') : '–'} Icon={Heart} tint="text-teal-400" />
+      {illnessFlag && (
+        <div className="px-4 py-3 rounded-2xl border border-orange-400/30" style={{ background: 'rgba(251,146,60,0.10)' }}>
+          <div className="flex items-start gap-2.5">
+            <span className="text-orange-400 text-[16px] shrink-0">⚠</span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-semibold text-orange-300">Signs of strain detected</span>
+              <span className="text-[12px] text-white/60">{illnessFlag.reason} — consider rest today</span>
+            </div>
+          </div>
+        </div>
+      )}
+      <AiInsight text={aiText} />
+      <HeroMetric
+        value={readiness.score ? String(readiness.score) : '–'}
+        label="Readiness"
+        note={readiness.score ? readiness.label : '–'}
+        Icon={Heart}
+        tint="text-teal-400"
+      />
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'}       unit={hrv ? 'ms' : ''} detail="Daily RMSSD"  Icon={Activity} tint="text-green-400"  />
-        <SmallCard title="Resting HR" value={restingHR ? String(restingHR) : '–'}          unit={restingHR ? 'bpm' : ''} detail="Last night" Icon={Heart}    tint="text-pink-400"   />
-        <SmallCard title="Sleep"      value={sleepMin ? fmtMin(sleepMin) : '–'}            detail="Duration"      Icon={Moon}     tint="text-indigo-400" />
-        <SmallCard title="Score"      value={sleepScore ? String(sleepScore) : '–'}        unit={sleepScore ? '%' : ''} detail="Sleep efficiency" Icon={Flame} tint="text-orange-400" />
+        <SmallCard title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'}  unit={hrv ? 'ms' : ''}        detail="Daily RMSSD"  Icon={Activity} tint="text-green-400"  />
+        <SmallCard title="Resting HR" value={restingHR ? String(restingHR) : '–'}     unit={restingHR ? 'bpm' : ''} detail="Last night"   Icon={Heart}    tint="text-pink-400"   />
+        <SmallCard title="Sleep"      value={sleepMin ? fmtMin(sleepMin) : '–'}       detail="Duration"             Icon={Moon}           tint="text-indigo-400" />
+        <SmallCard title="Score"      value={sleepScore ? String(sleepScore) : '–'}   unit={sleepScore ? '%' : ''}  detail="Sleep quality" Icon={Flame}   tint="text-orange-400" />
       </div>
       <Card>
         <div className="flex flex-col gap-3">
@@ -579,7 +634,7 @@ export function HeartSection() {
   const hrRows = rows.filter(r => r.hartslag_rust != null).slice(0, 7)
   const latest = hrRows[0]
   const restingHR = latest?.hartslag_rust ?? null
-  const hrv = latest?.hrv_rmssd ?? null
+  const hrv = rows.find(r => r.hrv_rmssd != null)?.hrv_rmssd ?? null
 
   const avgHR = hrRows.length
     ? Math.round(hrRows.reduce((s, r) => s + (r.hartslag_rust ?? 0), 0) / hrRows.length)
@@ -593,12 +648,31 @@ export function HeartSection() {
     return { day: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][d.getDay()], val: r.hartslag_rust ?? 0 }
   })
 
+  const hrvBaseline = computeHRVBaseline(rows)
+  const [hrvPeriod, setHrvPeriod] = useState<7 | 30>(30)
+  const hrvAll = [...rows.filter(r => r.hrv_rmssd != null)].reverse()
+  const hrv30 = hrvAll.slice(-hrvPeriod)
+  const maxHRV = hrv30.length ? Math.max(...hrv30.map(r => r.hrv_rmssd as number), 1) : 1
+  const baselineH = hrv30.length && hrvBaseline.baseline ? (hrvBaseline.baseline / maxHRV) * 48 : null
+
+  const deviationText = hrvBaseline.deviationPct !== null
+    ? `${hrvBaseline.deviationPct > 0 ? '+' : ''}${hrvBaseline.deviationPct}% vs baseline`
+    : 'Daily RMSSD'
+
+  const aiText = restingHR
+    ? `Resting HR ${restingHR} bpm${hrv ? `, HRV ${Math.round(hrv)} ms` : ''}.`
+      + (hrvBaseline.deviationPct !== null
+        ? ` HRV ${hrvBaseline.deviationPct > 0 ? 'above' : 'below'} 30-day baseline by ${Math.abs(hrvBaseline.deviationPct)}%.`
+        : '')
+      + (trend !== null ? ` RHR ${trend > 0 ? '+' : ''}${trend} vs 7-day avg.` : '')
+    : 'Connect Fitbit to see heart data.'
+
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text={restingHR ? `Resting HR ${restingHR} bpm${hrv ? `, HRV ${Math.round(hrv)} ms` : ''}.${trend !== null ? ` ${trend > 0 ? '+' : ''}${trend} vs 7-day avg.` : ''}` : 'Connect Fitbit to see heart data.'} />
+      <AiInsight text={aiText} />
       <div className="grid grid-cols-2 gap-3">
         <MetricTile title="Resting HR" value={restingHR ? String(restingHR) : '–'} unit={restingHR ? 'bpm' : ''} note={trend !== null ? `${trend > 0 ? '+' : ''}${trend} vs avg` : '–'} Icon={Heart}    tint="text-pink-400"  />
-        <MetricTile title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note="Daily RMSSD" Icon={Activity} tint="text-green-400" />
+        <MetricTile title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note={deviationText} Icon={Activity} tint="text-green-400" />
       </div>
       {hrDays.length > 1 && (
         <Card>
@@ -610,6 +684,51 @@ export function HeartSection() {
                 <span className="text-[10px] text-white/40">{day}</span>
               </div>
             ))}
+          </div>
+        </Card>
+      )}
+      {hrv30.length > 4 && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-semibold text-white/50">HRV Trend</span>
+                <div className="flex gap-1">
+                  {([7, 30] as const).map(p => (
+                    <button key={p} onClick={() => setHrvPeriod(p)}
+                      className="text-[11px] font-semibold px-2 py-0.5 rounded-full transition-all"
+                      style={{ background: hrvPeriod === p ? 'rgba(255,255,255,0.15)' : 'transparent', color: hrvPeriod === p ? 'white' : 'rgba(255,255,255,0.35)' }}>
+                      {p}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {hrvBaseline.baseline !== null && (
+                <div className="flex gap-3">
+                  <span className="text-[11px] text-white/40">baseline <span className="text-white/65 font-medium">{hrvBaseline.baseline} ms</span></span>
+                  {hrvBaseline.stddev !== null && <span className="text-[11px] text-white/40">±<span className="text-white/65 font-medium">{hrvBaseline.stddev}</span></span>}
+                </div>
+              )}
+            </div>
+            <div className="relative flex items-end gap-[2px] h-14">
+              {hrv30.map((r, i) => {
+                const v = r.hrv_rmssd as number
+                const barH = Math.max((v / maxHRV) * 48, 4)
+                const isLast = i === hrv30.length - 1
+                return (
+                  <div key={i} className="flex-1 rounded-sm" style={{
+                    height: `${barH}px`,
+                    background: isLast ? '#4ade80' : '#4ade8055',
+                  }} />
+                )
+              })}
+              {baselineH !== null && (
+                <div
+                  className="absolute left-0 right-0 border-t border-dashed border-white/30 pointer-events-none"
+                  style={{ bottom: `${baselineH}px` }}
+                />
+              )}
+            </div>
           </div>
         </Card>
       )}
@@ -637,22 +756,12 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
 
   const displayWeight = latest ?? null
 
-  const composition = [
-    { label: 'BMI',       value: '–',  unit: '',   sub: '',   color: '#2dd4bf' },
-    { label: 'Lean Mass', value: '–',  unit: 'kg', sub: '',   color: '#60a5fa' },
-    { label: 'Fat Mass',  value: '–',  unit: 'kg', sub: '',   color: '#fb923c' },
-    { label: 'Body Fat',  value: '–',  unit: '%',  sub: '',   color: '#facc15' },
-    { label: 'Bone Mass', value: '–',  unit: 'kg', sub: '',   color: '#9ca3af' },
-    { label: 'Water',     value: '–',  unit: '%',  sub: '',   color: '#22d3ee' },
-  ]
-
   const chartWeights = weights
   const chartMin = weights.length ? Math.min(...weights) : 0
   const chartMax = weights.length ? Math.max(...weights) : 0
 
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text="–" />
 
       {/* Hero */}
       <div className="flex flex-col gap-2">
@@ -665,25 +774,6 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
           {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)} kg` : '–'}
         </span>
       </div>
-
-      {/* Body Composition */}
-      <Card>
-        <div className="flex flex-col gap-4">
-          <span className="text-[15px] font-semibold text-white/50">Body Composition</span>
-          <div className="grid grid-cols-3 gap-x-4 gap-y-5">
-            {composition.map(c => (
-              <div key={c.label} className="flex flex-col gap-0.5">
-                <div className="flex items-baseline gap-[2px]">
-                  <span className="text-[22px] font-bold leading-none" style={{ color: c.color }}>{c.value}</span>
-                  {c.unit && <span className="text-[13px] font-semibold text-white/50">{c.unit}</span>}
-                </div>
-                <span className="text-[12px] text-white/40">{c.label}</span>
-                {c.sub && <span className="text-[12px] font-medium" style={{ color: c.color }}>{c.sub}</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
 
       {/* Trend Chart */}
       <Card>
@@ -749,22 +839,17 @@ export function ActivitySection({ rows, stepGoal = 10000 }: { rows: GezondheidsR
 
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text="–" />
       <Card>
         <div className="flex flex-col gap-4">
-          <span className="text-[15px] font-semibold text-white/50">Today's Rings</span>
-          <div className="flex justify-around">
-            <RingChart progress={todaySteps / stepGoal} color="#f97316" label="Steps"    value={`${todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} / ${stepGoal >= 1000 ? `${stepGoal / 1000}K` : stepGoal}`} />
-            <RingChart progress={0}                  color="#4ade80" label="Move"     value="– / – kcal" />
-            <RingChart progress={0}                  color="#60a5fa" label="Stand"    value="– / – hrs" />
+          <span className="text-[15px] font-semibold text-white/50">Daily Steps</span>
+          <div className="flex justify-center">
+            <RingChart progress={todaySteps / stepGoal} color="#f97316" label="Steps" value={`${todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} / ${stepGoal >= 1000 ? `${stepGoal / 1000}K` : stepGoal}`} />
           </div>
         </div>
       </Card>
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Steps"      value={todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} detail="Today" Icon={Footprints} tint="text-orange-400" />
-        <SmallCard title="Avg steps"  value={avgSteps ? avgSteps.toLocaleString('nl-NL') : '–'}   detail="7-day avg" Icon={Activity}   tint="text-blue-400"   />
-        <SmallCard title="Active cal" value="–" unit="kcal" detail="–" Icon={Flame}  tint="text-red-400"    />
-        <SmallCard title="Exercise"   value="–" unit="min"  detail="–" Icon={Timer}  tint="text-teal-400"   />
+        <SmallCard title="Steps"     value={todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} detail="Today"     Icon={Footprints} tint="text-orange-400" />
+        <SmallCard title="Avg steps" value={avgSteps ? avgSteps.toLocaleString('nl-NL') : '–'}    detail="7-day avg" Icon={Activity}   tint="text-blue-400"   />
       </div>
       {steps.length > 1 && (
         <Card>

@@ -1,0 +1,332 @@
+{
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\settings.json": {
+    "mtime": 1780604379.059911,
+    "ast_hash": "af5683cedca023035194f9ad92eb0eef",
+    "semantic_hash": "af5683cedca023035194f9ad92eb0eef"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\api\\route-plan\\route.ts": {
+    "mtime": 1780596803.6056032,
+    "ast_hash": "2ff14ab85e659dbbc38470038b8cd4d8",
+    "semantic_hash": "2ff14ab85e659dbbc38470038b8cd4d8"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\api\\scan-food\\route.ts": {
+    "mtime": 1780414634.1643858,
+    "ast_hash": "875c7af0098a82099b16dd0b5af1714e",
+    "semantic_hash": "875c7af0098a82099b16dd0b5af1714e"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\auth\\callback\\route.ts": {
+    "mtime": 1780411179.4027803,
+    "ast_hash": "cd8adca304ba120c0ad10fc6b986ddc9",
+    "semantic_hash": "cd8adca304ba120c0ad10fc6b986ddc9"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\coach\\page.tsx": {
+    "mtime": 1780256046.06766,
+    "ast_hash": "cdf71654eb6bbfcba064e287e84d6001",
+    "semantic_hash": "cdf71654eb6bbfcba064e287e84d6001"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\food\\FoodClient.tsx": {
+    "mtime": 1780598048.2937613,
+    "ast_hash": "834d19c9b668afb8c03fd5803a0cb8ca",
+    "semantic_hash": "834d19c9b668afb8c03fd5803a0cb8ca"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\food\\loading.tsx": {
+    "mtime": 1780412134.5077407,
+    "ast_hash": "1f0828c913973b6c23c3eee0099ae49d",
+    "semantic_hash": "1f0828c913973b6c23c3eee0099ae49d"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\food\\page.tsx": {
+    "mtime": 1780411904.3600392,
+    "ast_hash": "f03ace25a40a1028e89ea9283aa00a7c",
+    "semantic_hash": "f03ace25a40a1028e89ea9283aa00a7c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\activity\\page.tsx": {
+    "mtime": 1780414188.73923,
+    "ast_hash": "596f92c6e6dea183a5a3436351b73d9b",
+    "semantic_hash": "596f92c6e6dea183a5a3436351b73d9b"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\fetcher.ts": {
+    "mtime": 1780413935.8928213,
+    "ast_hash": "5646512cfd893af2b0c2a259c88b676c",
+    "semantic_hash": "5646512cfd893af2b0c2a259c88b676c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\heart\\page.tsx": {
+    "mtime": 1780414176.0608816,
+    "ast_hash": "62707ec47928a6eef766d53e4791290c",
+    "semantic_hash": "62707ec47928a6eef766d53e4791290c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\page.tsx": {
+    "mtime": 1780596803.6106448,
+    "ast_hash": "0451b412ffe40d7f677cf86a2045cba7",
+    "semantic_hash": "0451b412ffe40d7f677cf86a2045cba7"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\recovery\\page.tsx": {
+    "mtime": 1780414170.987234,
+    "ast_hash": "29e42b104d8c86e5c572c451980d5d31",
+    "semantic_hash": "29e42b104d8c86e5c572c451980d5d31"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\sections.tsx": {
+    "mtime": 1780435267.3120663,
+    "ast_hash": "e564a607ab12aa0ae162665a4d116509",
+    "semantic_hash": "e564a607ab12aa0ae162665a4d116509"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\sleep\\page.tsx": {
+    "mtime": 1780414165.7950296,
+    "ast_hash": "4fa8711f90a961a6f254540fb07ec4f2",
+    "semantic_hash": "4fa8711f90a961a6f254540fb07ec4f2"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\health\\weight\\page.tsx": {
+    "mtime": 1780414182.7349477,
+    "ast_hash": "a9a019d9c0e69e8958d42166a958afc2",
+    "semantic_hash": "a9a019d9c0e69e8958d42166a958afc2"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\layout.tsx": {
+    "mtime": 1780421799.42487,
+    "ast_hash": "c1979248dd86e412dcfe29e459c573f4",
+    "semantic_hash": "c1979248dd86e412dcfe29e459c573f4"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\loading.tsx": {
+    "mtime": 1780412125.735443,
+    "ast_hash": "e1b3d47fc1c3571c2e8695d09ad4bbb4",
+    "semantic_hash": "e1b3d47fc1c3571c2e8695d09ad4bbb4"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\login\\page.tsx": {
+    "mtime": 1780596803.6142366,
+    "ast_hash": "2a4e3d3d564b4e5b41c926911a6cabb4",
+    "semantic_hash": "2a4e3d3d564b4e5b41c926911a6cabb4"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\page.tsx": {
+    "mtime": 1780598349.8028483,
+    "ast_hash": "d6ce08e02b25b259bd464c1a862ff85f",
+    "semantic_hash": "d6ce08e02b25b259bd464c1a862ff85f"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\schedule\\page.tsx": {
+    "mtime": 1780256070.679659,
+    "ast_hash": "f0756fbbef7f0596c6ebd5f675bd613f",
+    "semantic_hash": "f0756fbbef7f0596c6ebd5f675bd613f"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\cycling\\page.tsx": {
+    "mtime": 1780506096.8621428,
+    "ast_hash": "5b391ed1f2b0d2b7ecad66bec231be46",
+    "semantic_hash": "5b391ed1f2b0d2b7ecad66bec231be46"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\fetcher.ts": {
+    "mtime": 1780435881.0895646,
+    "ast_hash": "cff509e6422b5d43a30cd5a71cad55f9",
+    "semantic_hash": "cff509e6422b5d43a30cd5a71cad55f9"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\history\\page.tsx": {
+    "mtime": 1780506096.864604,
+    "ast_hash": "4161ac8dc1d4e1f2713166137d4b5730",
+    "semantic_hash": "4161ac8dc1d4e1f2713166137d4b5730"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\page.tsx": {
+    "mtime": 1780573259.3803544,
+    "ast_hash": "b43372baaae12a44b674cebb04f6952e",
+    "semantic_hash": "b43372baaae12a44b674cebb04f6952e"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\performance\\page.tsx": {
+    "mtime": 1780596803.6158888,
+    "ast_hash": "313ae87df8c7fb270f67fe45f573733b",
+    "semantic_hash": "313ae87df8c7fb270f67fe45f573733b"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\running\\page.tsx": {
+    "mtime": 1780506096.8668182,
+    "ast_hash": "177dcbe8efc401fedb3a8684259ab9c0",
+    "semantic_hash": "177dcbe8efc401fedb3a8684259ab9c0"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\sections.tsx": {
+    "mtime": 1780596803.6169443,
+    "ast_hash": "1f7c0cb19d9c1130cedefdddabe841e4",
+    "semantic_hash": "1f7c0cb19d9c1130cedefdddabe841e4"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\session\\RouteMap.tsx": {
+    "mtime": 1780506096.8696496,
+    "ast_hash": "4550fd3c8ebe941b8de8d59205c00ea1",
+    "semantic_hash": "4550fd3c8ebe941b8de8d59205c00ea1"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\session\\page.tsx": {
+    "mtime": 1780596803.6169443,
+    "ast_hash": "9984b9593bdea11f198b54a9a3aa395b",
+    "semantic_hash": "9984b9593bdea11f198b54a9a3aa395b"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\app\\training\\strength\\page.tsx": {
+    "mtime": 1780506096.8720622,
+    "ast_hash": "39b3bae869ac504ca3bdf996cafab7cd",
+    "semantic_hash": "39b3bae869ac504ca3bdf996cafab7cd"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\BarcodeScanner.tsx": {
+    "mtime": 1780598145.8054736,
+    "ast_hash": "a7978bcb9357baa5b1b95a09a712ae13",
+    "semantic_hash": "a7978bcb9357baa5b1b95a09a712ae13"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\BottomNav.tsx": {
+    "mtime": 1780596803.6204753,
+    "ast_hash": "86ebccc9aba9e80de3678182b490d725",
+    "semantic_hash": "86ebccc9aba9e80de3678182b490d725"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\DataProvider.tsx": {
+    "mtime": 1780506096.8744576,
+    "ast_hash": "128d83927e0512f4b45c97831a33451c",
+    "semantic_hash": "128d83927e0512f4b45c97831a33451c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\DetailScreen.tsx": {
+    "mtime": 1780413288.22623,
+    "ast_hash": "76a30e1b64122f06983a28ee5e3785c9",
+    "semantic_hash": "76a30e1b64122f06983a28ee5e3785c9"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\ErrorBoundary.tsx": {
+    "mtime": 1780421793.804804,
+    "ast_hash": "99a3e012eabb1fe5554dcc5f586d387e",
+    "semantic_hash": "99a3e012eabb1fe5554dcc5f586d387e"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\HealthDetailScreen.tsx": {
+    "mtime": 1780414159.8194885,
+    "ast_hash": "cf30b3f11ee2ee28c2d8ce1f9bb506e9",
+    "semantic_hash": "cf30b3f11ee2ee28c2d8ce1f9bb506e9"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\PremiumScreen.tsx": {
+    "mtime": 1780413014.8129702,
+    "ast_hash": "71aedde0b64b989c045c35668fef4104",
+    "semantic_hash": "71aedde0b64b989c045c35668fef4104"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\ProfileButton.tsx": {
+    "mtime": 1780596803.6220744,
+    "ast_hash": "b9c05527aae4d61c28d47548b8bf74cc",
+    "semantic_hash": "b9c05527aae4d61c28d47548b8bf74cc"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\TrainingDetailScreen.tsx": {
+    "mtime": 1780573259.3873084,
+    "ast_hash": "453878c1f27d68e390be1de5a1217264",
+    "semantic_hash": "453878c1f27d68e390be1de5a1217264"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\components\\ui.tsx": {
+    "mtime": 1780506096.8776848,
+    "ast_hash": "e8ab38917ea7d394dd3a498a46b581be",
+    "semantic_hash": "e8ab38917ea7d394dd3a498a46b581be"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\lib\\logError.ts": {
+    "mtime": 1780421782.0072656,
+    "ast_hash": "6f2eecde50f026ff0439caa8ca285f1a",
+    "semantic_hash": "6f2eecde50f026ff0439caa8ca285f1a"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\lib\\supabase-server.ts": {
+    "mtime": 1780411409.7157786,
+    "ast_hash": "553003321a13d3746bda6de741e33174",
+    "semantic_hash": "553003321a13d3746bda6de741e33174"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\lib\\supabase.ts": {
+    "mtime": 1780411403.8802893,
+    "ast_hash": "ac8c83fd4f65eb7f78b5d82a918d55f5",
+    "semantic_hash": "ac8c83fd4f65eb7f78b5d82a918d55f5"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\middleware.ts": {
+    "mtime": 1780419105.3155034,
+    "ast_hash": "29bd0a7bffb7952f630f30b6eee24d0c",
+    "semantic_hash": "29bd0a7bffb7952f630f30b6eee24d0c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\next-env.d.ts": {
+    "mtime": 1780259316.571448,
+    "ast_hash": "90426577ad8f38459f3e566411c85589",
+    "semantic_hash": "90426577ad8f38459f3e566411c85589"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\next.config.ts": {
+    "mtime": 1780255526.8773296,
+    "ast_hash": "00e1e46b44cfb2339e9bc7e470ed75b8",
+    "semantic_hash": "00e1e46b44cfb2339e9bc7e470ed75b8"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\package.json": {
+    "mtime": 1780506096.8820176,
+    "ast_hash": "e2711250f1dfcc4cf2964ee7d8357ccd",
+    "semantic_hash": "e2711250f1dfcc4cf2964ee7d8357ccd"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\postcss.config.mjs": {
+    "mtime": 1780255530.177263,
+    "ast_hash": "9b6603c7cd7650cffc6036e05548e873",
+    "semantic_hash": "9b6603c7cd7650cffc6036e05548e873"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\tailwind.config.ts": {
+    "mtime": 1780255535.5092366,
+    "ast_hash": "5ef55ab5f11d77a499b049a144380ddb",
+    "semantic_hash": "5ef55ab5f11d77a499b049a144380ddb"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\tsconfig.json": {
+    "mtime": 1780255522.7450283,
+    "ast_hash": "3845ba465b50728d69e9dc9c327d8a56",
+    "semantic_hash": "3845ba465b50728d69e9dc9c327d8a56"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\CLAUDE.md": {
+    "mtime": 1780604379.0450833,
+    "ast_hash": "817fe671013b35ae0bc9301dfe449a87",
+    "semantic_hash": "817fe671013b35ae0bc9301dfe449a87"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\SKILL.md": {
+    "mtime": 1780604379.040671,
+    "ast_hash": "c0ac08140ebbce36e6562f1a8d3a97b9",
+    "semantic_hash": "c0ac08140ebbce36e6562f1a8d3a97b9"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\add-watch.md": {
+    "mtime": 1780604076.5582602,
+    "ast_hash": "0df0589623217ca38a12bdcabfb42f4c",
+    "semantic_hash": "0df0589623217ca38a12bdcabfb42f4c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\exports.md": {
+    "mtime": 1780604076.559898,
+    "ast_hash": "7fb1a81aca17a462db70684a324fcfb0",
+    "semantic_hash": "7fb1a81aca17a462db70684a324fcfb0"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\extraction-spec.md": {
+    "mtime": 1780604076.559898,
+    "ast_hash": "24808b03abfeaf5f6435bb69c0125b2c",
+    "semantic_hash": "24808b03abfeaf5f6435bb69c0125b2c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\github-and-merge.md": {
+    "mtime": 1780604076.559898,
+    "ast_hash": "cde13df085e4c492aeb7ba298a996d0d",
+    "semantic_hash": "cde13df085e4c492aeb7ba298a996d0d"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\hooks.md": {
+    "mtime": 1780604076.559898,
+    "ast_hash": "3f545db6ce646650bb9de588f5512a27",
+    "semantic_hash": "3f545db6ce646650bb9de588f5512a27"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\query.md": {
+    "mtime": 1780604076.5647721,
+    "ast_hash": "c2a8e798674a81b02aa9975f43023819",
+    "semantic_hash": "c2a8e798674a81b02aa9975f43023819"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\transcribe.md": {
+    "mtime": 1780604076.5652776,
+    "ast_hash": "70f6aa30d6211f3a2c7e9fc45479f50c",
+    "semantic_hash": "70f6aa30d6211f3a2c7e9fc45479f50c"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.claude\\skills\\graphify\\references\\update.md": {
+    "mtime": 1780604076.5667603,
+    "ast_hash": "735932eaa4f0c8fef9566c538ae3e5f8",
+    "semantic_hash": "735932eaa4f0c8fef9566c538ae3e5f8"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.playwright-mcp\\page-2026-06-03T17-15-40-373Z.yml": {
+    "mtime": 1780506940.3792453,
+    "ast_hash": "b9da966c6d6a24327cd9c626dafab8a1",
+    "semantic_hash": "b9da966c6d6a24327cd9c626dafab8a1"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.playwright-mcp\\page-2026-06-03T17-16-12-317Z.yml": {
+    "mtime": 1780506972.3231812,
+    "ast_hash": "9851a4daa9218413edbc06fb98a1b416",
+    "semantic_hash": "9851a4daa9218413edbc06fb98a1b416"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\CLAUDE.md": {
+    "mtime": 1780604379.0568259,
+    "ast_hash": "50d8064b1a0eeafb2243a1158cdce8bb",
+    "semantic_hash": "50d8064b1a0eeafb2243a1158cdce8bb"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.playwright-mcp\\page-2026-06-03T17-15-44-426Z.png": {
+    "mtime": 1780506944.4316845,
+    "ast_hash": "7c405a398e56ba66b3e84598f0b89050",
+    "semantic_hash": "7c405a398e56ba66b3e84598f0b89050"
+  },
+  "C:\\Users\\Gebruiker\\Desktop\\Floris school\\grantie\\web\\.playwright-mcp\\page-2026-06-03T17-16-20-463Z.png": {
+    "mtime": 1780506980.4694998,
+    "ast_hash": "da9330f603eb3d8ed6595521383401b7",
+    "semantic_hash": "da9330f603eb3d8ed6595521383401b7"
+  }
+}

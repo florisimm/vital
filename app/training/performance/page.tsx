@@ -10,6 +10,7 @@ import {
   computeRaceProjections, startOfWeek, formatDuration,
   type Activity, type HevyWorkout,
 } from '../sections'
+import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 
 function isRun(a: Activity) { return a.sport_type?.toLowerCase().includes('run') ?? false }
 function isRide(a: Activity) { const t = a.sport_type?.toLowerCase() ?? ''; return t.includes('ride') || t.includes('cycl') }
@@ -61,6 +62,7 @@ function StatCard({ label, value, unit, sub, color = 'text-white' }: {
 export default function PerformancePage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: strengthRefs = { squat: 140, bench: 100, deadlift: 180 } } = useSWR('user-settings-strength', fetchStrengthSettings, { revalidateOnFocus: false, dedupingInterval: 300_000 })
+  const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', null, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const activities: Activity[] = data?.activities ?? []
   const hevy: HevyWorkout[] = data?.hevy ?? []
 
@@ -71,12 +73,16 @@ export default function PerformancePage() {
   const lifts = extractKeyLifts(hevy)
   const strScore = computeStrengthScore(hevy, strengthRefs)
 
-  // Recovery
+  // Readiness: physiology (HRV/RHR/sleep) when available, otherwise training-load fallback
+  const physiologyReadiness = computePhysiologyReadiness(healthRows)
   const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
   const hoursSince = allTimes.length ? Math.max(0, (Date.now() - new Date(allTimes[0]).getTime()) / 3600000) : null
-  const recoveryPct = hoursSince !== null
+  const trainingLoadPct = hoursSince !== null
     ? hoursSince < 12 ? 45 : hoursSince < 24 ? 65 : hoursSince < 48 ? 82 : 95
     : 95
+  const recoveryPct = physiologyReadiness.score !== null
+    ? Math.round(physiologyReadiness.score * 0.65 + trainingLoadPct * 0.35)
+    : trainingLoadPct
 
   // Consistency (14-day)
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
@@ -142,10 +148,10 @@ export default function PerformancePage() {
       {/* Recovery + Consistency */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard
-          label="Recovery"
+          label="Readiness"
           value={`${recoveryPct}%`}
-          sub={hoursSince !== null ? (hoursSince < 1 ? 'Just now' : `Last workout ${Math.round(hoursSince)}h ago`) : 'No recent workout'}
-          color={recoveryPct >= 85 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
+          sub={physiologyReadiness.score !== null ? physiologyReadiness.label : (hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent workout')}
+          color={recoveryPct >= 80 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
         />
         <StatCard
           label="Consistency"

@@ -5,6 +5,7 @@ import { Sparkles, ChevronRight } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { SectionHeader } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
+import { computePhysiologyReadiness, computeHRVBaseline, computeSleepScore, type HealthRow } from '@/lib/readiness'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -447,6 +448,62 @@ function buildBriefing(insights: Insight[], today: any): string {
 
 // ─── Insight Card ─────────────────────────────────────────────────────────────
 
+// ─── Vitals Row ───────────────────────────────────────────────────────────────
+
+function VitalTile({ label, value, note, color }: { label: string; value: string; note: string; color: string }) {
+  return (
+    <div className="flex flex-col gap-1.5 px-3 py-3 rounded-[18px] border border-white/[0.09]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.08em]">{label}</span>
+      <span className="text-[22px] font-bold text-white leading-none">{value}</span>
+      <span className="text-[11px] font-semibold leading-none" style={{ color }}>{note}</span>
+    </div>
+  )
+}
+
+function VitalsRow({ rows }: { rows: HealthRow[] }) {
+  const readiness  = computePhysiologyReadiness(rows)
+  const latestSleep = rows.find(r => r.slaap_minuten != null)
+  const sleepScore = latestSleep ? computeSleepScore(latestSleep) : null
+  const hrv        = rows.find(r => r.hrv_rmssd != null)?.hrv_rmssd ?? null
+  const hrvBaseline = computeHRVBaseline(rows)
+
+  const sleepLabel = sleepScore === null ? '–'
+    : sleepScore >= 80 ? 'Good' : sleepScore >= 60 ? 'Fair' : 'Poor'
+  const sleepColor = sleepScore === null ? 'rgba(255,255,255,0.3)'
+    : sleepScore >= 80 ? '#4ade80' : sleepScore >= 60 ? '#fb923c' : '#f87171'
+
+  const hrvNote = hrvBaseline.deviationPct !== null
+    ? `${hrvBaseline.deviationPct > 0 ? '+' : ''}${hrvBaseline.deviationPct}% baseline`
+    : 'ms'
+  const hrvColor = hrvBaseline.deviationPct === null ? 'rgba(255,255,255,0.3)'
+    : hrvBaseline.deviationPct >= -5 ? '#4ade80' : '#fb923c'
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <VitalTile
+        label="Readiness"
+        value={readiness.score !== null ? String(readiness.score) : '–'}
+        note={readiness.label}
+        color={readiness.color}
+      />
+      <VitalTile
+        label="Sleep"
+        value={sleepScore !== null ? String(sleepScore) : '–'}
+        note={sleepLabel}
+        color={sleepColor}
+      />
+      <VitalTile
+        label="HRV"
+        value={hrv !== null ? String(Math.round(hrv)) : '–'}
+        note={hrvNote}
+        color={hrvColor}
+      />
+    </div>
+  )
+}
+
+// ─── Status dot ───────────────────────────────────────────────────────────────
+
 const STATUS_DOT: Record<InsightStatus, string> = {
   good: 'bg-teal-400',
   warning: 'bg-orange-400',
@@ -596,7 +653,7 @@ export default function TodayPage() {
     dedupingInterval: 60_000,
   })
 
-  const { data: gezondheid } = useSWR<any[]>('health-gezondheid', null)
+  const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const { data: training } = useSWR<any>('training', null)
 
   const calendarEvents = data?.calendarEvents ?? []
@@ -670,6 +727,8 @@ export default function TodayPage() {
         workoutTimePassed={workoutTimePassed}
         isTomorrow={displayIsTomorrow}
       />
+
+      {gezondheid && gezondheid.length > 0 && <VitalsRow rows={gezondheid} />}
 
       {briefing && <DailyBriefingCard text={briefing} />}
 

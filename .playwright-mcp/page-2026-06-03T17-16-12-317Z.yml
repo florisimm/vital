@@ -1,0 +1,40 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - paragraph [ref=e9]: Welcome back
+      - heading "Vital" [level=1] [ref=e10]
+      - paragraph [ref=e11]: Your AI fitness companion
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - img [ref=e15]
+          - textbox "Email address" [ref=e18]: pgztdtvtdh@privaterelay.appleid.com
+        - generic [ref=e19]:
+          - img [ref=e20]
+          - textbox "Password" [ref=e23]: Floris2005!
+      - paragraph [ref=e53]: Invalid login credentials
+      - button "Sign in" [ref=e24] [cursor=pointer]
+      - paragraph [ref=e25]: Vital — AI Fitness & Health Coaching
+  - navigation [ref=e27]:
+    - link "Today" [ref=e28] [cursor=pointer]:
+      - /url: /
+      - img [ref=e29]
+      - generic [ref=e32]: Today
+    - link "Coach" [ref=e33] [cursor=pointer]:
+      - /url: /coach
+      - img [ref=e34]
+      - generic [ref=e36]: Coach
+    - link "Training" [ref=e37] [cursor=pointer]:
+      - /url: /training
+      - img [ref=e38]
+      - generic [ref=e42]: Training
+    - link "Health" [ref=e43] [cursor=pointer]:
+      - /url: /health
+      - img [ref=e44]
+      - generic [ref=e46]: Health
+    - link "Food" [ref=e47] [cursor=pointer]:
+      - /url: /food
+      - img [ref=e48]
+      - generic [ref=e51]: Food
+  - alert [ref=e52]
