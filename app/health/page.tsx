@@ -35,33 +35,12 @@ function FitbitSyncHandler() {
   const router = useRouter()
 
   useEffect(() => {
-    // Handle redirect after OAuth connect
+    // Sync immediately after OAuth connect; periodic auto-sync lives in DataProvider
     if (searchParams.get('fitbit') === 'connected') {
       fetch('/api/fitbit/sync', { method: 'POST' })
         .then(() => mutate('health-gezondheid'))
       router.replace('/health')
-      return
     }
-
-    // Auto-sync once per day when Health page opens
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('fitbit_tokens')
-        .select('last_synced_at')
-        .eq('user_id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (!data) return
-          const lastSync = data.last_synced_at ? new Date(data.last_synced_at) : null
-          const hoursSince = lastSync ? (Date.now() - lastSync.getTime()) / 3_600_000 : Infinity
-          if (hoursSince >= 20) {
-            fetch('/api/fitbit/sync', { method: 'POST' })
-              .then(() => mutate('health-gezondheid'))
-          }
-        })
-    })
   }, [searchParams, router])
 
   return null

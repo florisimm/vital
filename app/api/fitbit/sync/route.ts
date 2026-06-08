@@ -209,18 +209,18 @@ export async function POST(_req: NextRequest) {
     ensure(date).stappen = total
   }
 
-  const syncedDates = Object.values(rows)
-    .map(r => r.datum as string)
-    .filter(d => d >= cutoffDate)
-    .sort()
-
   const upsertRows = Object.values(rows)
     .filter(r => (r.datum as string) >= cutoffDate)
-    .map(r => ({ ...r, user_id: user.id }))
+    // Strip null/undefined so an upsert never overwrites existing data with blanks.
+    // Per-row upsert: ON CONFLICT updates only the provided columns, preserving the rest.
+    .map(r => Object.fromEntries(Object.entries(r).filter(([, v]) => v != null)) as Record<string, unknown>)
+    .filter(r => Object.keys(r).length > 1) // keep rows that have data beyond just `datum`
 
-  if (upsertRows.length > 0) {
-    await supabase.from('gezondheid').upsert(upsertRows, { onConflict: 'user_id,datum' })
+  for (const row of upsertRows) {
+    await supabase.from('gezondheid').upsert({ ...row, user_id: user.id }, { onConflict: 'user_id,datum' })
   }
+
+  const syncedDates = upsertRows.map(r => r.datum as string).sort()
 
   await supabase.from('fitbit_tokens')
     .update({ last_synced_at: new Date().toISOString() })

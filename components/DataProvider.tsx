@@ -33,7 +33,7 @@ export function DataProvider() {
         supabase.from('products').select('id,name,brand,kcal,protein,carbs,fat,servings').or(`user_id.eq.${user.id},user_id.is.null`).order('name'),
         supabase.from('weather_cache').select('*').eq('id', 'current').single(),
         supabase.from('strava_activities').select('name,sport_type,start_date,distance,moving_time').eq('user_id', user.id).gte('start_date', new Date().toISOString()).order('start_date', { ascending: true }).limit(1).maybeSingle(),
-        supabase.from('gezondheid').select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min').eq('user_id', user.id).order('datum', { ascending: false }).limit(30),
+        supabase.from('gezondheid').select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min').eq('user_id', user.id).order('datum', { ascending: false }).limit(30),
         supabase.from('strava_activities').select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules').eq('user_id', user.id).gte('start_date', thirtyDaysAgo).order('start_date', { ascending: false }),
         supabase.from('hevy_workouts').select('id,title,start_time,end_time,duration,volume_kg,sets,exercises').eq('user_id', user.id).gte('start_time', thirtyDaysAgo).order('start_time', { ascending: false }),
         supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
@@ -86,6 +86,34 @@ export function DataProvider() {
     }
 
     prefetch()
+  }, [])
+
+  // Keep health data fresh automatically — no manual sync button.
+  // Runs on every app open and re-checks hourly while the app stays open.
+  useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+
+    async function autoSync() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+      const { data: tok } = await supabase.from('fitbit_tokens').select('last_synced_at').eq('user_id', user.id).maybeSingle()
+      if (!tok || cancelled) return // not connected
+      const last = tok.last_synced_at ? new Date(tok.last_synced_at).getTime() : 0
+      if ((Date.now() - last) / 3_600_000 < 3) return // synced within the last 3h
+
+      await fetch('/api/fitbit/sync', { method: 'POST' }).catch(() => {/* silent */})
+      if (cancelled) return
+      const { data: rows } = await supabase
+        .from('gezondheid')
+        .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min')
+        .eq('user_id', user.id).order('datum', { ascending: false }).limit(30)
+      if (!cancelled) mutate('health-gezondheid', rows ?? [], false)
+    }
+
+    autoSync()
+    const id = setInterval(autoSync, 60 * 60 * 1000) // hourly while app is open
+    return () => { cancelled = true; clearInterval(id) }
   }, [])
 
   return null

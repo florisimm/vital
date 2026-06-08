@@ -37,7 +37,6 @@ export function ProfileButton() {
   const [notifStatus, setNotifStatus] = useState<NotifStatus>('default')
   const [userId, setUserId] = useState<string | null>(null)
   const [confirmDisconnect, setConfirmDisconnect] = useState<'strava' | 'google' | 'fitbit' | null>(null)
-  const [fitbitSyncing, setFitbitSyncing] = useState(false)
   const [editingAccount, setEditingAccount] = useState(false)
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
@@ -155,13 +154,6 @@ export function ProfileButton() {
   function connectFitbit() {
     if (!userId) return
     window.location.href = `/api/fitbit/connect?user_id=${userId}`
-  }
-
-  async function syncFitbit() {
-    setFitbitSyncing(true)
-    await fetch('/api/fitbit/sync', { method: 'POST' })
-    setFitbitSyncing(false)
-    mutate('health-gezondheid')
   }
 
   async function handleDisconnect() {
@@ -546,14 +538,9 @@ export function ProfileButton() {
                     </button>
                   )}
                   {services?.fitbit === true && (
-                    <div className="flex items-center gap-3">
-                      <button onClick={syncFitbit} disabled={fitbitSyncing} className="text-[15px] font-semibold text-teal-400 active:opacity-60 disabled:opacity-40">
-                        {fitbitSyncing ? 'Syncing…' : 'Sync'}
-                      </button>
-                      <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[15px] font-semibold text-green-400 active:opacity-60">
-                        Connected
-                      </button>
-                    </div>
+                    <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[15px] font-semibold text-green-400 active:opacity-60">
+                      Connected
+                    </button>
                   )}
                   {services?.fitbit === undefined && (
                     <span className="text-[15px] text-white/30">…</span>
