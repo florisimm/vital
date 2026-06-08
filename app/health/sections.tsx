@@ -508,11 +508,14 @@ export function SleepSection() {
 export function RecoverySection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
 
-  const latest = rows[0]
-  const hrv = latest?.hrv_rmssd ?? null
-  const restingHR = latest?.hartslag_rust ?? null
-  const sleepScore = latest ? computeSleepScore(latest) : null
-  const sleepMin = latest?.slaap_minuten ?? null
+  const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
+  const latestWithHR    = rows.find(r => r.hartslag_rust  != null) ?? null
+  const latestWithHRV   = rows.find(r => r.hrv_rmssd      != null) ?? null
+
+  const hrv        = latestWithHRV?.hrv_rmssd ?? null
+  const restingHR  = latestWithHR?.hartslag_rust ?? null
+  const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
+  const sleepMin   = latestWithSleep?.slaap_minuten ?? null
 
   // Readiness score: sleep 40% (most actionable) + HRV 35% + resting HR 25%.
   // HRV uses a hyperbolic curve (half-saturation at 50ms) instead of a hard cap

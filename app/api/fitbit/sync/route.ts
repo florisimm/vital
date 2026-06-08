@@ -180,7 +180,10 @@ export async function POST(_req: NextRequest) {
       const min = localMinutes(physTime, utcOff)
       if (min >= 10 * 60 && min < 22 * 60) continue  // skip 10:00–22:00
     }
-    const date = h.sampleTime?.civilTime?.date ? dateStr(h.sampleTime.civilTime.date) : localDate(physTime ?? '', utcOff)
+    const date = h.sampleTime?.civilTime?.date
+      ? dateStr(h.sampleTime.civilTime.date)
+      : physTime ? localDate(physTime, utcOff) : null
+    if (!date) continue
     ;(hrvAgg[date] ??= []).push(v)
   }
   for (const [date, vals] of Object.entries(hrvAgg)) {

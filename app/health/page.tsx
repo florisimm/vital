@@ -8,7 +8,7 @@ import { BedDouble, Activity, Heart, Scale, Footprints } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
-import type { GezondheidsRow } from './sections'
+import { computeSleepScore, type GezondheidsRow } from './sections'
 
 async function fetchHealth() {
   const supabase = createClient()
@@ -52,11 +52,17 @@ export default function HealthPage() {
   })
 
   const latest = rows[0]
-  const steps = latest?.stappen ?? null
-  const weight = latest?.gewicht ? Number(latest.gewicht).toFixed(1) : null
-  const restingHR = latest?.hartslag_rust ?? null
-  const hrv = latest?.hrv_rmssd ?? null
-  const sleepScore = latest?.slaap_score ?? null
+  // Use the most recent row that actually has each metric — today's row may exist
+  // but be incomplete (e.g. no sleep yet, RHR not computed until end of day).
+  const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
+  const latestWithHR    = rows.find(r => r.hartslag_rust  != null) ?? null
+  const latestWithHRV   = rows.find(r => r.hrv_rmssd      != null) ?? null
+
+  const steps      = latest?.stappen ?? null
+  const weight     = latest?.gewicht ? Number(latest.gewicht).toFixed(1) : null
+  const restingHR  = latestWithHR?.hartslag_rust ?? null
+  const hrv        = latestWithHRV?.hrv_rmssd ?? null
+  const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
 
   const weightRows = rows.filter(r => r.gewicht != null)
   const latestWeight = weightRows[0] ? Number(weightRows[0].gewicht) : null
