@@ -92,6 +92,11 @@ export default function HealthPage() {
 
   const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 
+  function switchTab(key: string) {
+    setActiveTab(key)
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
   const latest          = rows[0]
   const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
   const latestWithHR    = rows.find(r => r.hartslag_rust  != null) ?? null
@@ -177,7 +182,7 @@ export default function HealthPage() {
         {TABS.map(({ label, key }) => (
           <button
             key={key}
-            onClick={() => setActiveTab(key)}
+            onClick={() => switchTab(key)}
             className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
             style={activeTab === key
               ? { background: 'white', color: 'black' }
