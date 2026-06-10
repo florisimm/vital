@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import useSWR from 'swr'
 import { Sparkles } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
@@ -375,7 +376,6 @@ function computeInsights(today: any, gezondheid: any[] | undefined, training: an
   ]
     .filter((c): c is Insight => c !== null)
     .sort((a, b) => b.priority - a.priority)
-    .slice(0, 4)
 }
 
 // ─── Daily briefing — synthesises signals not shown in the insight cards ───────
@@ -751,11 +751,14 @@ export default function TodayPage() {
   const displayTomorrow    = allTodayDone ? null : tomorrowWorkout
   const displayIsTomorrow  = allTodayDone && !!tomorrowWorkout
 
+  const [showAllInsights, setShowAllInsights] = useState(false)
+
   const rows = gezondheid ?? []
   const readiness = computePhysiologyReadiness(rows)
 
   const insights = computeInsights(data, gezondheid, training)
   const briefing = buildBriefing(insights, data, rows)
+  const visibleInsights = showAllInsights ? insights : insights.slice(0, 4)
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
@@ -784,10 +787,18 @@ export default function TodayPage() {
         <>
           <SectionHeader title="Key Insights" />
           <div className="grid grid-cols-2 gap-3">
-            {insights.map(insight => (
+            {visibleInsights.map(insight => (
               <InsightCard key={insight.id} insight={insight} />
             ))}
           </div>
+          {insights.length > 4 && (
+            <button
+              onClick={() => setShowAllInsights(v => !v)}
+              className="w-full py-3 text-[14px] font-semibold text-white/40 hover:text-white/60 transition-colors"
+            >
+              {showAllInsights ? 'Show less' : `Show all ${insights.length} insights`}
+            </button>
+          )}
         </>
       )}
 
