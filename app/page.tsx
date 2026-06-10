@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { Sparkles, ChevronRight } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { SectionHeader } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
@@ -46,7 +46,6 @@ async function fetchTodayData() {
   const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
   const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit', 'yoga', 'padel', 'hockey', 'basketbal', 'wielrennen']
   const upcomingCalendar = (calendarEvents ?? []).filter((e: any) => {
-    // Date-only strings (no time) must be parsed as local midnight, not UTC midnight
     const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
     if (t < startOfToday) return false
     return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
@@ -61,7 +60,7 @@ function formatSubtitle() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()
 }
 
-// ─── Insight builders (one per category) ─────────────────────────────────────
+// ─── Insight builders ─────────────────────────────────────────────────────────
 
 function nutritionInsight(today: any): Insight | null {
   const foodLog = today?.foodLog ?? []
@@ -74,7 +73,6 @@ function nutritionInsight(today: any): Insight | null {
   const remaining = Math.max(0, targetProtein - totalProtein)
   const surplus = Math.round(totalProtein - targetProtein)
 
-  // Project end-of-day pace (active window 6:00–24:00)
   const hour = new Date().getHours()
   const hoursElapsed = Math.max(1, hour - 6)
   const projected = Math.round(totalProtein * (18 / hoursElapsed))
@@ -113,6 +111,49 @@ function nutritionInsight(today: any): Insight | null {
     trend,
     href: '/food',
     priority: 75 + (1 - Math.min(pct, 1)) * 20,
+  }
+}
+
+function kcalInsight(today: any): Insight | null {
+  const foodLog = today?.foodLog ?? []
+  const settings = today?.settings
+  if (!settings || foodLog.length === 0) return null
+
+  const totalKcal = Math.round(foodLog.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0))
+  const targetKcal = Number(settings.macro_kcal ?? 2000)
+  if (targetKcal <= 0) return null
+
+  const pct = totalKcal / targetKcal
+  const remaining = Math.max(0, targetKcal - totalKcal)
+  const surplus = Math.round(totalKcal - targetKcal)
+
+  let status: InsightStatus
+  let explanation: string
+
+  if (pct >= 1.15) {
+    status = 'warning'
+    explanation = `${surplus} kcal over target`
+  } else if (pct >= 0.9) {
+    status = 'good'
+    explanation = 'Calorie goal on track'
+  } else if (pct >= 0.5) {
+    status = 'warning'
+    explanation = `${Math.round(remaining)} kcal to go`
+  } else {
+    status = 'alert'
+    explanation = `Well below target — eat more`
+  }
+
+  return {
+    id: 'kcal',
+    title: 'Calories',
+    value: String(totalKcal),
+    unit: `/ ${targetKcal}`,
+    status,
+    explanation,
+    trend: `${Math.round(pct * 100)}% of daily goal`,
+    href: '/food',
+    priority: 60,
   }
 }
 
@@ -205,38 +246,6 @@ function activityInsight(today: any): Insight | null {
   }
 }
 
-function weightInsight(gezondheid: any[]): Insight | null {
-  const withWeight = (gezondheid ?? []).filter((g: any) => g.gewicht && Number(g.gewicht) > 0)
-  if (withWeight.length < 2) return null
-
-  const latest = withWeight[0]
-  const current = Number(latest.gewicht)
-
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
-  const oldEntry = withWeight.find((g: any) => new Date(g.datum) <= sevenDaysAgo) ?? withWeight[withWeight.length - 1]
-  const daysDiff = Math.max(1, (new Date(latest.datum).getTime() - new Date(oldEntry.datum).getTime()) / 86400000)
-  const dailyDelta = (current - Number(oldEntry.gewicht)) / daysDiff
-  const projected7 = current + dailyDelta * 7
-
-  const trend = Math.abs(dailyDelta) < 0.02
-    ? 'Weight stable'
-    : dailyDelta < 0
-    ? `↓ ${Math.abs(dailyDelta * 7).toFixed(1)}kg expected in 7 days`
-    : `↑ ${(dailyDelta * 7).toFixed(1)}kg expected in 7 days`
-
-  return {
-    id: 'weight',
-    title: 'Weight',
-    value: current.toFixed(1),
-    unit: 'kg',
-    status: 'neutral',
-    explanation: `In 7 days: ~${projected7.toFixed(1)} kg`,
-    trend,
-    href: '/health/weight',
-    priority: 55,
-  }
-}
-
 function weatherInsight(weather: any): Insight | null {
   if (!weather) return null
 
@@ -246,7 +255,6 @@ function weatherInsight(weather: any): Insight | null {
   const precip = Number(weather.precipitation)
   const uv = Number(weather.uv_index_max)
 
-  // Only surface weather when it has meaningful impact on training
   const hasImpact = code >= 95 || precip > 3 || wind > 25 || temp > 28 || temp < 0 || uv > 7
   if (!hasImpact) return null
 
@@ -275,7 +283,7 @@ function weatherInsight(weather: any): Insight | null {
     unit: '',
     status,
     explanation,
-    priority: 20,
+    priority: status === 'alert' ? 90 : 20,
   }
 }
 
@@ -301,16 +309,9 @@ function calendarInsight(calendarEvents: any[], todayHevy: any[], todayActivitie
 
   const parseEventDate = (e: any) => e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
 
-  const todayEvents = calendarEvents.filter(e => {
-    const d = parseEventDate(e)
-    return d >= todayStart && d < tomorrowStart
-  })
-  const tomorrowEvents = calendarEvents.filter(e => {
-    const d = parseEventDate(e)
-    return d >= tomorrowStart && d < dayAfterStart
-  })
+  const todayEvents = calendarEvents.filter(e => { const d = parseEventDate(e); return d >= todayStart && d < tomorrowStart })
+  const tomorrowEvents = calendarEvents.filter(e => { const d = parseEventDate(e); return d >= tomorrowStart && d < dayAfterStart })
 
-  // Prioriteer: vandaag niet gedaan → vandaag gedaan → morgen
   const uncompletedToday = todayEvents.filter(e => !hasWorkedOut(e.title))
   const next = uncompletedToday[0] ?? todayEvents[0] ?? tomorrowEvents[0]
   if (!next) return null
@@ -361,114 +362,103 @@ function calendarInsight(calendarEvents: any[], todayHevy: any[], todayActivitie
 }
 
 function computeInsights(today: any, gezondheid: any[] | undefined, training: any): Insight[] {
+  const cal = calendarInsight(today?.calendarEvents ?? [], today?.todayHevy ?? [], today?.todayActivities ?? [])
   return [
     nutritionInsight(today),
-    trainingInsight(training),
+    kcalInsight(today),
+    // Training momentum only when no calendar event — avoids showing the same info twice
+    cal ? null : trainingInsight(training),
     activityInsight(today),
-    weightInsight(gezondheid ?? []),
+    // Weather at high priority when severe (thunderstorm), otherwise low
     weatherInsight(today?.weather),
-    calendarInsight(today?.calendarEvents ?? [], today?.todayHevy ?? [], today?.todayActivities ?? []),
+    cal,
   ]
     .filter((c): c is Insight => c !== null)
     .sort((a, b) => b.priority - a.priority)
     .slice(0, 4)
 }
 
-// ─── Daily briefing (state → reason → action) ─────────────────────────────────
+// ─── Daily briefing — synthesises signals not shown in the insight cards ───────
 
-function buildBriefing(insights: Insight[], today: any): string {
-  if (insights.length === 0) return ''
+function buildBriefing(insights: Insight[], today: any, rows: HealthRow[]): string {
+  const readiness = computePhysiologyReadiness(rows)
+  const latestSleep = rows.find(r => r.slaap_minuten != null)
+  const sleepScore = latestSleep ? computeSleepScore(latestSleep) : null
+  const hrvBaseline = computeHRVBaseline(rows)
+
+  // Build signal description from multi-source health data
+  const signalParts: string[] = []
+  if (sleepScore !== null) {
+    if (sleepScore < 55) signalParts.push('poor sleep')
+    else if (sleepScore >= 80) signalParts.push('good sleep')
+  }
+  if (hrvBaseline.deviationPct !== null) {
+    if (hrvBaseline.deviationPct <= -15) signalParts.push(`HRV ${Math.abs(hrvBaseline.deviationPct)}% below baseline`)
+    else if (hrvBaseline.deviationPct >= 10) signalParts.push(`HRV ${hrvBaseline.deviationPct}% above baseline`)
+  }
 
   const calI = insights.find(i => i.id === 'calendar')
-  const nutriI = insights.find(i => i.id === 'nutrition')
-  const trainI = insights.find(i => i.id === 'training')
-  const weatherI = insights.find(i => i.id === 'weather')
+  const workoutName = calI?.value ?? null
+  const workoutDone = calI?.trend?.includes('Completed') ?? false
 
+  // Health-data path — synthesises sleep + HRV + readiness into one statement
+  if (readiness.score !== null) {
+    if (readiness.score >= 75) {
+      const prefix = signalParts.length ? `${signalParts.join(' and ')} — ` : ''
+      if (workoutName && !workoutDone) {
+        return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)}Recovery is strong. Push hard in ${workoutName} today.`
+      }
+      return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)}Recovery markers are strong. A quality session is well-supported today.`
+    }
+    if (readiness.score >= 50) {
+      const prefix = signalParts.length ? `${signalParts.join(' and ')} — m` : 'M'
+      return `${prefix}oderate readiness. Zone 2 work and solid nutrition will bring you to full readiness.`
+    }
+    const reasons = signalParts.length ? ` (${signalParts.join(', ')})` : ''
+    return `Recovery is low${reasons}. Keep today easy and prioritise sleep and protein.`
+  }
+
+  // Fallback: no Fitbit data — use calendar + nutrition signals
   const foodLog = today?.foodLog ?? []
   const totalProtein = foodLog.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
   const targetProtein = Number(today?.settings?.macro_protein ?? 180)
   const proteinLeft = Math.round(Math.max(0, targetProtein - totalProtein))
-  const proteinAchieved = totalProtein >= targetProtein
 
-  const nextEvent = (today?.calendarEvents ?? [])[0]
-  const now = new Date()
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
-  const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(todayStart.getDate() + 1)
-  const dayAfterStart = new Date(tomorrowStart); dayAfterStart.setDate(tomorrowStart.getDate() + 1)
-  const nextEventDate = nextEvent?.start_datetime ? new Date(nextEvent.start_datetime) : nextEvent ? new Date(nextEvent.start_date) : null
-  const nextIsToday = nextEventDate ? nextEventDate >= todayStart && nextEventDate < tomorrowStart : false
-  const nextIsTomorrow = nextEventDate ? nextEventDate >= tomorrowStart && nextEventDate < dayAfterStart : false
-
-  // Collect positive facts for state sentence
-  const positives: string[] = []
-  if (proteinAchieved) positives.push('protein goal already reached')
-  if (trainI?.status === 'good') positives.push('training week is going well')
-
-  // Collect what needs attention
-  const needsAttention: string[] = []
-  if (!proteinAchieved && nutriI?.status === 'alert') needsAttention.push(`protein intake behind (${proteinLeft}g to go)`)
-  if (trainI?.status === 'alert') needsAttention.push("you haven't trained in a while")
-  if (weatherI) needsAttention.push(weatherI.explanation.toLowerCase())
-
-  // 1. State sentence
-  let state: string
-  if (needsAttention.length > 0) {
-    const item = needsAttention[0]
-    state = item.charAt(0).toUpperCase() + item.slice(1)
-  } else if (positives.length >= 2) {
-    state = positives.slice(0, -1).join(', ') + ' and ' + positives[positives.length - 1]
-    state = state.charAt(0).toUpperCase() + state.slice(1)
-  } else if (positives.length === 1) {
-    state = positives[0].charAt(0).toUpperCase() + positives[0].slice(1)
-  } else {
-    state = "You're on track today"
+  if (workoutName && !workoutDone) {
+    if (proteinLeft > 30) return `${workoutName} is coming up. Front-load ${proteinLeft}g protein before training for better performance.`
+    return `${workoutName} is coming up. Nutrition is on track — focus on executing the session.`
   }
 
-  // 2. Action sentence
-  let action: string
-  if (!proteinAchieved && nutriI && proteinLeft > 15) {
-    action = `Focus on ${proteinLeft}g more protein for optimal recovery`
-  } else if (trainI?.status === 'alert') {
-    action = 'Plan a workout today or tomorrow to stay on track'
-  } else if (nextIsToday && nextEvent) {
-    const t = nextEvent.start_datetime
-      ? new Date(nextEvent.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      : null
-    action = t ? `Prepare for ${nextEvent.title} at ${t}` : `Prepare for ${nextEvent.title} today`
-  } else if (nextIsTomorrow && nextEvent) {
-    action = `Focus on recovery to be ready for ${nextEvent.title} tomorrow`
-  } else if (!proteinAchieved && proteinLeft > 10) {
-    action = `Eat ${proteinLeft}g more protein before end of day`
-  } else {
-    action = 'Stay consistent and enjoy the day'
-  }
-
-  return `${state}. ${action}.`
+  if (proteinLeft > 40) return `Protein intake is behind schedule. Aim for ${proteinLeft}g more before end of day.`
+  return "You're on track today. Stay consistent and enjoy the day."
 }
 
-// ─── Insight Card ─────────────────────────────────────────────────────────────
+// ─── Vitals row ───────────────────────────────────────────────────────────────
 
-// ─── Vitals Row ───────────────────────────────────────────────────────────────
-
-function VitalTile({ label, value, note, color }: { label: string; value: string; note: string; color: string }) {
+function VitalTile({ label, value, note, color, href }: {
+  label: string; value: string; note: string; color: string; href: string
+}) {
   return (
-    <div className="flex flex-col gap-1.5 px-3 py-3 rounded-[18px] border border-white/[0.09]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+    <a
+      href={href}
+      className="flex flex-col gap-1.5 px-3 py-3 rounded-[18px] border border-white/[0.09] active:opacity-70 transition-opacity"
+      style={{ background: 'rgba(255,255,255,0.05)' }}
+    >
       <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.08em]">{label}</span>
       <span className="text-[22px] font-bold text-white leading-none">{value}</span>
       <span className="text-[11px] font-semibold leading-none" style={{ color }}>{note}</span>
-    </div>
+    </a>
   )
 }
 
 function VitalsRow({ rows }: { rows: HealthRow[] }) {
-  const readiness  = computePhysiologyReadiness(rows)
+  const readiness   = computePhysiologyReadiness(rows)
   const latestSleep = rows.find(r => r.slaap_minuten != null)
-  const sleepScore = latestSleep ? computeSleepScore(latestSleep) : null
-  const hrv        = rows.find(r => r.hrv_rmssd != null)?.hrv_rmssd ?? null
+  const sleepScore  = latestSleep ? computeSleepScore(latestSleep) : null
+  const hrv         = rows.find(r => r.hrv_rmssd != null)?.hrv_rmssd ?? null
   const hrvBaseline = computeHRVBaseline(rows)
 
-  const sleepLabel = sleepScore === null ? '–'
-    : sleepScore >= 80 ? 'Good' : sleepScore >= 60 ? 'Fair' : 'Poor'
+  const sleepLabel = sleepScore === null ? '–' : sleepScore >= 80 ? 'Good' : sleepScore >= 60 ? 'Fair' : 'Poor'
   const sleepColor = sleepScore === null ? 'rgba(255,255,255,0.3)'
     : sleepScore >= 80 ? '#4ade80' : sleepScore >= 60 ? '#fb923c' : '#f87171'
 
@@ -478,38 +468,83 @@ function VitalsRow({ rows }: { rows: HealthRow[] }) {
   const hrvColor = hrvBaseline.deviationPct === null ? 'rgba(255,255,255,0.3)'
     : hrvBaseline.deviationPct >= -5 ? '#4ade80' : '#fb923c'
 
+  // One-line context: driven by the weakest signal
+  const context = (() => {
+    if (readiness.score === null) return null
+    if (readiness.score < 45) return 'Recovery is low — keep today easy'
+    if (sleepScore !== null && sleepScore < 55) return 'Poor sleep — avoid high intensity'
+    if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -15) return 'HRV below baseline — train light'
+    if (readiness.score >= 80) return 'Strong recovery — push hard today'
+    return null
+  })()
+
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <VitalTile
-        label="Readiness"
-        value={readiness.score !== null ? String(readiness.score) : '–'}
-        note={readiness.label}
-        color={readiness.color}
-      />
-      <VitalTile
-        label="Sleep"
-        value={sleepScore !== null ? String(sleepScore) : '–'}
-        note={sleepLabel}
-        color={sleepColor}
-      />
-      <VitalTile
-        label="HRV"
-        value={hrv !== null ? String(Math.round(hrv)) : '–'}
-        note={hrvNote}
-        color={hrvColor}
-      />
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-3 gap-2">
+        <VitalTile label="Readiness" value={readiness.score !== null ? String(readiness.score) : '–'} note={readiness.label} color={readiness.color} href="/health/recovery" />
+        <VitalTile label="Sleep" value={sleepScore !== null ? String(sleepScore) : '–'} note={sleepLabel} color={sleepColor} href="/health/sleep" />
+        <VitalTile label="HRV" value={hrv !== null ? String(Math.round(hrv)) : '–'} note={hrvNote} color={hrvColor} href="/health/heart" />
+      </div>
+      {context && (
+        <p className="text-[13px] text-white/40 px-1">{context}</p>
+      )}
     </div>
+  )
+}
+
+// ─── Macro progress ───────────────────────────────────────────────────────────
+
+function MacroBar({ label, current, target, color }: { label: string; current: number; target: number; color: string }) {
+  const pct = target > 0 ? Math.min(current / target, 1) : 0
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex justify-between items-baseline">
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.06em]">{label}</span>
+        <span className="text-[11px] text-white/40">{Math.round(current)}<span className="text-white/25">/{target}</span></span>
+      </div>
+      <div className="h-[4px] rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct * 100}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+function MacroProgress({ today }: { today: any }) {
+  const foodLog = today?.foodLog ?? []
+  const settings = today?.settings
+  if (!settings || foodLog.length === 0) return null
+
+  const t = foodLog.reduce((s: any, f: any) => ({
+    kcal:    s.kcal    + Number(f.kcal    ?? 0),
+    protein: s.protein + Number(f.protein ?? 0),
+    carbs:   s.carbs   + Number(f.carbs   ?? 0),
+    fat:     s.fat     + Number(f.fat     ?? 0),
+  }), { kcal: 0, protein: 0, carbs: 0, fat: 0 })
+
+  return (
+    <a
+      href="/food"
+      className="flex flex-col gap-3 px-4 py-3.5 rounded-[20px] border border-white/[0.09] active:opacity-70 transition-opacity"
+      style={{ background: 'rgba(255,255,255,0.05)' }}
+    >
+      <MacroBar label="Kcal"    current={t.kcal}    target={Number(settings.macro_kcal    ?? 2000)} color="rgb(251,146,60)"  />
+      <MacroBar label="Protein" current={t.protein} target={Number(settings.macro_protein ?? 180)}  color="rgb(45,212,191)"  />
+      <MacroBar label="Carbs"   current={t.carbs}   target={Number(settings.macro_carbs   ?? 250)}  color="rgb(163,230,53)"  />
+      <MacroBar label="Fat"     current={t.fat}     target={Number(settings.macro_fat     ?? 70)}   color="rgb(250,204,21)"  />
+    </a>
   )
 }
 
 // ─── Status dot ───────────────────────────────────────────────────────────────
 
 const STATUS_DOT: Record<InsightStatus, string> = {
-  good: 'bg-teal-400',
+  good:    'bg-teal-400',
   warning: 'bg-orange-400',
-  alert: 'bg-red-400',
+  alert:   'bg-red-400',
   neutral: 'bg-white/25',
 }
+
+// ─── Insight card ─────────────────────────────────────────────────────────────
 
 function InsightCard({ insight }: { insight: Insight }) {
   const inner = (
@@ -548,7 +583,7 @@ function InsightCard({ insight }: { insight: Insight }) {
   return inner
 }
 
-// ─── Daily Briefing Card ──────────────────────────────────────────────────────
+// ─── Daily briefing card ──────────────────────────────────────────────────────
 
 function DailyBriefingCard({ text }: { text: string }) {
   return (
@@ -568,13 +603,13 @@ function DailyBriefingCard({ text }: { text: string }) {
 
 const STRAVA_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
 
-function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, proteinLeft, workoutTimePassed = false, isTomorrow = false }: {
+function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, workoutTimePassed = false, isTomorrow = false, readinessScore }: {
   todayWorkout: { title: string; start_datetime: string | null } | null
   todayWorkoutDone: boolean
   tomorrowWorkout: { title: string } | null
-  proteinLeft: number
   workoutTimePassed?: boolean
   isTomorrow?: boolean
+  readinessScore?: number | null
 }) {
   const workoutLabel = todayWorkout
     ? (() => {
@@ -588,22 +623,27 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, prote
       })()
     : 'No workout planned today'
 
+  const showTomorrow = tomorrowWorkout && (todayWorkoutDone || !todayWorkout)
+  const isOverdue = workoutTimePassed && !todayWorkoutDone && !!todayWorkout
+
+  // Sleep tip only surfaces late evening when recovery is actually low
+  const hour = new Date().getHours()
+  const showSleepTip = hour >= 21 && readinessScore != null && readinessScore < 70
   const sleepAction = tomorrowWorkout
     ? `Sleep before 23:00 to be ready for ${tomorrowWorkout.title}`
     : 'Sleep before 23:00 to optimize recovery'
 
-  const showTomorrow = tomorrowWorkout && (todayWorkoutDone || !todayWorkout)
-
-  const isOverdue = workoutTimePassed && !todayWorkoutDone && !!todayWorkout
   const actions = [
-    { label: workoutLabel, done: todayWorkoutDone && !!todayWorkout, overdue: isOverdue, isWorkout: true },
-    ...(showTomorrow ? [{ label: `Tomorrow: ${tomorrowWorkout!.title}`, done: false, overdue: false, isWorkout: false }] : []),
-    { label: proteinLeft > 10 ? `Eat ${Math.round(proteinLeft)}g protein to support recovery` : 'Protein goal reached ✓', done: false, overdue: false, isWorkout: false },
-    { label: sleepAction, done: false, overdue: false, isWorkout: false },
+    { label: workoutLabel, done: todayWorkoutDone && !!todayWorkout, overdue: isOverdue },
+    ...(showTomorrow ? [{ label: `Tomorrow: ${tomorrowWorkout!.title}`, done: false, overdue: false }] : []),
+    ...(showSleepTip  ? [{ label: sleepAction,                         done: false, overdue: false }] : []),
   ]
 
-  const showTrainingLink = todayWorkout !== null && !todayWorkoutDone &&
-    STRAVA_KEYWORDS.some(k => todayWorkout.title.toLowerCase().includes(k))
+  const hasUnfinishedWorkout = todayWorkout !== null && !todayWorkoutDone
+  const isStravaWorkout = hasUnfinishedWorkout && STRAVA_KEYWORDS.some(k => todayWorkout!.title.toLowerCase().includes(k))
+  const workoutHref = todayWorkout
+    ? (isStravaWorkout ? `/training/session?title=${encodeURIComponent(todayWorkout.title)}&time=${encodeURIComponent(todayWorkout.start_datetime ?? '')}` : '/training')
+    : '/training'
 
   return (
     <div
@@ -617,29 +657,33 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, prote
 
       <div className="flex flex-col gap-4 mb-6">
         {actions.map((a, i) => (
-          <div key={i} className="flex flex-col gap-1">
-            <div className="flex items-center gap-3.5">
-              <div className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.done ? 'bg-teal-400' : a.overdue ? 'bg-orange-400' : 'bg-white'}`} />
-              <span className={`text-[20px] font-semibold ${a.done ? 'text-white/50' : 'text-white'}`}>{a.label}</span>
-            </div>
-            {i === 0 && showTrainingLink && (
-              <a
-                href={`/training/session?title=${encodeURIComponent(todayWorkout!.title)}&time=${encodeURIComponent(todayWorkout!.start_datetime ?? '')}`}
-                className="ml-[23px] text-[14px] font-semibold text-teal-400"
-              >
-                View training →
-              </a>
-            )}
+          <div key={i} className="flex items-center gap-3.5">
+            <div className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.done ? 'bg-teal-400' : a.overdue ? 'bg-orange-400' : 'bg-white'}`} />
+            <span className={`text-[20px] font-semibold leading-tight ${a.done ? 'text-white/50' : 'text-white'}`}>{a.label}</span>
           </div>
         ))}
       </div>
 
-      <a
-        href="/food"
-        className="flex items-center justify-center w-full h-[54px] rounded-[18px] bg-white text-black font-semibold text-[16px]"
-      >
-        Log food
-      </a>
+      <div className="flex flex-col gap-3">
+        {hasUnfinishedWorkout && (
+          <a
+            href={workoutHref}
+            className="flex items-center justify-center w-full h-[54px] rounded-[18px] bg-white text-black font-semibold text-[16px]"
+          >
+            Start training →
+          </a>
+        )}
+        <a
+          href="/food"
+          className={`flex items-center justify-center w-full h-[54px] rounded-[18px] font-semibold text-[16px] ${
+            hasUnfinishedWorkout
+              ? 'border border-white/20 text-white/70'
+              : 'bg-white text-black'
+          }`}
+        >
+          Log food
+        </a>
+      </div>
     </div>
   )
 }
@@ -654,45 +698,38 @@ export default function TodayPage() {
   })
 
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
-  const { data: training } = useSWR<any>('training', null)
+  const { data: training }   = useSWR<any>('training', null)
 
   const calendarEvents = data?.calendarEvents ?? []
   const now = new Date()
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+  const todayStart    = new Date(now); todayStart.setHours(0, 0, 0, 0)
   const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(todayStart.getDate() + 1)
 
   const parseDate = (e: any) => e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
-  const todayEvents = calendarEvents.filter((e: any) => { const d = parseDate(e); return d >= todayStart && d < tomorrowStart })
+  const todayEvents    = calendarEvents.filter((e: any) => { const d = parseDate(e); return d >= todayStart && d < tomorrowStart })
   const tomorrowEvents = calendarEvents.filter((e: any) => parseDate(e) >= tomorrowStart)
 
   const tomorrowWorkout = tomorrowEvents[0] ?? null
 
   const strengthKw = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower']
-  const cardioKw = ['run', 'loop', 'fietsen', 'zwemmen', 'swim', 'ride', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval']
-
+  const cardioKw   = ['run', 'loop', 'fietsen', 'zwemmen', 'swim', 'ride', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval']
   const CARDIO_SPORT_TYPES = ['run', 'ride', 'swim', 'walk', 'hike', 'virtual_run', 'virtual_ride', 'rowing', 'kayaking', 'crossfit', 'elliptical']
 
   function isEventDone(title: string): boolean {
     const t = title.toLowerCase()
     const isStrength = strengthKw.some(kw => t.includes(kw))
-    const isCardio = cardioKw.some(kw => t.includes(kw))
+    const isCardio   = cardioKw.some(kw => t.includes(kw))
     const hevy = data?.todayHevy ?? []
     const acts = data?.todayActivities ?? []
-    // Only count Strava activities with actual cardio sport types — WeightTraining/strength
-    // activities must not falsely mark a run/ride/swim event as done
-    const cardioActs = acts.filter((a: any) =>
-      CARDIO_SPORT_TYPES.some(ct => (a.sport_type ?? '').toLowerCase().includes(ct))
-    )
+    const cardioActs = acts.filter((a: any) => CARDIO_SPORT_TYPES.some(ct => (a.sport_type ?? '').toLowerCase().includes(ct)))
     if (isStrength && !isCardio) return hevy.length > 0
-    if (isCardio && !isStrength) return cardioActs.length > 0
+    if (isCardio && !isStrength)  return cardioActs.length > 0
     return hevy.length > 0 || cardioActs.length > 0
   }
 
-  // Find the first undone event today; check if all events are done
-  const firstUndone = todayEvents.find((e: any) => !isEventDone(e.title)) ?? null
+  const firstUndone  = todayEvents.find((e: any) => !isEventDone(e.title)) ?? null
   const allTodayDone = todayEvents.length > 0 && firstUndone === null
 
-  // No calendar events at all → fall back to actual Hevy/Strava data
   const actualToday = todayEvents.length === 0
     ? ((data?.todayHevy ?? []).length > 0
         ? { title: (data!.todayHevy as any[])[0].title as string, start_datetime: (data!.todayHevy as any[])[0].start_time as string }
@@ -703,35 +740,40 @@ export default function TodayPage() {
 
   const workoutTimePassed = firstUndone?.start_datetime ? new Date(firstUndone.start_datetime) < now : false
 
-  // Display logic: first undone → (if all done) tomorrow → actual fallback
-  const displayWorkout = firstUndone ?? (allTodayDone ? tomorrowWorkout : actualToday)
+  const displayWorkout     = firstUndone ?? (allTodayDone ? tomorrowWorkout : actualToday)
   const displayWorkoutDone = !firstUndone && !allTodayDone && actualToday !== null
-  const displayTomorrow = allTodayDone ? null : tomorrowWorkout
-  const displayIsTomorrow = allTodayDone && !!tomorrowWorkout
+  const displayTomorrow    = allTodayDone ? null : tomorrowWorkout
+  const displayIsTomorrow  = allTodayDone && !!tomorrowWorkout
 
-  const totalProtein = (data?.foodLog ?? []).reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
-  const targetProtein = Number(data?.settings?.macro_protein ?? 180)
-  const proteinLeft = Math.max(0, targetProtein - totalProtein)
+  const rows = gezondheid ?? []
+  const readiness = computePhysiologyReadiness(rows)
 
   const insights = computeInsights(data, gezondheid, training)
-  const briefing = buildBriefing(insights, data)
+  const briefing = buildBriefing(insights, data, rows)
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
 
+      {/* 1. Briefing — sets the tone for the day */}
+      {briefing && <DailyBriefingCard text={briefing} />}
+
+      {/* 2. Vitals — health data behind the briefing, clickable to detail */}
+      {rows.length > 0 && <VitalsRow rows={rows} />}
+
+      {/* 3. Hero — today's concrete actions */}
       <HeroActionCard
         todayWorkout={displayWorkout}
         todayWorkoutDone={displayWorkoutDone}
         tomorrowWorkout={displayTomorrow}
-        proteinLeft={proteinLeft}
         workoutTimePassed={workoutTimePassed}
         isTomorrow={displayIsTomorrow}
+        readinessScore={readiness.score}
       />
 
-      {gezondheid && gezondheid.length > 0 && <VitalsRow rows={gezondheid} />}
+      {/* 4. Macro progress — daily nutrition at a glance, links to food tab */}
+      <MacroProgress today={data} />
 
-      {briefing && <DailyBriefingCard text={briefing} />}
-
+      {/* 5. Key insights — trends and context */}
       {insights.length > 0 && (
         <>
           <SectionHeader title="Key Insights" />
@@ -742,15 +784,6 @@ export default function TodayPage() {
           </div>
         </>
       )}
-
-      <a
-        href="/health"
-        className="flex items-center justify-between px-[18px] py-[14px] rounded-2xl border border-white/[0.09]"
-        style={{ background: 'rgba(255,255,255,0.05)' }}
-      >
-        <span className="text-[15px] font-semibold text-white/60">View All Metrics</span>
-        <ChevronRight size={16} className="text-white/30" />
-      </a>
 
     </PremiumScreen>
   )
