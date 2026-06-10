@@ -638,9 +638,18 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, worko
   ]
 
   const hasUnfinishedWorkout = todayWorkout !== null && !todayWorkoutDone
-  const workoutHref = todayWorkout
-    ? `/training/session?title=${encodeURIComponent(todayWorkout.title)}&time=${encodeURIComponent(todayWorkout.start_datetime ?? '')}`
-    : '/training'
+
+  const GYM_KEYWORDS = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'gewichten', 'kracht']
+  const CARDIO_KEYWORDS = ['run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval', 'tempoloop']
+
+  const workoutHref = (() => {
+    if (!todayWorkout) return '/training'
+    const t = todayWorkout.title.toLowerCase()
+    const isGym     = GYM_KEYWORDS.some(k => t.includes(k))
+    const isCardio  = CARDIO_KEYWORDS.some(k => t.includes(k))
+    if (isGym && !isCardio) return '/training/strength'
+    return `/training/session?title=${encodeURIComponent(todayWorkout.title)}&time=${encodeURIComponent(todayWorkout.start_datetime ?? '')}`
+  })()
 
   return (
     <div
@@ -667,7 +676,7 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, worko
             href={workoutHref}
             className="flex items-center justify-center w-full h-[54px] rounded-[18px] bg-white text-black font-semibold text-[16px]"
           >
-            View training →
+            {workoutHref.includes('/training/strength') ? 'View strength →' : 'View training →'}
           </a>
         )}
         <a
