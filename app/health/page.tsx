@@ -1,14 +1,21 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import Link from 'next/link'
 import useSWR, { mutate } from 'swr'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { BedDouble, Activity, Heart, Scale, Footprints, RefreshCw } from 'lucide-react'
+import { BedDouble, Activity, RefreshCw } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card, MetricTile, MetricRow } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
-import { computeSleepScore, type GezondheidsRow } from './sections'
+import {
+  computeSleepScore,
+  SleepSection,
+  RecoverySection,
+  HeartSection,
+  WeightSection,
+  ActivitySection,
+  type GezondheidsRow,
+} from './sections'
 
 type SyncMessage = { type: 'ok' | 'err'; text: string }
 
@@ -30,13 +37,21 @@ async function refreshHealthCache() {
   return rows
 }
 
-const CATEGORIES = [
-  { label: 'Overview', href: null               },
-  { label: 'Sleep',    href: '/health/sleep'    },
-  { label: 'Recovery', href: '/health/recovery' },
-  { label: 'Heart',    href: '/health/heart'    },
-  { label: 'Weight',   href: '/health/weight'   },
-  { label: 'Activity', href: '/health/activity' },
+async function fetchHiddenPages(): Promise<string[]> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  const { data } = await supabase.from('user_settings').select('hidden_pages').eq('user_id', user.id).single()
+  return Array.isArray(data?.hidden_pages) ? data.hidden_pages : []
+}
+
+const ALL_TABS = [
+  { label: 'Overview', key: 'overview', href: null               },
+  { label: 'Sleep',    key: 'sleep',    href: '/health/sleep'    },
+  { label: 'Recovery', key: 'recovery', href: '/health/recovery' },
+  { label: 'Heart',    key: 'heart',    href: '/health/heart'    },
+  { label: 'Weight',   key: 'weight',   href: '/health/weight'   },
+  { label: 'Activity', key: 'activity', href: '/health/activity' },
 ]
 
 function FitbitSyncHandler() {
@@ -68,8 +83,14 @@ export default function HealthPage() {
   const { data: rows = [] } = useSWR('health-gezondheid', fetchHealth, {
     revalidateOnFocus: false, dedupingInterval: 60_000,
   })
+  const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, {
+    revalidateOnFocus: false, dedupingInterval: 300_000,
+  })
+  const [activeTab, setActiveTab] = useState('overview')
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<SyncMessage | null>(null)
+
+  const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 
   const latest          = rows[0]
   const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
@@ -151,76 +172,79 @@ export default function HealthPage() {
         <FitbitSyncHandler />
       </Suspense>
 
-      {/* Category strip */}
+      {/* Category strip — buttons swap content in place, no navigation */}
       <div className="flex gap-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
-        {CATEGORIES.map(({ label, href }) =>
-          href ? (
-            <Link key={label} href={href} prefetch={true}
-              className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
-              style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}>
-              {label}
-            </Link>
-          ) : (
-            <span key={label}
-              className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
-              style={{ background: 'white', color: 'black' }}>
-              {label}
-            </span>
-          )
-        )}
+        {TABS.map(({ label, key }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className="whitespace-nowrap px-4 py-2.5 rounded-full text-[15px] font-semibold shrink-0"
+            style={activeTab === key
+              ? { background: 'white', color: 'black' }
+              : { background: 'rgba(255,255,255,0.08)', color: 'white' }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Overview tiles */}
-      <div className="grid grid-cols-2 gap-3">
-        <MetricTile title="Sleep score" value={sleepScore ? String(sleepScore) : '–'} unit={sleepScore ? '%' : ''} note="Last night"
-          Icon={BedDouble} tint="text-blue-400" />
-        <MetricTile title="HRV" value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note="Daily RMSSD"
-          Icon={Activity} tint="text-green-400" />
-      </div>
+      {/* Tab content */}
+      {activeTab === 'sleep'    && <SleepSection />}
+      {activeTab === 'recovery' && <RecoverySection />}
+      {activeTab === 'heart'    && <HeartSection />}
+      {activeTab === 'weight'   && <WeightSection rows={rows} />}
+      {activeTab === 'activity' && <ActivitySection rows={rows} />}
 
-      {/* Metric rows */}
-      <MetricRow
-        title="Resting heart rate"
-        value={restingHR ? `${restingHR} bpm` : '–'}
-        detail={restingHR ? (restingHR <= 60 ? 'Excellent' : restingHR <= 70 ? 'Good' : 'Elevated') : '–'}
-      />
-      <MetricRow
-        title="Weight trend"
-        value={weight ? `${weight} kg` : '–'}
-        detail={weightDetail}
-      />
-      <MetricRow
-        title="Daily activity"
-        value={steps ? `${Number(steps).toLocaleString('nl-NL')} steps` : '–'}
-        detail={stepsDetail}
-      />
-
-      {/* Recommendation card */}
-      <Card>
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">
-              Recommendation
-            </span>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex items-center gap-1.5 text-[12px] text-white/30 hover:text-teal-400 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'Syncing…' : 'Sync'}
-            </button>
-          </div>
-          <p className="text-[22px] font-bold text-white leading-snug">
-            {recommendation}
-          </p>
-          {syncMessage && (
-            <p className={`text-[13px] font-medium ${syncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
-              {syncMessage.text}
-            </p>
-          )}
+      {activeTab === 'overview' && <>
+        <div className="grid grid-cols-2 gap-3">
+          <MetricTile title="Sleep score" value={sleepScore ? String(sleepScore) : '–'} unit={sleepScore ? '%' : ''} note="Last night"
+            Icon={BedDouble} tint="text-blue-400" />
+          <MetricTile title="HRV" value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note="Daily RMSSD"
+            Icon={Activity} tint="text-green-400" />
         </div>
-      </Card>
+
+        <MetricRow
+          title="Resting heart rate"
+          value={restingHR ? `${restingHR} bpm` : '–'}
+          detail={restingHR ? (restingHR <= 60 ? 'Excellent' : restingHR <= 70 ? 'Good' : 'Elevated') : '–'}
+        />
+        <MetricRow
+          title="Weight trend"
+          value={weight ? `${weight} kg` : '–'}
+          detail={weightDetail}
+        />
+        <MetricRow
+          title="Daily activity"
+          value={steps ? `${Number(steps).toLocaleString('nl-NL')} steps` : '–'}
+          detail={stepsDetail}
+        />
+
+        <Card>
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">
+                Recommendation
+              </span>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="flex items-center gap-1.5 text-[12px] text-white/30 hover:text-teal-400 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+                {syncing ? 'Syncing…' : 'Sync'}
+              </button>
+            </div>
+            <p className="text-[22px] font-bold text-white leading-snug">
+              {recommendation}
+            </p>
+            {syncMessage && (
+              <p className={`text-[13px] font-medium ${syncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
+                {syncMessage.text}
+              </p>
+            )}
+          </div>
+        </Card>
+      </>}
 
     </PremiumScreen>
   )

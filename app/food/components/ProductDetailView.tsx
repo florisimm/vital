@@ -172,6 +172,7 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
   const [showImpact, setShowImpact] = useState(false)
   const [saving, setSaving] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
+  const [portionInput, setPortionInput] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const repeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -195,9 +196,11 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
   function pickServing(s: { label: string; amount_g: number }) {
     setSelectedServing(s)
     if (s.label !== GRAM_SERVING.label) setGrams(String(s.amount_g))
+    setPortionInput(null)
     setShowServings(false)
   }
   function applyStep(dir: 1 | -1) {
+    setPortionInput(null)
     setGrams(prev => String(Math.max(stepAmt, (Number(prev) || 0) + dir * stepAmt)))
   }
   function startRepeat(dir: 1 | -1) { applyStep(dir); repeatRef.current = setInterval(() => applyStep(dir), 110) }
@@ -291,11 +294,11 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
                 <div className="flex items-baseline gap-0">
                   {active.amount_g > 1 ? (
                     <input ref={inputRef} type="text" inputMode="decimal"
-                      value={g > 0 ? String(Math.round(g / active.amount_g * 10) / 10) : ''}
-                      size={Math.max(1, String(Math.round(g / active.amount_g * 10) / 10).length)}
-                      onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setGrams(String(Number(v) * active.amount_g)) }}
-                      onFocus={() => setInputFocused(true)}
-                      onBlur={() => setInputFocused(false)}
+                      value={portionInput !== null ? portionInput : (g > 0 ? String(Math.round(g / active.amount_g * 10) / 10) : '')}
+                      size={Math.max(1, (portionInput !== null ? portionInput : String(Math.round(g / active.amount_g * 10) / 10)).length)}
+                      onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) { setPortionInput(v); const n = parseFloat(v); if (!isNaN(n)) setGrams(String(n * active.amount_g)) } }}
+                      onFocus={() => { setInputFocused(true); setPortionInput(String(Math.round(g / active.amount_g * 10) / 10)) }}
+                      onBlur={() => { setInputFocused(false); setPortionInput(null) }}
                       className="text-[18px] font-bold text-white bg-transparent outline-none" />
                   ) : (
                     <input ref={inputRef} type="text" inputMode="decimal" value={grams}

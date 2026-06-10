@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { mutate } from 'swr'
+import useSWR, { mutate } from 'swr'
 import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -55,6 +55,36 @@ export function ProfileButton() {
   const [pagesSaving, setPagesSaving] = useState(false)
   const [fitbitSyncing, setFitbitSyncing] = useState(false)
   const [fitbitSyncMessage, setFitbitSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  // Macro calculator
+  const [editingMacroMode, setEditingMacroMode] = useState(false)
+  const [editingMacroCalc, setEditingMacroCalc] = useState(false)
+  const [editingMacroManual, setEditingMacroManual] = useState(false)
+  const [calcStep, setCalcStep] = useState(0)
+  const [calcGoal, setCalcGoal] = useState<'lose' | 'maintain' | 'gain' | null>(null)
+  const [calcGender, setCalcGender] = useState<'male' | 'female' | null>(null)
+  const [calcAge, setCalcAge] = useState('')
+  const [calcHeight, setCalcHeight] = useState('')
+  const [calcWeight, setCalcWeight] = useState('')
+  const [calcActivity, setCalcActivity] = useState<number | null>(null)
+  const [calcSaving, setCalcSaving] = useState(false)
+  const [calcSaved, setCalcSaved] = useState(false)
+  const [calcTargetKg, setCalcTargetKg] = useState('')
+  const [calcTargetWeeks, setCalcTargetWeeks] = useState('')
+  const [savedCalcHeight, setSavedCalcHeight] = useState('')
+  const [savedCalcAge, setSavedCalcAge] = useState('')
+  const [savedCalcGender, setSavedCalcGender] = useState<'male' | 'female' | null>(null)
+  const [manualKcal, setManualKcal] = useState('')
+  const [manualProtein, setManualProtein] = useState('')
+  const [manualCarbs, setManualCarbs] = useState('')
+  const [manualFat, setManualFat] = useState('')
+  const [manualSaving, setManualSaving] = useState(false)
+  const [savedMacroKcal, setSavedMacroKcal] = useState(0)
+  const [savedMacroProtein, setSavedMacroProtein] = useState(0)
+  const [savedMacroCarbs, setSavedMacroCarbs] = useState(0)
+  const [savedMacroFat, setSavedMacroFat] = useState(0)
+
+  const { data: healthRows = [] } = useSWR<any[]>('health-gezondheid')
   const router = useRouter()
 
   useEffect(() => {
@@ -94,7 +124,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -103,6 +133,13 @@ export function ProfileButton() {
           if (data?.strength_bench_ref) setBenchRef(data.strength_bench_ref)
           if (data?.strength_deadlift_ref) setDeadliftRef(data.strength_deadlift_ref)
           setHiddenPages(Array.isArray(data?.hidden_pages) ? data.hidden_pages : [])
+          if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm))))
+          if (data?.age) setSavedCalcAge(String(data.age))
+          if (data?.gender === 'male' || data?.gender === 'female') setSavedCalcGender(data.gender)
+          if (data?.macro_kcal) setSavedMacroKcal(data.macro_kcal)
+          if (data?.macro_protein) setSavedMacroProtein(data.macro_protein)
+          if (data?.macro_carbs) setSavedMacroCarbs(data.macro_carbs)
+          if (data?.macro_fat) setSavedMacroFat(data.macro_fat)
         })
     })
   }, [open])
@@ -118,10 +155,10 @@ export function ProfileButton() {
 
   async function saveAccount() {
     if (editPassword && editPassword !== editPasswordConfirm) {
-      setEditMsg({ type: 'err', text: 'Wachtwoorden komen niet overeen' }); return
+      setEditMsg({ type: 'err', text: "Passwords don't match" }); return
     }
     if (editPassword && editPassword.length < 6) {
-      setEditMsg({ type: 'err', text: 'Wachtwoord moet minimaal 6 tekens zijn' }); return
+      setEditMsg({ type: 'err', text: 'Password must be at least 6 characters' }); return
     }
     setEditSaving(true); setEditMsg(null)
     const supabase = createClient()
@@ -137,7 +174,7 @@ export function ProfileButton() {
       if (updates.email) setEmail(updates.email)
       setEditPassword('')
       setEditPasswordConfirm('')
-      setEditMsg({ type: 'ok', text: updates.email ? 'Bevestigingsmail verstuurd naar nieuw adres.' : 'Opgeslagen.' })
+      setEditMsg({ type: 'ok', text: updates.email ? 'Confirmation email sent to new address.' : 'Saved.' })
     }
   }
 
@@ -170,10 +207,10 @@ export function ProfileButton() {
         setFitbitSyncMessage({
           type: 'err',
           text: data?.error === 'not connected'
-            ? 'Fitbit is nog niet gekoppeld.'
+            ? 'Fitbit is not connected.'
             : apiError
-              ? `Sync fout: ${apiError}`
-              : 'Fitbit sync mislukt.',
+              ? `Sync error: ${apiError}`
+              : 'Fitbit sync failed.',
         })
         return
       }
@@ -185,8 +222,8 @@ export function ProfileButton() {
       setFitbitSyncMessage({
         type: errorCount ? 'err' : 'ok',
         text: errorCount
-          ? `Sync met ${errorCount} fout${errorCount === 1 ? '' : 'en'}.`
-          : `Fitbit bijgewerkt: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+          ? `Sync completed with ${errorCount} error${errorCount === 1 ? '' : 's'}.`
+          : `Fitbit updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
       })
     } finally {
       setFitbitSyncing(false)
@@ -217,6 +254,107 @@ export function ProfileButton() {
       .from('user_settings')
       .update({ units: next })
       .eq('user_id', userId)
+  }
+
+  function openMacroChoice() {
+    setEditingMacroMode(true)
+  }
+
+  function openMacroCalc() {
+    const latestWeight = healthRows.find((r: any) => r.gewicht != null)?.gewicht ?? null
+    setCalcStep(0); setCalcGoal(null)
+    setCalcGender(savedCalcGender)
+    setCalcAge(savedCalcAge)
+    setCalcHeight(savedCalcHeight)
+    setCalcWeight(latestWeight ? String(Math.round(Number(latestWeight) * 10) / 10) : '')
+    setCalcActivity(null); setCalcSaved(false); setCalcTargetKg(''); setCalcTargetWeeks('')
+    setEditingMacroMode(false)
+    setEditingMacroCalc(true)
+  }
+
+  function openMacroManual() {
+    setManualKcal(savedMacroKcal ? String(savedMacroKcal) : '')
+    setManualProtein(savedMacroProtein ? String(savedMacroProtein) : '')
+    setManualCarbs(savedMacroCarbs ? String(savedMacroCarbs) : '')
+    setManualFat(savedMacroFat ? String(savedMacroFat) : '')
+    setEditingMacroMode(false)
+    setEditingMacroManual(true)
+  }
+
+  function computeMacros(rate = 0) {
+    const w = Number(calcWeight), h = Number(calcHeight), a = Number(calcAge)
+    if (!w || !h || !a || !calcGender || !calcActivity || !calcGoal) return null
+    const bmr = calcGender === 'male'
+      ? 10 * w + 6.25 * h - 5 * a + 5
+      : 10 * w + 6.25 * h - 5 * a - 161
+    const tdee = Math.round(bmr * calcActivity)
+    const deficit = Math.round(rate * 7700 / 7)
+    const kcal = Math.round(
+      calcGoal === 'lose'     ? tdee - deficit :
+      calcGoal === 'gain'     ? tdee + deficit :
+      tdee
+    )
+    const protein = Math.round(w * (calcGoal === 'lose' ? 2.2 : calcGoal === 'gain' ? 2.0 : 1.8))
+    const fat = Math.round(kcal * (calcGoal === 'lose' ? 0.25 : calcGoal === 'gain' ? 0.28 : 0.30) / 9)
+    const carbs = Math.round(Math.max(0, kcal - protein * 4 - fat * 9) / 4)
+    return { kcal, protein, fat, carbs, tdee }
+  }
+
+  async function saveMacros() {
+    if (!userId) return
+    const deltaKg = calcTargetKg && Number(calcTargetKg) > 0
+      ? Math.abs(Number(calcWeight) - Number(calcTargetKg))
+      : 0
+    const resolvedWeeks = Number(calcTargetWeeks) > 0
+      ? Number(calcTargetWeeks)
+      : deltaKg > 0 ? Math.round(deltaKg / 0.5) : 1
+    const derivedRate = calcGoal !== 'maintain' && deltaKg > 0
+      ? Math.max(0.1, deltaKg / resolvedWeeks)
+      : 0
+    const m = computeMacros(derivedRate)
+    if (!m) return
+    setCalcSaving(true)
+    await createClient()
+      .from('user_settings')
+      .update({
+        macro_kcal: m.kcal, macro_protein: m.protein, macro_carbs: m.carbs, macro_fat: m.fat,
+        height_cm: Number(calcHeight) || null,
+        age: Number(calcAge) || null,
+        gender: calcGender,
+      })
+      .eq('user_id', userId)
+    setSavedCalcHeight(calcHeight)
+    setSavedCalcAge(calcAge)
+    setSavedCalcGender(calcGender)
+    setSavedMacroKcal(m.kcal); setSavedMacroProtein(m.protein)
+    setSavedMacroCarbs(m.carbs); setSavedMacroFat(m.fat)
+    const newTargets = { kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat }
+    const today = new Date().toISOString().split('T')[0]
+    mutate('food-log', (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
+    mutate(`food-log-${today}`, (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
+    setCalcSaving(false)
+    setCalcSaved(true)
+    setTimeout(() => { setEditingMacroCalc(false); setOpen(false); router.push('/food') }, 800)
+  }
+
+  async function saveMacrosManual() {
+    if (!userId) return
+    const kcal = Number(manualKcal), protein = Number(manualProtein)
+    const carbs = Number(manualCarbs), fat = Number(manualFat)
+    if (!kcal || !protein || !carbs || !fat) return
+    setManualSaving(true)
+    await createClient()
+      .from('user_settings')
+      .update({ macro_kcal: kcal, macro_protein: protein, macro_carbs: carbs, macro_fat: fat })
+      .eq('user_id', userId)
+    setSavedMacroKcal(kcal); setSavedMacroProtein(protein)
+    setSavedMacroCarbs(carbs); setSavedMacroFat(fat)
+    const newTargets = { kcal, protein, carbs, fat }
+    const today = new Date().toISOString().split('T')[0]
+    mutate('food-log', (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
+    mutate(`food-log-${today}`, (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
+    setManualSaving(false)
+    setEditingMacroManual(false)
   }
 
   async function saveTargets() {
@@ -296,43 +434,43 @@ export function ProfileButton() {
                 <button onClick={() => setEditingAccount(false)}
                   className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
-                  Terug
+                  Back
                 </button>
                 <span className="text-[17px] font-semibold text-white">Account</span>
                 <button onClick={saveAccount} disabled={editSaving}
                   className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
-                  {editSaving ? '…' : 'Opslaan'}
+                  {editSaving ? '…' : 'Save'}
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
-                <ProfileSection title="Naam">
+                <ProfileSection title="Name">
                   <ProfileRow>
                     <input
                       value={editName}
                       onChange={e => setEditName(e.target.value)}
-                      placeholder="Naam"
+                      placeholder="Name"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
                     />
                   </ProfileRow>
                 </ProfileSection>
-                <ProfileSection title="E-mailadres">
+                <ProfileSection title="Email">
                   <ProfileRow>
                     <input
                       type="email"
                       value={editEmail}
                       onChange={e => setEditEmail(e.target.value)}
-                      placeholder="E-mailadres"
+                      placeholder="Email address"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
                     />
                   </ProfileRow>
                 </ProfileSection>
-                <ProfileSection title="Wachtwoord">
+                <ProfileSection title="Password">
                   <ProfileRow separator>
                     <input
                       type="password"
                       value={editPassword}
                       onChange={e => setEditPassword(e.target.value)}
-                      placeholder="Nieuw wachtwoord"
+                      placeholder="New password"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
                     />
                   </ProfileRow>
@@ -341,7 +479,7 @@ export function ProfileButton() {
                       type="password"
                       value={editPasswordConfirm}
                       onChange={e => setEditPasswordConfirm(e.target.value)}
-                      placeholder="Bevestig wachtwoord"
+                      placeholder="Confirm password"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
                     />
                   </ProfileRow>
@@ -363,19 +501,19 @@ export function ProfileButton() {
                 <button onClick={() => setEditingTargets(false)}
                   className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
-                  Terug
+                  Back
                 </button>
                 <span className="text-[17px] font-semibold text-white">Targets</span>
                 <button onClick={saveTargets} disabled={targetsSaving}
                   className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
-                  {targetsSaving ? '…' : 'Opslaan'}
+                  {targetsSaving ? '…' : 'Save'}
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
-                <ProfileSection title="Activiteit">
+                <ProfileSection title="Activity">
                   <ProfileRow>
                     <div className="flex items-center justify-between">
-                      <span className="text-[17px] text-white">Stappendoel</span>
+                      <span className="text-[17px] text-white">Step goal</span>
                       <input
                         type="number"
                         value={stepGoal}
@@ -385,7 +523,7 @@ export function ProfileButton() {
                     </div>
                   </ProfileRow>
                 </ProfileSection>
-                <ProfileSection title="Kracht-standaarden (kg)">
+                <ProfileSection title="Strength standards (kg)">
                   <ProfileRow separator>
                     <div className="flex items-center justify-between">
                       <span className="text-[17px] text-white">Squat</span>
@@ -453,20 +591,18 @@ export function ProfileButton() {
               <div className="absolute inset-0 z-10 flex flex-col"
                 style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
 
-                {/* Nav */}
                 <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
                   <button onClick={() => setEditingPages(false)}
                     className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
                     style={{ background: 'rgba(255,255,255,0.10)' }}>
-                    Terug
+                    Back
                   </button>
                   <button onClick={savePages} disabled={pagesSaving}
                     className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
-                    {pagesSaving ? '…' : 'Opslaan'}
+                    {pagesSaving ? '…' : 'Save'}
                   </button>
                 </div>
 
-                {/* Title block */}
                 <div className="px-5 pt-3 pb-5 shrink-0 flex items-end justify-between">
                   <div>
                     <h1 className="text-[28px] font-bold text-white leading-tight">Pages</h1>
@@ -482,8 +618,6 @@ export function ProfileButton() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
-
-                  {/* Training section */}
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] font-semibold px-1 tracking-[0.12em]"
                       style={{ color: 'rgba(255,255,255,0.28)' }}>
@@ -497,7 +631,6 @@ export function ProfileButton() {
                     </div>
                   </div>
 
-                  {/* Health section */}
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] font-semibold px-1 tracking-[0.12em]"
                       style={{ color: 'rgba(255,255,255,0.28)' }}>
@@ -511,7 +644,6 @@ export function ProfileButton() {
                     </div>
                   </div>
 
-                  {/* Warning — only 1 active */}
                   {onlyOne && (
                     <div className="rounded-[14px] px-4 py-3.5 flex items-center gap-3"
                       style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.22)' }}>
@@ -521,8 +653,398 @@ export function ProfileButton() {
                       </p>
                     </div>
                   )}
-
                 </div>
+              </div>
+            )
+          })()}
+
+          {/* Macro mode choice overlay */}
+          {editingMacroMode && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingMacroMode(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Macro Targets</span>
+                <div className="w-16" />
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col gap-6 pt-4">
+                <div>
+                  <p className="text-[30px] font-bold text-white leading-tight">How do you want to set your macros?</p>
+                  <p className="text-[15px] text-white/40 mt-1.5">The calculator uses your body stats and goal to compute optimal targets.</p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <CalcCard emoji="🧮" title="Calculator"
+                    desc="Answer a few questions and we'll calculate your targets"
+                    selected={false} onSelect={openMacroCalc} />
+                  <CalcCard emoji="✏️" title="Set manually"
+                    desc="Enter your calorie and macro targets directly"
+                    selected={false} onSelect={openMacroManual} />
+                </div>
+                {(savedMacroKcal > 0) && (
+                  <div className="rounded-[14px] px-4 py-3"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <p className="text-[12px] text-white/35 mb-1 uppercase tracking-[0.08em] font-semibold">Current targets</p>
+                    <p className="text-[15px] text-white/70">
+                      {savedMacroKcal} kcal · {savedMacroProtein}g protein · {savedMacroCarbs}g carbs · {savedMacroFat}g fat
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Manual macro input overlay */}
+          {editingMacroManual && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingMacroManual(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Set Macros</span>
+                <button onClick={saveMacrosManual} disabled={manualSaving || !manualKcal || !manualProtein || !manualCarbs || !manualFat}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                  {manualSaving ? '…' : 'Save'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-4">
+                <ProfileSection title="Daily targets">
+                  {([
+                    { label: 'Calories', unit: 'kcal', value: manualKcal, set: setManualKcal },
+                    { label: 'Protein',  unit: 'g',    value: manualProtein, set: setManualProtein },
+                    { label: 'Carbs',    unit: 'g',    value: manualCarbs,   set: setManualCarbs },
+                    { label: 'Fat',      unit: 'g',    value: manualFat,     set: setManualFat },
+                  ] as const).map(({ label, unit, value, set }, i, arr) => (
+                    <ProfileRow key={label} separator={i < arr.length - 1}>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[17px] text-white">{label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={value}
+                            onChange={e => (set as (v: string) => void)(e.target.value)}
+                            placeholder="—"
+                            className="w-20 bg-transparent text-white text-[17px] text-right outline-none placeholder:text-white/25"
+                          />
+                          <span className="text-[14px] text-white/35 w-8">{unit}</span>
+                        </div>
+                      </div>
+                    </ProfileRow>
+                  ))}
+                </ProfileSection>
+              </div>
+            </div>
+          )}
+
+          {/* Macro calculator overlay */}
+          {editingMacroCalc && (() => {
+            // Steps: 0=gender 1=age 2=height 3=weight 4=activity 5=goal
+            //        6=target-weight+weeks-slider(lose/gain only) 7=results
+            const ACTS = [
+              { label: 'Sedentary',         desc: 'Desk job, no exercise',     v: 1.2   },
+              { label: 'Lightly active',    desc: '1–3× exercise per week',    v: 1.375 },
+              { label: 'Moderately active', desc: '3–5× exercise per week',    v: 1.55  },
+              { label: 'Very active',       desc: '6–7× exercise per week',    v: 1.725 },
+              { label: 'Extra active',      desc: 'Athlete / physical job',    v: 1.9   },
+            ]
+
+            const deltaKg = calcTargetKg && Number(calcTargetKg) > 0
+              ? Math.abs(Number(calcWeight) - Number(calcTargetKg))
+              : 0
+
+            // Dynamic slider range: fastest = 2 kg/week, slowest = 0.1 kg/week
+            const minWeeks = deltaKg > 0 ? Math.max(1, Math.ceil(deltaKg / 2)) : 1
+            const maxWeeks = deltaKg > 0 ? Math.max(minWeeks + 1, Math.floor(deltaKg / 0.1)) : 10
+            const defaultWeeks = deltaKg > 0 ? Math.round(deltaKg / 0.5) : Math.round((minWeeks + maxWeeks) / 2)
+            const sliderWeeks = Number(calcTargetWeeks) > 0 ? Number(calcTargetWeeks) : defaultWeeks
+            const sliderRate = deltaKg > 0 && sliderWeeks > 0 ? Math.round(deltaKg / sliderWeeks * 100) / 100 : 0
+            const sliderPct = maxWeeks > minWeeks ? (sliderWeeks - minWeeks) / (maxWeeks - minWeeks) * 100 : 0
+
+            const derivedRate = calcGoal !== 'maintain' && deltaKg > 0
+              ? Math.max(0.1, deltaKg / Math.max(1, sliderWeeks))
+              : 0
+            const macros = calcStep === 7 ? computeMacros(derivedRate) : null
+
+            const canNextMap: Record<number, boolean> = {
+              0: !!calcGender,
+              1: !!calcAge && Number(calcAge) > 0,
+              2: !!calcHeight && Number(calcHeight) > 0,
+              3: !!calcWeight && Number(calcWeight) > 0,
+              4: calcActivity !== null,
+              5: !!calcGoal,
+              6: deltaKg > 0,
+            }
+            const canNext = canNextMap[calcStep] ?? false
+
+            const questionSteps = calcGoal === 'maintain' ? [0,1,2,3,4,5] : [0,1,2,3,4,5,6]
+            const dotIdx = questionSteps.indexOf(calcStep)
+            const totalDots = calcGoal === 'maintain' ? 6 : 7
+
+            function goBack() {
+              if (calcStep === 0) { setEditingMacroCalc(false); return }
+              if (calcStep === 7) { setCalcSaved(false); setCalcStep(calcGoal === 'maintain' ? 5 : 6); return }
+              setCalcStep(s => s - 1)
+            }
+
+            const deficit = macros ? Math.round(derivedRate * 7700 / 7) : 0
+            const safeLabel = calcGoal === 'maintain' || !derivedRate ? null
+              : derivedRate < 0.5  ? { text: 'Recommended',                          color: '#2dd4bf', icon: '✅' }
+              : derivedRate < 0.75 ? { text: 'Acceptable',                            color: '#a3e635', icon: '⚠️' }
+              : derivedRate < 1.5  ? { text: 'Aggressive — risk of muscle loss',      color: '#fb923c', icon: '🚨' }
+              :                      { text: 'Not recommended — serious health risks', color: '#f87171', icon: '❌' }
+
+            return (
+              <div className="absolute inset-0 z-10 flex flex-col"
+                style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+
+                <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                  <button onClick={goBack}
+                    className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                    style={{ background: 'rgba(255,255,255,0.10)' }}>
+                    {calcStep === 0 ? 'Back' : '‹ Back'}
+                  </button>
+                  {calcStep < 7 ? (
+                    <div className="flex gap-1.5 items-center">
+                      {Array.from({ length: totalDots }).map((_, i) => (
+                        <div key={i} className="rounded-full transition-all duration-300"
+                          style={{ width: i === dotIdx ? '16px' : '6px', height: '6px',
+                            background: i <= dotIdx ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.18)' }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[17px] font-semibold text-white">Your macros</span>
+                  )}
+                  <div className="w-16" />
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-5 pb-6" style={{ scrollbarWidth: 'none' }}>
+
+                  {calcStep === 0 && (
+                    <div className="flex flex-col gap-6 pt-3">
+                      <div>
+                        <p className="text-[30px] font-bold text-white leading-tight">What is your sex?</p>
+                        <p className="text-[15px] text-white/40 mt-1.5">Required for the BMR calculation.</p>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {([
+                          { v: 'male'   as const, e: '♂️', t: 'Male' },
+                          { v: 'female' as const, e: '♀️', t: 'Female' },
+                        ] as const).map(({ v, e, t }) => (
+                          <CalcCard key={v} emoji={e} title={t} selected={calcGender === v}
+                            onSelect={() => { setCalcGender(v); setCalcStep(1) }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {calcStep === 1 && <CalcNumberStep question="How old are you?"   unit="yrs" value={calcAge}    onChange={setCalcAge}    min={10}  max={100} />}
+                  {calcStep === 2 && <CalcNumberStep question="How tall are you?"  unit="cm"  value={calcHeight} onChange={setCalcHeight} min={100} max={250} />}
+                  {calcStep === 3 && <CalcNumberStep question="What do you weigh?" unit="kg"  value={calcWeight} onChange={setCalcWeight} min={30}  max={300} decimal />}
+
+                  {calcStep === 4 && (
+                    <div className="flex flex-col gap-6 pt-3">
+                      <div>
+                        <p className="text-[30px] font-bold text-white leading-tight">How active are you?</p>
+                        <p className="text-[15px] text-white/40 mt-1.5">Average week, including exercise.</p>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {ACTS.map(({ label, desc, v }) => (
+                          <CalcCard key={v} title={label} desc={desc} selected={calcActivity === v}
+                            onSelect={() => { setCalcActivity(v); setCalcStep(5) }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {calcStep === 5 && (
+                    <div className="flex flex-col gap-6 pt-3">
+                      <div>
+                        <p className="text-[30px] font-bold text-white leading-tight">What is your goal?</p>
+                        <p className="text-[15px] text-white/40 mt-1.5">This determines your calorie and macro targets.</p>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {([
+                          { v: 'lose'     as const, e: '🔥', t: 'Lose weight',    d: 'Calorie deficit based on your target' },
+                          { v: 'maintain' as const, e: '⚖️', t: 'Maintain weight', d: 'Maintenance calories' },
+                          { v: 'gain'     as const, e: '💪', t: 'Build muscle',    d: 'Calorie surplus based on your target' },
+                        ] as const).map(({ v, e, t, d }) => (
+                          <CalcCard key={v} emoji={e} title={t} desc={d} selected={calcGoal === v}
+                            onSelect={() => { setCalcGoal(v); setCalcStep(v === 'maintain' ? 7 : 6) }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 6: target weight + dynamic weeks slider */}
+                  {calcStep === 6 && (
+                    <div className="flex flex-col gap-8 pt-3">
+                      <p className="text-[30px] font-bold text-white leading-tight">What do you want to weigh?</p>
+
+                      {/* Current vs Goal side by side */}
+                      <div className="flex items-end gap-4">
+                        {/* Current weight (static) */}
+                        <div className="flex flex-col items-center gap-1 flex-1">
+                          <span className="text-[12px] font-semibold text-white/35 uppercase tracking-[0.10em]">Now</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[48px] font-bold text-white/40 leading-none">{calcWeight || '—'}</span>
+                            <span className="text-[16px] text-white/25">kg</span>
+                          </div>
+                        </div>
+
+                        <span className="text-[24px] text-white/20 pb-2 shrink-0">→</span>
+
+                        {/* Target weight (editable) */}
+                        <div className="flex flex-col items-center gap-1 flex-1">
+                          <span className="text-[12px] font-semibold text-teal-400 uppercase tracking-[0.10em]">Goal</span>
+                          <div className="flex items-baseline gap-1">
+                            <input
+                              type="text" inputMode="decimal"
+                              value={calcTargetKg}
+                              onChange={e => {
+                                const v = e.target.value.replace(',', '.')
+                                if (/^\d*\.?\d*$/.test(v)) { setCalcTargetKg(v); setCalcTargetWeeks('') }
+                              }}
+                              placeholder="—"
+                              className="text-[48px] font-bold text-white bg-transparent outline-none text-center"
+                              style={{ width: '120px', caretColor: 'rgb(45,212,191)' }}
+                            />
+                            <span className="text-[16px] text-white/40">kg</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ± buttons */}
+                      <div className="flex justify-center gap-4 -mt-2">
+                        <button onClick={() => { const v = Math.round((Math.max(30, (Number(calcTargetKg) || Number(calcWeight) || 70) - 0.5)) * 10) / 10; setCalcTargetKg(String(v)); setCalcTargetWeeks('') }}
+                          className="w-[52px] h-[52px] rounded-full text-[26px] text-white flex items-center justify-center"
+                          style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
+                        <button onClick={() => { const v = Math.round((Math.min(300, (Number(calcTargetKg) || Number(calcWeight) || 70) + 0.5)) * 10) / 10; setCalcTargetKg(String(v)); setCalcTargetWeeks('') }}
+                          className="w-[52px] h-[52px] rounded-full text-[26px] text-white flex items-center justify-center"
+                          style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+                      </div>
+
+                      {deltaKg > 0 && (
+                        <div className="flex flex-col gap-3">
+                          {/* Labels above slider */}
+                          <div className="flex justify-between items-center px-1">
+                            <span className="text-[13px] font-semibold text-white/50">{sliderWeeks} weeks</span>
+                            <span className="text-[13px] font-semibold"
+                              style={{ color: sliderRate < 0.5 ? '#2dd4bf' : sliderRate < 0.75 ? '#a3e635' : sliderRate < 1.5 ? '#fb923c' : '#f87171' }}>
+                              {sliderRate.toFixed(2)} kg/week
+                            </span>
+                          </div>
+
+                          {/* Slider */}
+                          <input
+                            type="range"
+                            min={minWeeks} max={maxWeeks} step={1}
+                            value={sliderWeeks}
+                            onChange={e => setCalcTargetWeeks(e.target.value)}
+                            className="w-full h-[4px] rounded-full appearance-none outline-none"
+                            style={{
+                              background: `linear-gradient(to right, rgb(45,212,191) 0%, rgb(45,212,191) ${sliderPct}%, rgba(255,255,255,0.15) ${sliderPct}%, rgba(255,255,255,0.15) 100%)`,
+                              WebkitAppearance: 'none',
+                            }}
+                          />
+
+                          {/* Safety indicator */}
+                          {sliderRate >= 1.5 && (
+                            <div className="rounded-[14px] px-4 py-3 mt-1"
+                              style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                              <p className="text-[13px] text-red-400/80 leading-relaxed">
+                                1.5 kg/week or more carries serious health risks. Consider spreading your goal over more weeks.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Step 7: results */}
+                  {calcStep === 7 && macros && (
+                    <div className="flex flex-col gap-5 pt-3">
+                      <div>
+                        <p className="text-[13px] font-semibold text-teal-400 uppercase tracking-[0.12em] mb-2">
+                          {calcGoal === 'lose' ? 'Losing weight' : calcGoal === 'gain' ? 'Building muscle' : 'Maintaining weight'}
+                        </p>
+                        <p className="text-[56px] font-bold text-white leading-none">{macros.kcal}</p>
+                        <p className="text-[16px] text-white/40 mt-1">
+                          kcal per day
+                          {calcGoal !== 'maintain' && macros.tdee && (
+                            <span className="text-[13px] ml-2" style={{ color: calcGoal === 'lose' ? '#f87171' : '#4ade80' }}>
+                              ({calcGoal === 'lose' ? '−' : '+'}{deficit} vs maintenance)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {([
+                          { label: 'Protein', value: macros.protein, color: '#2dd4bf' },
+                          { label: 'Carbs',   value: macros.carbs,   color: '#facc15' },
+                          { label: 'Fat',     value: macros.fat,     color: '#818cf8' },
+                        ]).map(({ label, value, color }) => (
+                          <div key={label} className="flex flex-col gap-1.5 p-3.5 rounded-[16px]"
+                            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color }}>{label}</span>
+                            <div className="flex items-baseline gap-0.5">
+                              <span className="text-[28px] font-bold text-white leading-none">{value}</span>
+                              <span className="text-[10px] text-white/35 ml-0.5">g</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {calcGoal !== 'maintain' && safeLabel && (
+                        <div className="rounded-[14px] px-4 py-3 flex items-center gap-3"
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <span className="text-[18px]">{safeLabel.icon}</span>
+                          <div>
+                            <p className="text-[14px] font-semibold" style={{ color: safeLabel.color }}>{safeLabel.text}</p>
+                            <p className="text-[12px] text-white/35 mt-0.5">
+                              {calcWeight} → {calcTargetKg} kg in {sliderWeeks} weeks · {derivedRate.toFixed(2)} kg/week
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="rounded-[14px] p-4"
+                        style={{ background: 'rgba(45,212,191,0.06)', border: '1px solid rgba(45,212,191,0.14)' }}>
+                        <p className="text-[13px] text-white/50 leading-relaxed">
+                          Calculated via <span className="text-white/70 font-medium">Mifflin-St Jeor</span> · maintenance {macros.tdee} kcal · {calcGoal === 'lose' ? 2.2 : calcGoal === 'gain' ? 2.0 : 1.8}g protein/kg
+                        </p>
+                      </div>
+
+                      <button onClick={saveMacros} disabled={calcSaving || calcSaved}
+                        className="w-full h-[52px] rounded-[16px] font-bold text-[16px] transition-all disabled:opacity-60"
+                        style={{
+                          background: calcSaved ? 'rgba(45,212,191,0.12)' : 'rgba(45,212,191,0.18)',
+                          border: '1.5px solid rgba(45,212,191,0.38)',
+                          color: 'rgb(45,212,191)',
+                        }}>
+                        {calcSaving ? 'Saving…' : calcSaved ? '✓ Saved as targets' : 'Save as targets'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {(calcStep >= 1 && calcStep <= 3 || calcStep === 6) && (
+                  <div className="shrink-0 px-5 pb-8 pt-2">
+                    <button onClick={() => setCalcStep(s => s + 1)} disabled={!canNext}
+                      className="w-full h-[52px] rounded-[16px] font-bold text-[16px] text-white transition-all disabled:opacity-30"
+                      style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                      {calcStep === 6 ? 'Calculate my macros →' : 'Next →'}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -603,6 +1125,12 @@ export function ProfileButton() {
             {/* Preferences */}
             <ProfileSection title="Preferences">
               <ProfileRow separator>
+                <button className="flex items-center justify-between w-full" onClick={openMacroChoice}>
+                  <span className="text-[17px] text-white">Macro Targets</span>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
+                </button>
+              </ProfileRow>
+              <ProfileRow separator>
                 <button className="flex items-center justify-between w-full" onClick={() => setEditingTargets(true)}>
                   <span className="text-[17px] text-white">Targets & Standards</span>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
@@ -610,7 +1138,7 @@ export function ProfileButton() {
               </ProfileRow>
               <ProfileRow separator>
                 <button className="flex items-center justify-between w-full" onClick={() => setEditingPages(true)}>
-                  <span className="text-[17px] text-white">Pagina's</span>
+                  <span className="text-[17px] text-white">Pages</span>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
               </ProfileRow>
@@ -666,14 +1194,14 @@ export function ProfileButton() {
           <div className="w-full max-w-sm flex flex-col gap-3" onClick={e => e.stopPropagation()}>
             <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(30,30,30,0.98)' }}>
               <div className="px-5 pt-5 pb-4 text-center border-b border-white/[0.08]">
-                <p className="text-[17px] font-semibold text-white mb-1">{disconnectLabel} loskoppelen</p>
-                <p className="text-[13px] text-white/50">Je data wordt niet meer gesynchroniseerd.</p>
+                <p className="text-[17px] font-semibold text-white mb-1">Disconnect {disconnectLabel}</p>
+                <p className="text-[13px] text-white/50">Your data will no longer be synced.</p>
               </div>
               <button
                 onClick={handleDisconnect}
                 className="w-full py-4 text-[17px] font-semibold text-red-400 text-center"
               >
-                Loskoppelen
+                Disconnect
               </button>
             </div>
             <button
@@ -681,7 +1209,7 @@ export function ProfileButton() {
               className="w-full py-4 rounded-[14px] text-[17px] font-semibold text-white text-center"
               style={{ background: 'rgba(30,30,30,0.98)' }}
             >
-              Annuleren
+              Cancel
             </button>
           </div>
         </div>
@@ -709,6 +1237,68 @@ function ProfileRow({ children, separator }: { children: React.ReactNode; separa
   return (
     <div className="px-4 py-3.5" style={{ borderBottom: separator ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
       {children}
+    </div>
+  )
+}
+
+function CalcCard({ emoji, title, desc, selected, onSelect }: {
+  emoji?: string; title: string; desc?: string; selected: boolean; onSelect: () => void
+}) {
+  return (
+    <button onClick={onSelect}
+      className="w-full px-4 py-4 rounded-[16px] flex items-center gap-3.5 text-left active:scale-[0.98] transition-transform"
+      style={{
+        background: selected ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.07)',
+        border: `1.5px solid ${selected ? 'rgba(45,212,191,0.35)' : 'rgba(255,255,255,0.08)'}`,
+      }}>
+      {emoji && <span className="text-[26px] shrink-0 leading-none">{emoji}</span>}
+      <div className="flex-1">
+        <p className="text-[17px] font-semibold text-white leading-snug">{title}</p>
+        {desc && <p className="text-[13px] text-white/40 mt-0.5">{desc}</p>}
+      </div>
+      <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${selected ? 'bg-teal-400 border-teal-400' : 'border-white/20'}`}>
+        {selected && <span className="text-[10px] text-black font-bold leading-none">✓</span>}
+      </div>
+    </button>
+  )
+}
+
+function CalcNumberStep({ question, unit, value, onChange, min, max, decimal }: {
+  question: string; unit: string; value: string; onChange: (v: string) => void; min: number; max: number; decimal?: boolean
+}) {
+  const step = decimal ? 0.5 : 1
+  return (
+    <div className="flex flex-col gap-10 pt-3">
+      <p className="text-[30px] font-bold text-white leading-tight">{question}</p>
+      <div className="flex flex-col items-center gap-6">
+        <div className="flex items-baseline gap-2">
+          <input
+            type="text" inputMode="decimal" value={value}
+            onChange={e => {
+              const v = e.target.value.replace(',', '.')
+              if (/^\d*\.?\d*$/.test(v)) onChange(v)
+            }}
+            placeholder="—"
+            className="text-[72px] font-bold text-white bg-transparent outline-none text-center"
+            style={{ width: '180px', caretColor: 'rgb(45,212,191)' }}
+          />
+          <span className="text-[22px] text-white/40 font-medium">{unit}</span>
+        </div>
+        <div className="flex gap-4">
+          <button onClick={() => {
+            const next = Math.round((Math.max(min, (Number(value) || 0) - step)) * 10) / 10
+            onChange(String(next))
+          }}
+            className="w-[52px] h-[52px] rounded-full text-[26px] text-white flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
+          <button onClick={() => {
+            const next = Math.round((Math.min(max, (Number(value) || 0) + step)) * 10) / 10
+            onChange(String(next))
+          }}
+            className="w-[52px] h-[52px] rounded-full text-[26px] text-white flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+        </div>
+      </div>
     </div>
   )
 }
