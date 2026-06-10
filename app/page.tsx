@@ -601,8 +601,6 @@ function DailyBriefingCard({ text }: { text: string }) {
 
 // ─── Hero action card ─────────────────────────────────────────────────────────
 
-const STRAVA_KEYWORDS = ['fietsen', 'ride', 'cycling', 'wielren', 'hardlopen', 'run', 'loop', 'duurloop', 'interval', 'tempoloop']
-
 function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, workoutTimePassed = false, isTomorrow = false, readinessScore }: {
   todayWorkout: { title: string; start_datetime: string | null } | null
   todayWorkoutDone: boolean
@@ -640,9 +638,8 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, worko
   ]
 
   const hasUnfinishedWorkout = todayWorkout !== null && !todayWorkoutDone
-  const isStravaWorkout = hasUnfinishedWorkout && STRAVA_KEYWORDS.some(k => todayWorkout!.title.toLowerCase().includes(k))
   const workoutHref = todayWorkout
-    ? (isStravaWorkout ? `/training/session?title=${encodeURIComponent(todayWorkout.title)}&time=${encodeURIComponent(todayWorkout.start_datetime ?? '')}` : '/training')
+    ? `/training/session?title=${encodeURIComponent(todayWorkout.title)}&time=${encodeURIComponent(todayWorkout.start_datetime ?? '')}`
     : '/training'
 
   return (
@@ -670,7 +667,7 @@ function HeroActionCard({ todayWorkout, todayWorkoutDone, tomorrowWorkout, worko
             href={workoutHref}
             className="flex items-center justify-center w-full h-[54px] rounded-[18px] bg-white text-black font-semibold text-[16px]"
           >
-            Start training →
+            View training →
           </a>
         )}
         <a
