@@ -8,7 +8,8 @@ export function MealSection({ meal, icon, label, entries, onDelete, onEdit, onAd
   meal: string; icon: string; label: string; entries: FoodLogEntry[]
   onDelete: (id: string) => void; onEdit: (entry: FoodLogEntry) => void; onAdd: () => void
 }) {
-  const mealKcal = entries.reduce((s, f) => s + Number(f.kcal ?? 0), 0)
+  const mealKcal    = entries.reduce((s, f) => s + Number(f.kcal    ?? 0), 0)
+  const mealProtein = entries.reduce((s, f) => s + Number(f.protein ?? 0), 0)
 
   return (
     <div className="rounded-[18px] border border-white/[0.055] overflow-hidden"
@@ -19,7 +20,9 @@ export function MealSection({ meal, icon, label, entries, onDelete, onEdit, onAd
         <span className="text-[18px] w-7 text-center">{icon}</span>
         <span className="flex-1 text-[16px] font-semibold text-white">{label}</span>
         {mealKcal > 0 && (
-          <span className="text-[13px] font-medium text-white/40">{Math.round(mealKcal)} kcal</span>
+          <span className="text-[13px] font-medium text-white/40">
+            {Math.round(mealKcal)} kcal{mealProtein > 0 ? ` · ${Math.round(mealProtein)}g P` : ''}
+          </span>
         )}
       </div>
 

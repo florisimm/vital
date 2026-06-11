@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { ChevronLeft, Bike, PersonStanding, Dumbbell, RefreshCw, Map, Download } from 'lucide-react'
+import { ChevronLeft, Bike, PersonStanding, Dumbbell, RefreshCw, Map, Download, ArrowUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Card } from '@/components/ui'
 import {
@@ -12,6 +12,27 @@ import {
 } from '@/lib/training-algorithm'
 
 const RouteMap = dynamic(() => import('./RouteMap').then(m => m.RouteMap), { ssr: false })
+
+// ─── Wind helpers ─────────────────────────────────────────────────────────────
+
+type WindData = { speedKmh: number; directionDeg: number; compassLabel: string }
+
+function degToCompass(deg: number): string {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  return dirs[Math.round(deg / 45) % 8]
+}
+
+async function fetchWind(lat: number, lon: number): Promise<WindData | null> {
+  try {
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=windspeed_10m,winddirection_10m&wind_speed_unit=kmh&forecast_days=1`
+    )
+    const json = await res.json()
+    const speed = Math.round(json?.current?.windspeed_10m ?? 0)
+    const dir   = Math.round(json?.current?.winddirection_10m ?? 0)
+    return { speedKmh: speed, directionDeg: dir, compassLabel: degToCompass(dir) }
+  } catch { return null }
+}
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
@@ -145,6 +166,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [windData, setWindData] = useState<WindData | null>(null)
   const seedRef = useRef(Math.floor(Math.random() * 10000))
   const kmRef = useRef(advice.targetKm)
   const startCoordRef = useRef<[number, number] | null>(null)
@@ -166,6 +188,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     startCoordRef.current = [lat, lon]
     setStartCoord([lat, lon])
     setLoading(true); setError(null)
+    fetchWind(lat, lon).then(w => { if (w) setWindData(w) })
     try {
       const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
       setRouteCoords(result.coords); setActualKm(result.actualKm)
@@ -279,12 +302,24 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
         </div>
       ) : null}
 
-      {/* Actual route distance */}
+      {/* Actual route distance + wind */}
       {routeCoords && actualKm !== null && (
-        <div className="px-4 pb-2 flex items-center gap-2">
-          <span className="text-[13px] text-white/40">Route distance:</span>
-          <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
-          <span className="text-[13px] text-white/30">· target {parsedKm()} km</span>
+        <div className="px-4 pb-2 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-white/40">Route distance:</span>
+            <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
+            <span className="text-[13px] text-white/30">· target {parsedKm()} km</span>
+          </div>
+          {windData && (
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] text-white/40">Wind</span>
+              <span className="text-[15px] font-semibold text-white">{windData.speedKmh} km/h</span>
+              <span className="text-[13px] text-white/50">from {windData.compassLabel}</span>
+              <div style={{ transform: `rotate(${(windData.directionDeg + 180) % 360}deg)` }} className="inline-flex text-white/35">
+                <ArrowUp size={13} />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

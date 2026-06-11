@@ -25,8 +25,8 @@ const ALL_TABS = [
   { label: 'Cycling',      key: 'cycling',      href: '/training/cycling'      },
   { label: 'Swimming',     key: 'swimming',     href: '/training/swimming'     },
   { label: 'Strength',     key: 'strength',     href: '/training/strength'     },
-  { label: 'History',      key: 'history',      href: '/training/history'      },
-  { label: 'Performance',  key: 'performance',  href: '/training/performance'  },
+  { label: 'Log',          key: 'history',      href: '/training/history'      },
+  { label: 'Metrics',      key: 'performance',  href: '/training/performance'  },
 ]
 
 export default function TrainingPage() {

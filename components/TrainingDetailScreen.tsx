@@ -12,8 +12,8 @@ const ALL_CATEGORIES = [
   { label: 'Cycling',     href: '/training/cycling'     },
   { label: 'Swimming',    href: '/training/swimming'    },
   { label: 'Strength',    href: '/training/strength'    },
-  { label: 'History',     href: '/training/history'     },
-  { label: 'Performance', href: '/training/performance' },
+  { label: 'Log',         href: '/training/history'     },
+  { label: 'Metrics',    href: '/training/performance' },
 ]
 
 async function fetchHiddenPages(): Promise<string[]> {

@@ -118,7 +118,7 @@ function AiInsight({ text }: { text: string }) {
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <span className="text-orange-400 text-[14px]">✦</span>
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Insight</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Coach Tip</span>
         </div>
         <p className="text-[17px] text-white/85 leading-relaxed">{text}</p>
       </div>
@@ -328,15 +328,25 @@ export function SleepSection() {
     ? 'Sync Fitbit to see your sleep quality data.'
     : (() => {
         const lines: string[] = []
+        if (deepPct !== null && deepPct < 20) {
+          const streak = sleepRows.slice(0, 4).filter(r => {
+            const d = r.slaap_diep; const t = r.slaap_minuten
+            return d !== null && t !== null && Math.round(d / t * 100) < 20
+          }).length
+          lines.push(streak >= 3
+            ? `Deep sleep below 20% for ${streak} consecutive nights — try an earlier bedtime and less screen time in the evening.`
+            : `Deep sleep at ${deepPct}% — slightly below the 20–25% target.`)
+        } else if (deepPct !== null) {
+          lines.push(`Deep sleep at ${deepPct}% — within the healthy range.`)
+        }
+        if (efficiency !== null && efficiency < 85)
+          lines.push(`Sleep efficiency at ${efficiency}% — frequent awakenings are reducing sleep quality.`)
         if (totalMin !== null && avg30Min !== null) {
           const diff = totalMin - avg30Min
-          lines.push(`Sleep duration ${diff >= 0 ? 'exceeded' : 'was below'} your 30-day average by ${fmtMin(Math.abs(diff))}.`)
+          if (Math.abs(diff) > 30)
+            lines.push(`Duration ${diff > 0 ? '+' : ''}${fmtMin(Math.round(diff))} vs your 30-day average.`)
         }
-        if (deepPct !== null)
-          lines.push(`Deep sleep at ${deepPct}% — ${deepPct >= 20 ? 'within' : 'below'} the healthy 20–25% range.`)
-        if (efficiency !== null)
-          lines.push(`Sleep efficiency ${efficiency}%.`)
-        return lines.join(' ') || 'Sleep data loaded.'
+        return lines.join(' ') || 'Sleep data looks normal.'
       })()
 
   // Sleep → next-day HRV correlation pairs
@@ -419,7 +429,7 @@ export function SleepSection() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="text-orange-400 text-[14px]">✦</span>
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Insight</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Coach Tip</span>
             {quality && (
               <span className="ml-auto text-[12px] font-bold" style={{ color: qualityColor }}>
                 Sleep Quality: {quality}
@@ -456,28 +466,14 @@ export function SleepSection() {
         </div>
       </Card>
 
-      {/* Quality Insights 2×2 */}
-      <div className="grid grid-cols-2 gap-3">
-        <MiniCard
-          title="Deep Sleep"
-          value={deepPct !== null ? `${deepPct}%` : '–'}
-          tint={deepPct !== null && deepPct >= 20 ? 'text-indigo-400' : 'text-yellow-400'}
-        />
-        <MiniCard
-          title="REM Sleep"
-          value={remPct !== null ? `${remPct}%` : '–'}
-          tint={remPct !== null && remPct >= 20 ? 'text-purple-400' : 'text-yellow-400'}
-        />
-        <MiniCard
-          title="Efficiency"
-          value={efficiency !== null ? `${efficiency}%` : '–'}
-          tint={efficiency !== null && efficiency >= 85 ? 'text-green-400' : 'text-yellow-400'}
-        />
-        <MiniCard
-          title="Consistency"
-          value={consistency !== null ? `${consistency}%` : '–'}
-          tint={consistency !== null && consistency >= 80 ? 'text-teal-400' : 'text-yellow-400'}
-        />
+      {/* Quality Insights 3×2 — SpO₂ promoted to primary grid */}
+      <div className="grid grid-cols-3 gap-2">
+        <MiniCard title="Deep"        value={deepPct  !== null ? `${deepPct}%`  : '–'} tint={deepPct  !== null && deepPct  >= 20 ? 'text-indigo-400' : 'text-yellow-400'} />
+        <MiniCard title="REM"         value={remPct   !== null ? `${remPct}%`   : '–'} tint={remPct   !== null && remPct   >= 20 ? 'text-purple-400' : 'text-yellow-400'} />
+        <MiniCard title="SpO₂"        value={spo2     !== null ? `${spo2}%`     : '–'} tint={spo2     !== null && spo2     >= 95 ? 'text-teal-400'   : 'text-red-400'}    />
+        <MiniCard title="Efficiency"  value={efficiency  !== null ? `${efficiency}%`  : '–'} tint={efficiency  !== null && efficiency  >= 85 ? 'text-green-400' : 'text-yellow-400'} />
+        <MiniCard title="Consistency" value={consistency !== null ? `${consistency}%` : '–'} tint={consistency !== null && consistency >= 80 ? 'text-teal-400'  : 'text-yellow-400'} />
+        <MiniCard title="Resp"        value={resp !== null ? `${resp}/min` : '–'}       tint="text-cyan-400" />
       </div>
 
       {/* 30-day trends */}
@@ -533,15 +529,6 @@ export function SleepSection() {
         </Card>
       )}
 
-      {/* Secondary: SpO₂ / Resp / Awake */}
-      <div className="flex flex-col gap-3">
-        <span className="text-[13px] font-semibold text-white/30 uppercase tracking-[0.10em]">Also this night</span>
-        <div className="grid grid-cols-3 gap-2">
-          <MiniCard title="SpO₂"      value={spo2 !== null ? `${spo2}%` : '–'}   tint="text-teal-400" />
-          <MiniCard title="Resp rate" value={resp !== null ? `${resp}/min` : '–'} tint="text-cyan-400" />
-          <MiniCard title="Awake"     value={fmtMin(wake)}                         tint="text-white/50" />
-        </div>
-      </div>
 
     </div>
   )
@@ -564,20 +551,32 @@ export function RecoverySection() {
   const readiness   = computePhysiologyReadiness(rows)
   const illnessFlag = computeIllnessFlag(rows)
 
-  const hrvOk   = hrv       ? hrv >= 35       : null
-  const hrOk    = restingHR ? restingHR <= 65 : null
-  const sleepOk = sleepMin  ? sleepMin >= 420  : null
+  const hrvBaseline = computeHRVBaseline(rows)
+  const hrvThreshold = hrvBaseline.baseline ? hrvBaseline.baseline * 0.85 : 35
+  const hrThreshold  = (() => {
+    const hrVals = rows.filter(r => r.hartslag_rust != null).slice(0, 14).map(r => r.hartslag_rust as number)
+    return hrVals.length >= 5 ? Math.round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) + 5 : 65
+  })()
+
+  const hrvOk   = hrv       ? hrv >= hrvThreshold   : null
+  const hrOk    = restingHR ? restingHR <= hrThreshold : null
+  const sleepOk = sleepMin  ? sleepMin >= 420         : null
 
   const factors = [
-    { label: 'HRV',            status: hrv       ? `${Math.round(hrv)} ms` : '–', ok: hrvOk   },
-    { label: 'Resting HR',     status: restingHR ? `${restingHR} bpm`      : '–', ok: hrOk    },
-    { label: 'Sleep quality',  status: sleepScore ? `${sleepScore}%`       : '–', ok: sleepOk },
-    { label: 'Sleep duration', status: sleepMin  ? fmtMin(sleepMin)        : '–', ok: sleepOk },
+    { label: 'HRV',        status: hrv       ? `${Math.round(hrv)} ms` : '–', ok: hrvOk, note: hrvBaseline.baseline ? `baseline ${hrvBaseline.baseline} ms` : '' },
+    { label: 'Resting HR', status: restingHR ? `${restingHR} bpm`      : '–', ok: hrOk,  note: `threshold ${hrThreshold} bpm` },
+    { label: 'Sleep',      status: sleepMin  ? fmtMin(sleepMin)        : '–', ok: sleepOk, note: '7h target' },
   ]
 
-  const aiText = readiness.score
-    ? `Readiness ${readiness.score} (${readiness.label}) — based on HRV, resting HR, and sleep.`
-    : 'Connect Fitbit to see readiness data.'
+  const aiText = (() => {
+    if (!readiness.score) return 'Connect Fitbit to see personalised readiness data.'
+    const lines: string[] = []
+    if (readiness.score >= 80) lines.push(`Readiness at ${readiness.score}% — ${readiness.label}. A good day to push hard in training.`)
+    else if (readiness.score >= 60) lines.push(`Readiness at ${readiness.score}% — ${readiness.label}. Moderate training is supported; avoid max efforts.`)
+    else lines.push(`Readiness at ${readiness.score}% — ${readiness.label}. Prioritise recovery: sleep, nutrition, and easy movement only.`)
+    if (illnessFlag) lines.push('Physiological stress markers are elevated — consider skipping intense sessions today.')
+    return lines.join(' ')
+  })()
 
   return (
     <div className="flex flex-col gap-6">
@@ -601,21 +600,56 @@ export function RecoverySection() {
         tint="text-teal-400"
       />
       <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'}  unit={hrv ? 'ms' : ''}        detail="Daily RMSSD"  Icon={Activity} tint="text-green-400"  />
-        <SmallCard title="Resting HR" value={restingHR ? String(restingHR) : '–'}     unit={restingHR ? 'bpm' : ''} detail="Last night"   Icon={Heart}    tint="text-pink-400"   />
-        <SmallCard title="Sleep"      value={sleepMin ? fmtMin(sleepMin) : '–'}       detail="Duration"             Icon={Moon}           tint="text-indigo-400" />
-        <SmallCard title="Score"      value={sleepScore ? String(sleepScore) : '–'}   unit={sleepScore ? '%' : ''}  detail="Sleep quality" Icon={Flame}   tint="text-orange-400" />
+        <SmallCard title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'}  unit={hrv ? 'ms' : ''}        detail={hrvBaseline.baseline ? `baseline ${hrvBaseline.baseline} ms` : 'Daily RMSSD'} Icon={Activity} tint="text-green-400" />
+        <SmallCard title="Resting HR" value={restingHR ? String(restingHR) : '–'}     unit={restingHR ? 'bpm' : ''} detail="Last night"  Icon={Heart} tint="text-pink-400" />
       </div>
+
+      {/* 7-day HRV trend — proxy for recovery trajectory */}
+      {(() => {
+        const hrv7 = [...rows.filter(r => r.hrv_rmssd != null)].reverse().slice(-7)
+        if (hrv7.length < 3) return null
+        const maxV = Math.max(...hrv7.map(r => r.hrv_rmssd as number), 1)
+        return (
+          <Card>
+            <div className="flex flex-col gap-3">
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">7-Day HRV Trend</span>
+              <div className="flex items-end gap-[3px] h-12">
+                {hrv7.map((r, i) => {
+                  const v = r.hrv_rmssd as number
+                  const isLast = i === hrv7.length - 1
+                  return (
+                    <div key={i} className="flex-1 rounded-sm" style={{ height: `${Math.max((v / maxV) * 48, 4)}px`, background: isLast ? '#4ade80' : '#4ade8055' }} />
+                  )
+                })}
+              </div>
+              {(() => {
+                const first = hrv7[0].hrv_rmssd as number
+                const last = hrv7[hrv7.length - 1].hrv_rmssd as number
+                const diff = Math.round(last - first)
+                return (
+                  <span className="text-[12px]" style={{ color: diff > 0 ? '#4ade80' : diff < 0 ? '#f87171' : 'rgba(255,255,255,0.4)' }}>
+                    {diff > 0 ? '↑' : diff < 0 ? '↓' : '→'} {Math.abs(diff)} ms over 7 days
+                  </span>
+                )
+              })()}
+            </div>
+          </Card>
+        )
+      })()}
+
       <Card>
         <div className="flex flex-col gap-3">
-          <span className="text-[15px] font-semibold text-white/50">Readiness Factors</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Readiness Factors</span>
           {factors.map(f => (
             <div key={f.label} className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <span className={f.ok === null ? 'text-white/30' : f.ok ? 'text-green-400' : 'text-yellow-400'}>
                   {f.ok === null ? '○' : f.ok ? '✓' : '−'}
                 </span>
-                <span className="text-[15px] text-white">{f.label}</span>
+                <div className="flex flex-col">
+                  <span className="text-[15px] text-white">{f.label}</span>
+                  {f.note && <span className="text-[11px] text-white/30">{f.note}</span>}
+                </div>
               </div>
               <span className={`text-[14px] font-medium ${f.ok === null ? 'text-white/30' : f.ok ? 'text-green-400' : 'text-yellow-400'}`}>{f.status}</span>
             </div>
@@ -659,17 +693,8 @@ export function HeartSection() {
     ? `${hrvBaseline.deviationPct > 0 ? '+' : ''}${hrvBaseline.deviationPct}% vs baseline`
     : 'Daily RMSSD'
 
-  const aiText = restingHR
-    ? `Resting HR ${restingHR} bpm${hrv ? `, HRV ${Math.round(hrv)} ms` : ''}.`
-      + (hrvBaseline.deviationPct !== null
-        ? ` HRV ${hrvBaseline.deviationPct > 0 ? 'above' : 'below'} 30-day baseline by ${Math.abs(hrvBaseline.deviationPct)}%.`
-        : '')
-      + (trend !== null ? ` RHR ${trend > 0 ? '+' : ''}${trend} vs 7-day avg.` : '')
-    : 'Connect Fitbit to see heart data.'
-
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text={aiText} />
       <div className="grid grid-cols-2 gap-3">
         <MetricTile title="Resting HR" value={restingHR ? String(restingHR) : '–'} unit={restingHR ? 'bpm' : ''} note={trend !== null ? `${trend > 0 ? '+' : ''}${trend} vs avg` : '–'} Icon={Heart}    tint="text-pink-400"  />
         <MetricTile title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note={deviationText} Icon={Activity} tint="text-green-400" />
@@ -756,6 +781,11 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
 
   const displayWeight = latest ?? null
 
+  const daysDiff = weightRows.length > 1
+    ? (new Date(weightRows[weightRows.length - 1].datum).getTime() - new Date(weightRows[0].datum).getTime()) / 86400000
+    : 0
+  const weeklyRate = daysDiff >= 3 && latest && oldest ? ((latest - oldest) / daysDiff) * 7 : null
+
   const chartWeights = weights
   const chartMin = weights.length ? Math.min(...weights) : 0
   const chartMax = weights.length ? Math.max(...weights) : 0
@@ -770,9 +800,16 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
           <span className="text-[56px] font-bold text-white leading-none">{displayWeight ? displayWeight.toFixed(1) : '–'}</span>
           <span className="text-[24px] font-semibold text-white/50 ml-1">kg</span>
         </div>
-        <span className="text-[15px] font-medium text-cyan-400">
-          {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)} kg` : '–'}
-        </span>
+        <div className="flex items-baseline gap-3">
+          <span className="text-[15px] font-medium text-cyan-400">
+            {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)} kg` : '–'}
+          </span>
+          {weeklyRate !== null && (
+            <span className="text-[13px] text-white/40">
+              {weeklyRate > 0 ? '+' : ''}{weeklyRate.toFixed(2)} kg/week
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Trend Chart */}
@@ -831,34 +868,66 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
 export function ActivitySection({ rows, stepGoal = 10000 }: { rows: GezondheidsRow[]; stepGoal?: number }) {
-  const stepRows = rows.filter(r => r.stappen != null).slice(0, 7).reverse()
-  const steps = stepRows.map(r => Number(r.stappen))
-  const todaySteps = steps[steps.length - 1] ?? 0
-  const avgSteps = steps.length ? Math.round(steps.reduce((a, b) => a + b, 0) / steps.length) : 0
-  const maxSteps = steps.length ? Math.max(...steps) : 10000
+  const stepRows7  = rows.filter(r => r.stappen != null).slice(0, 7).reverse()
+  const stepRows30 = rows.filter(r => r.stappen != null).slice(0, 30).reverse()
+  const steps7  = stepRows7.map(r => Number(r.stappen))
+  const steps30 = stepRows30.map(r => Number(r.stappen))
+
+  const todaySteps = steps7[steps7.length - 1] ?? 0
+  const avgSteps7  = steps7.length ? Math.round(steps7.reduce((a, b) => a + b, 0) / steps7.length) : 0
+  const avgSteps30 = steps30.length ? Math.round(steps30.reduce((a, b) => a + b, 0) / steps30.length) : 0
+  const maxSteps   = steps30.length ? Math.max(...steps30) : stepGoal
+  const distKm     = (todaySteps * 0.00075).toFixed(1)
+  const goalsHit7  = steps7.filter(s => s >= stepGoal).length
+  const goalHitPct = steps7.length ? Math.round((goalsHit7 / steps7.length) * 100) : null
 
   return (
     <div className="flex flex-col gap-6">
       <Card>
         <div className="flex flex-col gap-4">
-          <span className="text-[15px] font-semibold text-white/50">Daily Steps</span>
-          <div className="flex justify-center">
-            <RingChart progress={todaySteps / stepGoal} color="#f97316" label="Steps" value={`${todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} / ${stepGoal >= 1000 ? `${stepGoal / 1000}K` : stepGoal}`} />
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today</span>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[40px] font-bold text-white leading-none">{todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'}</span>
+                <span className="text-[15px] font-semibold text-white/50">steps</span>
+              </div>
+              <span className="text-[13px] text-white/40">{distKm} km estimated</span>
+            </div>
+            <RingChart progress={todaySteps / stepGoal} color="#f97316" label="" value={`${Math.round((todaySteps / stepGoal) * 100)}%`} />
           </div>
         </div>
       </Card>
-      <div className="grid grid-cols-2 gap-3">
-        <SmallCard title="Steps"     value={todaySteps ? todaySteps.toLocaleString('nl-NL') : '–'} detail="Today"     Icon={Footprints} tint="text-orange-400" />
-        <SmallCard title="Avg steps" value={avgSteps ? avgSteps.toLocaleString('nl-NL') : '–'}    detail="7-day avg" Icon={Activity}   tint="text-blue-400"   />
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-[12px] px-3 py-2.5 flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <span className="text-[10px] text-white/30 uppercase tracking-[0.08em]">7d avg</span>
+          <span className="text-[15px] font-semibold text-orange-400">{avgSteps7 ? avgSteps7.toLocaleString('nl-NL') : '–'}</span>
+        </div>
+        <div className="rounded-[12px] px-3 py-2.5 flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <span className="text-[10px] text-white/30 uppercase tracking-[0.08em]">30d avg</span>
+          <span className="text-[15px] font-semibold text-blue-400">{avgSteps30 ? avgSteps30.toLocaleString('nl-NL') : '–'}</span>
+        </div>
+        <div className="rounded-[12px] px-3 py-2.5 flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <span className="text-[10px] text-white/30 uppercase tracking-[0.08em]">Goal hit</span>
+          <span className={`text-[15px] font-semibold ${goalHitPct !== null && goalHitPct >= 70 ? 'text-green-400' : 'text-yellow-400'}`}>
+            {goalHitPct !== null ? `${goalsHit7}/7d` : '–'}
+          </span>
+        </div>
       </div>
-      {steps.length > 1 && (
+
+      {steps30.length > 4 && (
         <Card>
-          <SectionHeader title="7-Day Steps" detail={`avg ${avgSteps.toLocaleString('nl-NL')}`} />
-          <div className="flex items-end gap-1.5 h-16 mt-4">
-            {steps.map((v, i) => (
+          <SectionHeader title="30-Day Steps" detail={`avg ${avgSteps30.toLocaleString('nl-NL')}`} />
+          <div className="flex items-end gap-[2px] h-16 mt-4">
+            {steps30.map((v, i) => (
               <div key={i} className="flex-1 rounded-sm"
-                style={{ height: `${(v / maxSteps) * 56}px`, background: i === steps.length - 1 ? '#f97316' : 'rgba(255,255,255,0.15)' }} />
+                style={{ height: `${Math.max((v / maxSteps) * 56, 3)}px`, background: i === steps30.length - 1 ? '#f97316' : 'rgba(255,255,255,0.15)' }} />
             ))}
+          </div>
+          {/* Goal line */}
+          <div className="relative mt-1 h-[1px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="absolute right-0 text-[10px] text-white/25">{(stepGoal / 1000).toFixed(0)}K goal</div>
           </div>
         </Card>
       )}

@@ -3,10 +3,11 @@
 import { Suspense, useEffect, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { BedDouble, Activity, RefreshCw } from 'lucide-react'
+import { Activity, RefreshCw, ChevronRight } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
-import { Card, MetricTile, MetricRow } from '@/components/ui'
+import { Card } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
+import { computePhysiologyReadiness } from '@/lib/readiness'
 import {
   computeSleepScore,
   SleepSection,
@@ -138,6 +139,21 @@ export default function HealthPage() {
     return 'Physiological signals support moderate training today.'
   })()
 
+  const physiologyReadiness = computePhysiologyReadiness(rows)
+  const readinessPct = physiologyReadiness.score
+  const readinessColor = readinessPct !== null
+    ? (readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171')
+    : 'rgba(255,255,255,0.3)'
+
+  const recCta = (() => {
+    if (!sleepScore && !hrv && !restingHR) return null
+    if (restingHR !== null && restingHR > 70 && sleepScore !== null && sleepScore < 55)
+      return { label: 'Check your sleep →', tab: 'sleep' as const, href: null }
+    if (hrv !== null && hrv < 25)
+      return { label: 'See HRV trend →', tab: 'heart' as const, href: null }
+    return { label: 'View training →', tab: null, href: '/training' }
+  })()
+
   async function handleSync() {
     setSyncing(true)
     try {
@@ -201,29 +217,56 @@ export default function HealthPage() {
       {activeTab === 'activity' && <ActivitySection rows={rows} />}
 
       {activeTab === 'overview' && <>
-        <div className="grid grid-cols-2 gap-3">
-          <MetricTile title="Sleep score" value={sleepScore ? String(sleepScore) : '–'} unit={sleepScore ? '%' : ''} note="Last night"
-            Icon={BedDouble} tint="text-blue-400" />
-          <MetricTile title="HRV" value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note="Daily RMSSD"
-            Icon={Activity} tint="text-green-400" />
+
+        {/* Today's Status — readiness hero */}
+        <Card>
+          <div className="flex flex-col gap-3">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today's Status</span>
+            {readinessPct !== null ? (<>
+              <div className="flex items-end justify-between">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[56px] font-bold text-white leading-none">{readinessPct}</span>
+                  <span className="text-[24px] font-semibold text-white/50">%</span>
+                </div>
+                <div className="flex items-center gap-1.5 pb-1">
+                  <div className="w-[8px] h-[8px] rounded-full" style={{ background: readinessColor }} />
+                  <span className="text-[17px] font-semibold" style={{ color: readinessColor }}>{physiologyReadiness.label}</span>
+                </div>
+              </div>
+              <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-full rounded-full" style={{ width: `${readinessPct}%`, background: readinessColor }} />
+              </div>
+            </>) : (
+              <p className="text-[15px] text-white/40">Connect Fitbit to see readiness data.</p>
+            )}
+          </div>
+        </Card>
+
+        {/* Signal rows — each row taps into its sub-tab */}
+        <div style={{ background: 'rgba(255,255,255,0.075)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 16, overflow: 'hidden' }}>
+          {([
+            { label: 'Sleep',       value: sleepScore ? `${sleepScore}%`                              : '–', tab: 'sleep'    },
+            { label: 'HRV',         value: hrv        ? `${Math.round(Number(hrv))} ms`               : '–', tab: 'heart'    },
+            { label: 'Resting HR',  value: restingHR  ? `${restingHR} bpm`                            : '–', tab: 'heart'    },
+            { label: 'Weight',      value: weight     ? `${weight} kg`                                 : '–', tab: 'weight'   },
+            { label: 'Steps',       value: steps      ? `${Number(steps).toLocaleString('nl-NL')}`    : '–', tab: 'activity' },
+          ] as const).map(({ label, value, tab }, i) => (
+            <button
+              key={label}
+              onClick={() => switchTab(tab)}
+              className="flex items-center justify-between px-4 py-3.5 w-full text-left"
+              style={{ borderBottom: i < 4 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
+            >
+              <span className="text-[15px] text-white/70">{label}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[15px] font-semibold text-white">{value}</span>
+                <ChevronRight size={14} className="text-white/30" />
+              </div>
+            </button>
+          ))}
         </div>
 
-        <MetricRow
-          title="Resting heart rate"
-          value={restingHR ? `${restingHR} bpm` : '–'}
-          detail={restingHR ? (restingHR <= 60 ? 'Excellent' : restingHR <= 70 ? 'Good' : 'Elevated') : '–'}
-        />
-        <MetricRow
-          title="Weight trend"
-          value={weight ? `${weight} kg` : '–'}
-          detail={weightDetail}
-        />
-        <MetricRow
-          title="Daily activity"
-          value={steps ? `${Number(steps).toLocaleString('nl-NL')} steps` : '–'}
-          detail={stepsDetail}
-        />
-
+        {/* Recommendation + contextual CTA */}
         <Card>
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
@@ -246,6 +289,19 @@ export default function HealthPage() {
               <p className={`text-[13px] font-medium ${syncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
                 {syncMessage.text}
               </p>
+            )}
+            {recCta && (
+              <div className="flex justify-end pt-1">
+                {recCta.href ? (
+                  <a href={recCta.href} className="px-3 py-1.5 rounded-full text-[13px] font-semibold text-black" style={{ background: 'rgb(45,212,191)' }}>
+                    {recCta.label}
+                  </a>
+                ) : (
+                  <button onClick={() => switchTab(recCta.tab!)} className="px-3 py-1.5 rounded-full text-[13px] font-semibold text-black" style={{ background: 'rgb(45,212,191)' }}>
+                    {recCta.label}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </Card>

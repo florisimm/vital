@@ -8,7 +8,7 @@ import { trainingFetcher } from '../fetcher'
 export default function HistoryPage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   return (
-    <TrainingDetailScreen title="History" active="History">
+    <TrainingDetailScreen title="Log" active="Log">
       <HistorySection activities={data?.activities ?? []} hevy={data?.hevy ?? []} />
     </TrainingDetailScreen>
   )

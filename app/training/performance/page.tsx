@@ -5,7 +5,7 @@ import { PerformanceSection } from '../PerformanceSection'
 
 export default function PerformancePage() {
   return (
-    <TrainingDetailScreen title="Performance" active="Performance">
+    <TrainingDetailScreen title="Metrics" active="Metrics">
       <PerformanceSection />
     </TrainingDetailScreen>
   )

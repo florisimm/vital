@@ -623,15 +623,23 @@ function computeTrainingStreak(hevy: HevyWorkout[]) {
 // ─── AI Insight builders ──────────────────────────────────────────────────────
 
 function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[]): string {
-  const { score, label } = computePerformanceScore(activities, hevy)
+  const { score, label, loadRatio } = computePerformanceScore(activities, hevy)
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const weekRuns = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).length
   const weekStrength = hevy.filter(h => h.start_time >= sevenDaysAgo).length
+  const weekKm = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+
+  if (loadRatio > 1.3)
+    return `Training load is ${Math.round(loadRatio * 100)}% of your recent baseline — elevated. Consider keeping today easy to avoid overreaching.`
+  if (weekRuns === 0 && weekStrength === 0)
+    return 'No sessions logged this week yet. Even a short workout maintains your fitness base — consistency beats intensity long-term.'
   const parts: string[] = []
-  if (weekRuns > 0) parts.push(`${weekRuns} run${weekRuns > 1 ? 's' : ''}`)
+  if (weekRuns > 0) parts.push(`${weekRuns} run${weekRuns > 1 ? 's' : ''}${weekKm > 0 ? ` (${weekKm.toFixed(1)} km)` : ''}`)
   if (weekStrength > 0) parts.push(`${weekStrength} strength session${weekStrength > 1 ? 's' : ''}`)
-  const prefix = parts.length > 0 ? parts.join(' and ') + ' this week. ' : ''
-  return `${prefix}Performance score ${score}/100 — ${label.toLowerCase()}.`
+  const summary = parts.join(' and ') + ' this week.'
+  if (score >= 80) return `${summary} Strong week — performance at ${score}/100. Keep the momentum but protect your recovery.`
+  if (loadRatio < 0.7 && activities.length > 0) return `${summary} Load is below your baseline — a good moment to add a session safely.`
+  return `${summary} Performance at ${score}/100 — ${label.toLowerCase()}.`
 }
 
 function buildRunningInsight(activities: Activity[]): string {
@@ -697,11 +705,9 @@ type InsightBadge = { emoji: string; text: string }
 function buildTopInsights(
   activities: Activity[],
   hevy: HevyWorkout[],
-  gezondheid: { datum: string; stappen: number; gewicht: number }[] | null,
-  foodData: { foodLog: any[]; targets: any } | null
+  gezondheid: { datum: string; stappen: number; gewicht: number }[] | null
 ): InsightBadge[] {
   const badges: InsightBadge[] = []
-  const today = new Date().toISOString().split('T')[0]
   const weekStart = startOfWeek()
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
@@ -752,14 +758,6 @@ function buildTopInsights(
     badges.push({ emoji: '⚠️', text: `Recovery low (${weekStrength}x strength)` })
   }
 
-  // Protein gap
-  const hasTodayActivity = activities.some(a => a.start_date.startsWith(today)) || hevy.some(h => h.start_time.startsWith(today))
-  const todayProtein = (foodData?.foodLog ?? []).reduce((s: number, f: any) => s + (Number(f.protein) || 0), 0)
-  const proteinTarget = Number(foodData?.targets?.protein) || 0
-  if (hasTodayActivity && proteinTarget > 0 && todayProtein / proteinTarget < 0.75 && badges.length < 3) {
-    badges.push({ emoji: '🍗', text: 'Protein goal not met' })
-  }
-
   // Low load
   if (loadRatio < 0.6 && activities.length > 0 && badges.length < 3) {
     badges.push({ emoji: '📉', text: 'Load low vs last week' })
@@ -784,7 +782,7 @@ export function AiInsight({ text }: { text: string }) {
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <span className="text-orange-400 text-[14px]">✦</span>
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">AI Insight</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Coach Tip</span>
         </div>
         <p className="text-[17px] text-white/85 leading-relaxed">{text}</p>
       </div>
@@ -1589,6 +1587,106 @@ function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub
   )
 }
 
+const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'gewichten', 'kracht']
+const CARDIO_KW = ['run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval', 'tempo']
+
+function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
+  focus: { emoji: string; label: string; sub: string }
+  calendarEvents: any[]
+  readinessPct: number
+}) {
+  const now = new Date().toISOString()
+  const next = (calendarEvents ?? [])
+    .filter((e: any) => (e.start_datetime || e.start_date) >= now)
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
+
+  const [ctaLabel, ctaHref] = (() => {
+    if (!next) return ['View training →', '/training']
+    const t = (next.title ?? '').toLowerCase()
+    const isGym = GYM_KW.some(k => t.includes(k))
+    const isCardio = CARDIO_KW.some(k => t.includes(k))
+    if (isGym && !isCardio) return ['View strength →', '/training/strength']
+    const dateStr = next.start_datetime || next.start_date
+    const time = encodeURIComponent(new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))
+    return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${time}`]
+  })()
+
+  const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
+  const rl = readinessPct >= 70 ? 'Good to train' : readinessPct >= 45 ? 'Train light' : 'Rest recommended'
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today's Plan</span>
+        <div className="flex items-center gap-4">
+          <span className="text-[36px] leading-none">{focus.emoji}</span>
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span className="text-[17px] font-semibold text-white leading-snug">{focus.label}</span>
+            <span className="text-[13px] text-white/50">{focus.sub}</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full" style={{ background: rc }} />
+            <span className="text-[13px] font-semibold" style={{ color: rc }}>{rl}</span>
+            <span className="text-[13px] text-white/30">· {readinessPct}%</span>
+          </div>
+          <a href={ctaHref}
+            className="px-3 py-1.5 rounded-full text-[13px] font-semibold text-black"
+            style={{ background: 'rgb(45,212,191)' }}>
+            {ctaLabel}
+          </a>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function WeekSummaryCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, perf }: {
+  weekCompleted: number; weekPlanned: number; weekKm: number
+  weekDurationSecs: number; weekVolume: number
+  perf: ReturnType<typeof computePerformanceScore>
+}) {
+  const target = Math.max(weekPlanned, 4, weekCompleted)
+  const progress = target > 0 ? Math.min(1, weekCompleted / target) : 0
+  const stats = [
+    weekKm > 0 && `${weekKm.toFixed(1)} km`,
+    weekDurationSecs > 0 && formatDuration(weekDurationSecs),
+    weekVolume > 0 && `${(Math.round(weekVolume / 100) / 10).toFixed(1)}k kg`,
+  ].filter(Boolean) as string[]
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">This Week</span>
+        <div className="flex items-end justify-between">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[40px] font-bold text-white leading-none">{weekCompleted}</span>
+            <span className="text-[17px] font-semibold text-white/50">workout{weekCompleted !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex items-center gap-1.5 pb-1">
+            <div className="w-[8px] h-[8px] rounded-full" style={{ background: perf.color }} />
+            <span className="text-[14px] font-semibold" style={{ color: perf.color }}>{perf.label}</span>
+          </div>
+        </div>
+        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progress * 100}%`, background: 'rgb(45,212,191)' }} />
+        </div>
+        {weekPlanned > 0 && (
+          <span className="text-[12px] text-white/30">{weekCompleted} of {weekPlanned} planned</span>
+        )}
+        {stats.length > 0 && (
+          <div className="flex gap-4 pt-1 border-t border-white/[0.06]">
+            {stats.map((s, i) => (
+              <span key={i} className="text-[14px] font-semibold text-white/70">{s}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 function PerformanceHeroCard({ perf }: { perf: ReturnType<typeof computePerformanceScore> }) {
   const trendLabel = perf.loadRatio > 1.1 ? '↑ Load increasing' : perf.loadRatio < 0.9 ? '↓ Load declining' : '→ Load stable'
   const { consistency, loadBalance, trend } = perf.breakdown
@@ -1786,7 +1884,6 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
-  const { data: foodData } = useSWR<{ foodLog: any[]; targets: any }>('food-log', null)
 
   const perf = computePerformanceScore(activities, hevy)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
@@ -1827,20 +1924,27 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const acwr = chronic28kj / 4 > 5 ? Math.round((acute7kj / (chronic28kj / 4)) * 10) / 10 : null
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
-  const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null, foodData ?? null)
+  const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
 
   return (
     <div className="flex flex-col gap-[18px]">
-      {/* 1. AI Insight */}
+      {/* 1. Coach Tip */}
       <AiInsight text={buildOverviewInsight(activities, hevy)} />
 
-      {/* 2. Today's Focus */}
-      <TodaysFocusCard focus={todaysFocus} />
+      {/* 2. Today's Plan — focus + readiness + CTA */}
+      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} />
 
-      {/* 3. Performance Score */}
-      <PerformanceHeroCard perf={perf} />
+      {/* 3. This Week — sessions + progress + stats */}
+      <WeekSummaryCard
+        weekCompleted={weekCompleted}
+        weekPlanned={weekPlanned}
+        weekKm={weekKm}
+        weekDurationSecs={weekDurationSecs}
+        weekVolume={weekVolume}
+        perf={perf}
+      />
 
-      {/* 4. Recovery */}
+      {/* 4. Readiness */}
       <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
 
       {/* 5. Training Load */}
@@ -1857,9 +1961,6 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
 
       {/* 6. Top Insights */}
       <TopInsightsCard insights={topInsights} />
-
-      {/* 7. Next Workout */}
-      <NextWorkoutCard calendarEvents={calendarEvents} />
     </div>
   )
 }
