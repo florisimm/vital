@@ -91,9 +91,9 @@ function effectiveLoad(a: Activity): number {
 }
 
 function hevyLoad(h: HevyWorkout): number {
-  const vol = (h.volume_kg ?? 0) / 100          // push/pull ~50-90, abs/forearms ~5-15
-  const dur = (h.duration ?? 3600) / 60          // fallback for bodyweight-only sessions
-  return vol > dur * 0.3 ? vol : dur * 0.5
+  // Duration-only for consistency — volume_kg is missing on older synced records,
+  // which would make the chronic baseline artificially low vs recent sessions.
+  return (h.duration ?? 3600) / 60
 }
 
 function formatPace100m(speedMs: number): string {
