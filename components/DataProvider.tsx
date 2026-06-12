@@ -63,12 +63,18 @@ export function DataProvider() {
       const todayHevy = (hevy ?? []).filter((h: any) => new Date(h.start_time) >= startOfToday)
       const todayActivities = (activities ?? []).filter((a: any) => new Date(a.start_date) >= startOfToday)
 
+      const allUpcoming = (calendarEvents ?? []).filter((e: any) => {
+        const t = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
+        return t >= startOfToday
+      })
+
       mutate('today', {
         weather, upcomingActivity: upcoming,
         latestGezondheid: gezondheid?.[0] ?? null,
-        foodLog: foodLog ?? [],
+        foodLogToday: foodLog ?? [],
+        foodLog7d: [],
         settings,
-        calendarEvents: upcomingCalendar,
+        calendarEvents: allUpcoming,
         todayHevy,
         todayActivities,
       }, false)
