@@ -47,6 +47,23 @@ export async function fetchFoodData(date: string) {
   }
 }
 
+export async function fetchWeeklyNutrition(): Promise<{ avgProtein: number; proteinTarget: number }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { avgProtein: 0, proteinTarget: 0 }
+  const from = new Date()
+  from.setDate(from.getDate() - 13)
+  const [{ data: log }, { data: settings }] = await Promise.all([
+    supabase.from('food_log').select('date,protein').eq('user_id', user.id).gte('date', from.toISOString().split('T')[0]),
+    supabase.from('user_settings').select('macro_protein').eq('user_id', user.id).single(),
+  ])
+  const byDay: Record<string, number> = {}
+  ;(log ?? []).forEach(r => { byDay[r.date] = (byDay[r.date] ?? 0) + Number(r.protein ?? 0) })
+  const days = Object.values(byDay).filter(v => v > 0)
+  const avgProtein = days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0
+  return { avgProtein, proteinTarget: Number(settings?.macro_protein ?? 0) }
+}
+
 export async function fetchProducts(): Promise<Product[]> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
