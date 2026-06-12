@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { ChevronLeft, Bike, PersonStanding, Dumbbell, RefreshCw, Map, Download, ArrowUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Card } from '@/components/ui'
+import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import {
   detectSport, computeAdvice, TYPE_LABEL, TYPE_COLOR,
   type SportType, type Advice, type ComputeAdviceResult,
@@ -361,9 +362,7 @@ function SessionContent() {
   const sport = detectSport(title)
   const [result, setResult] = useState<ComputeAdviceResult | null>(null)
 
-  const timeLabel = time
-    ? new Date(time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    : null
+  const timeLabel = time ? formatClockTime(new Date(time)) : null
 
   useEffect(() => {
     async function load() {

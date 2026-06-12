@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
+import { formatTime as formatClockTime } from '@/lib/timeFormat'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1472,7 +1473,7 @@ function computeTodaysFocus(
     const dayLabel = eventDate === todayDate ? 'Today' : eventDate === tomorrowDate ? 'Tomorrow'
       : new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })
     const time = nextEvent.start_datetime
-      ? ' · ' + new Date(nextEvent.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      ? ' · ' + formatClockTime(nextEvent.start_datetime)
       : ''
     const when = dayLabel + time
     if (tl.includes('strength') || tl.includes('gym') || tl.includes('kracht') || tl.includes('push') || tl.includes('pull') || tl.includes('legs')) {
@@ -1624,8 +1625,7 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
     const isCardio = CARDIO_KW.some(k => t.includes(k))
     if (isGym && !isCardio) return ['View strength →', '/training/strength']
     const dateStr = next.start_datetime || next.start_date
-    const time = encodeURIComponent(new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))
-    return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${time}`]
+    return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
 
   const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
@@ -1865,7 +1865,7 @@ function NextWorkoutCard({ calendarEvents }: {
   const dateStr = next ? (next.start_datetime || next.start_date) : null
   const when = dateStr ? new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' }) : null
   const time = next?.start_datetime
-    ? new Date(next.start_datetime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    ? formatClockTime(next.start_datetime)
     : null
   let countdown: string | null = null
   if (dateStr) {

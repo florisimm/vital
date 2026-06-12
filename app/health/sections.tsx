@@ -42,6 +42,12 @@ function fmtTime(min: number | null) {
   if (min === null) return '–'
   const h = Math.floor(min / 60) % 24
   const m = min % 60
+  const fmt = typeof window !== 'undefined' ? (localStorage.getItem('time_format') ?? '24h') : '24h'
+  if (fmt === '12h') {
+    const period = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    return `${h12}:${m.toString().padStart(2, '0')} ${period}`
+  }
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 }
 
