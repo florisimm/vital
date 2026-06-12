@@ -55,6 +55,7 @@ export function ProfileButton() {
   const [pagesSaving, setPagesSaving] = useState(false)
   const [fitbitSyncing, setFitbitSyncing] = useState(false)
   const [fitbitSyncMessage, setFitbitSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [timeFormat, setTimeFormat] = useState<'24h' | '12h'>('24h')
 
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
@@ -95,6 +96,7 @@ export function ProfileButton() {
 
   useEffect(() => {
     if (!open) return
+    setTimeFormat((localStorage.getItem('time_format') as '24h' | '12h') ?? '24h')
     const supabase = createClient()
 
     if ('Notification' in window) {
@@ -254,6 +256,12 @@ export function ProfileButton() {
       .from('user_settings')
       .update({ units: next })
       .eq('user_id', userId)
+  }
+
+  function toggleTimeFormat() {
+    const next: '24h' | '12h' = timeFormat === '24h' ? '12h' : '24h'
+    setTimeFormat(next)
+    localStorage.setItem('time_format', next)
   }
 
   function openMacroChoice() {
@@ -1146,6 +1154,12 @@ export function ProfileButton() {
                 <button className="flex items-center justify-between w-full" onClick={toggleUnits}>
                   <span className="text-[17px] text-white">Units</span>
                   <span className="text-[15px] text-white/40 capitalize">{units}</span>
+                </button>
+              </ProfileRow>
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full" onClick={toggleTimeFormat}>
+                  <span className="text-[17px] text-white">Time Format</span>
+                  <span className="text-[15px] text-white/40">{timeFormat === '12h' ? '12h (AM/PM)' : '24h'}</span>
                 </button>
               </ProfileRow>
               <ProfileRow separator>
