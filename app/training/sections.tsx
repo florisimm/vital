@@ -24,10 +24,10 @@ export type HevyWorkout = {
 
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
-  hasHistory: boolean; daysWithData: number; weeksWithData: number
+  confidence: 'low' | 'medium' | 'high'; daysWithData: number
 }
 type ACWRDetail = {
-  total: number | null; totalHasHistory: boolean
+  total: number | null; confidence: 'low' | 'medium' | 'high'
   sports: SportBreakdown[]; explanation: string
 }
 
@@ -112,23 +112,32 @@ function hevyLoad(h: HevyWorkout): number {
 function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number): ACWRDetail {
   const t7  = new Date(now - 7  * 86400000).toISOString()
   const t28 = new Date(now - 28 * 86400000).toISOString()
-  const wk  = (iso: string) => { const d = new Date(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) }
   const dy  = (iso: string) => iso.slice(0, 10)
 
   function calcBreakdown(acts: Activity[], hevyW: HevyWorkout[]) {
     const a28 = acts.filter(a => a.start_date >= t28)
     const h28 = hevyW.filter(h => h.start_time >= t28)
-    if (!a28.length && !h28.length) return { acwr: null, hasHistory: false, daysWithData: 0, weeksWithData: 0 }
-    const acute   = a28.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
-                  + h28.filter(h => h.start_time >= t7).reduce((s, h) => s + hevyLoad(h), 0)
-    const chronic = a28.reduce((s, a) => s + effectiveLoad(a), 0)
-                  + h28.reduce((s, h) => s + hevyLoad(h), 0)
-    const wkSet  = new Set([...a28.map(a => wk(a.start_date)), ...h28.map(h => wk(h.start_time))])
-    const dySet  = new Set([...a28.map(a => dy(a.start_date)), ...h28.map(h => dy(h.start_time))])
-    const weeks  = Math.max(1, wkSet.size)
-    const hist   = weeks >= 4
-    const acwr   = hist && chronic / 4 > 5 ? Math.round((acute / (chronic / 4)) * 10) / 10 : null
-    return { acwr, hasHistory: hist, daysWithData: dySet.size, weeksWithData: weeks }
+    if (!a28.length && !h28.length) return { acwr: null, confidence: 'low' as const, daysWithData: 0 }
+
+    const acute    = a28.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
+                   + h28.filter(h => h.start_time >= t7).reduce((s, h) => s + hevyLoad(h), 0)
+    const chronic28 = a28.reduce((s, a) => s + effectiveLoad(a), 0)
+                    + h28.reduce((s, h) => s + hevyLoad(h), 0)
+
+    // Calendar days elapsed since oldest training in window (determines confidence)
+    const allDates = [...a28.map(a => a.start_date), ...h28.map(h => h.start_time)]
+    const oldestMs = Math.min(...allDates.map(d => new Date(d).getTime()))
+    const elapsedDays = Math.min(28, (now - oldestMs) / 86400000)
+
+    const dySet = new Set([...a28.map(a => dy(a.start_date)), ...h28.map(h => dy(h.start_time))])
+    const confidence: 'low' | 'medium' | 'high' =
+      elapsedDays < 15 ? 'low' : elapsedDays < 28 ? 'medium' : 'high'
+
+    // Always divide by 4 (standard ACWR formula); with less history the ratio is less reliable
+    // which is reflected in confidence, not by hiding the value
+    const acwr = chronic28 / 4 > 5 ? Math.round((acute / (chronic28 / 4)) * 10) / 10 : null
+
+    return { acwr, confidence, daysWithData: dySet.size }
   }
 
   const hevyMain  = hevy.filter(h => !h.title.toLowerCase().includes('hyrox'))
@@ -151,25 +160,28 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
 
   const total = calcBreakdown(activities, hevy)
 
-  // Dynamic explanation
-  const elevated  = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
-  const newSports = sports.filter(s => !s.hasHistory && s.daysWithData > 0)
+  // Dynamic explanation — identifies top contributing sport and data quality
+  const elevated = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
   let explanation = ''
-  if (!total.hasHistory) {
-    explanation = 'ACWR wordt betrouwbaar na 4 weken consistente trainingshistorie.'
+  if (total.acwr === null) {
+    explanation = total.daysWithData > 0
+      ? 'Trainingsbelasting te laag om ACWR te berekenen.'
+      : 'Geen trainingsdata beschikbaar in de afgelopen 28 dagen.'
   } else if (elevated.length > 0) {
     const top = elevated[0]
     const pct = Math.round(((top.acwr ?? 1) - 1) * 100)
-    explanation = !top.hasHistory
-      ? `Je ACWR wordt verhoogd door ${top.label} (+${pct}%). Omdat dit een relatief nieuwe activiteit is, kan de waarde tijdelijk vertekend zijn.`
-      : `De stijging komt voornamelijk van ${top.label}, ${pct}% boven je 4-weeks gemiddelde.`
-  } else if (newSports.length > 0) {
-    explanation = `Je traint recent ${newSports.map(s => s.label.toLowerCase()).join(' en ')}. ACWR wordt opgebouwd zodra er 4 weken data beschikbaar is.`
+    if (top.confidence !== 'high') {
+      explanation = `Je ACWR wordt voornamelijk verhoogd door ${top.label}. Deze activiteit heeft nog beperkte historische data waardoor de score tijdelijk hoger kan uitvallen.`
+    } else {
+      explanation = `De stijging komt voornamelijk van ${top.label}, ${pct}% boven je 4-weeks gemiddelde.`
+    }
+  } else if (total.confidence === 'low') {
+    explanation = 'ACWR is gebaseerd op minder dan 2 weken data. De waarde wordt nauwkeuriger naarmate er meer historische data beschikbaar is.'
   } else {
     explanation = 'Je trainingsbelasting ligt dicht bij je gebruikelijke niveau.'
   }
 
-  return { total: total.acwr, totalHasHistory: total.hasHistory, sports, explanation }
+  return { total: total.acwr, confidence: total.confidence, sports, explanation }
 }
 
 function formatPace100m(speedMs: number): string {
@@ -1907,18 +1919,20 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
 
 function ACWRCard({ detail }: { detail: ACWRDetail }) {
   const [expanded, setExpanded] = useState(false)
-  const { total, totalHasHistory, sports, explanation } = detail
+  const { total, confidence, sports, explanation } = detail
 
   const col = (v: number | null) =>
     v == null ? 'rgba(255,255,255,0.4)'
     : v > 1.5 ? '#f87171' : v > 1.3 ? '#fb923c' : v < 0.8 ? '#60a5fa' : '#4ade80'
 
-  const status = total == null
-    ? (totalHasHistory ? null : 'Baseline wordt opgebouwd')
-    : total > 1.5 ? 'Hoog blessurerisico'
+  const status = total == null ? null
+    : total > 1.5 ? 'Hoog risico'
     : total > 1.3 ? 'Verhoogde belasting'
     : total < 0.8 ? 'Onderbelasting'
     : 'Optimaal'
+
+  const confLabel = confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low'
+  const confColor = confidence === 'high' ? '#4ade80' : confidence === 'medium' ? '#facc15' : '#fb923c'
 
   return (
     <Card>
@@ -1928,45 +1942,48 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
           <ChevronRight size={14} className="text-white/25 transition-transform duration-200"
             style={{ transform: expanded ? 'rotate(90deg)' : 'none' }} />
         </div>
-        {total !== null ? (
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-[28px] font-bold leading-none" style={{ color: col(total) }}>{total.toFixed(2)}</span>
-            <span className="text-[15px] font-semibold" style={{ color: col(total) }}>{status}</span>
-          </div>
-        ) : (
-          <span className="text-[15px] text-white/50">{status ?? 'Geen data'}</span>
-        )}
+        <div className="flex items-center gap-3 mb-1.5">
+          {total !== null ? (
+            <>
+              <span className="text-[28px] font-bold leading-none" style={{ color: col(total) }}>{total.toFixed(2)}</span>
+              {status && <span className="text-[15px] font-semibold" style={{ color: col(total) }}>{status}</span>}
+            </>
+          ) : (
+            <span className="text-[15px] text-white/40">Geen data</span>
+          )}
+          <span className="ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0"
+            style={{ color: confColor, backgroundColor: `${confColor}22` }}>
+            {confLabel} confidence
+          </span>
+        </div>
         {explanation && (
-          <p className="text-[12px] text-white/40 leading-relaxed mt-1.5">{explanation}</p>
-        )}
-        {!totalHasHistory && !explanation && (
-          <p className="text-[11px] text-white/25 leading-relaxed mt-1.5">
-            Betrouwbaar na 4 weken trainingshistorie. Een hoge belasting in de eerste weken wijst niet automatisch op overbelasting.
-          </p>
+          <p className="text-[12px] text-white/40 leading-relaxed">{explanation}</p>
         )}
       </button>
 
       {expanded && sports.length > 0 && (
         <div className="mt-3 pt-3 border-t border-white/[0.06] flex flex-col gap-2.5">
-          {sports.map(s => (
-            <div key={s.key} className="flex items-start justify-between gap-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[14px] text-white/70">{s.label}</span>
-                {!s.hasHistory && s.daysWithData > 0 && (
-                  <span className="text-[11px] text-white/30">
-                    {s.daysWithData} van 28 dagen · baseline opgebouwd
+          {sports.map(s => {
+            const sConfLabel = s.confidence === 'high' ? 'High' : s.confidence === 'medium' ? 'Medium' : 'Low'
+            const sConfColor = s.confidence === 'high' ? '#4ade80' : s.confidence === 'medium' ? '#facc15' : '#fb923c'
+            return (
+              <div key={s.key} className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[14px] text-white/70">{s.label}</span>
+                  <span className="text-[11px]" style={{ color: sConfColor }}>
+                    {sConfLabel} · {s.daysWithData} trainingsdagen
                   </span>
-                )}
+                </div>
+                <div className="shrink-0">
+                  {s.acwr !== null ? (
+                    <span className="text-[15px] font-bold" style={{ color: col(s.acwr) }}>{s.acwr.toFixed(2)}</span>
+                  ) : (
+                    <span className="text-[12px] text-white/30">–</span>
+                  )}
+                </div>
               </div>
-              <div className="shrink-0">
-                {s.acwr !== null ? (
-                  <span className="text-[15px] font-bold" style={{ color: col(s.acwr) }}>{s.acwr.toFixed(2)}</span>
-                ) : (
-                  <span className="text-[12px] text-white/30">opbouw</span>
-                )}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </Card>
