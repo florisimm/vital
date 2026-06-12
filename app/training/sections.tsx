@@ -80,6 +80,19 @@ function isWeightTraining(a: Activity) {
   return a.sport_type?.toLowerCase() === 'weighttraining'
 }
 
+// Consistent load unit (minutes) with zone-2 dampening.
+// Avoids mixing real kilojoules (available on recent Strava syncs) with the
+// moving_time fallback on older records, which would inflate acute:chronic ratios.
+function effectiveLoad(a: Activity): number {
+  const mins = (a.moving_time ?? 0) / 60
+  const isZone2 = a.average_heartrate != null && a.average_heartrate < 145
+  return mins * (isZone2 ? 0.5 : 1)
+}
+
+function hevyLoad(h: HevyWorkout): number {
+  return (h.duration ?? 3600) / 60
+}
+
 function formatPace100m(speedMs: number): string {
   const secs = 100 / speedMs
   const m = Math.floor(secs / 60)
@@ -99,8 +112,10 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   ]
   const consistency = Math.min(recent14.length / 6, 1)
 
-  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
-  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
   const loadRatio = kj14to7 > 0 ? kj7 / kj14to7 : 1
   const loadScore = loadRatio > 1.4 ? 0.2 : loadRatio > 1.2 ? 0.7 : loadRatio > 0.7 ? 1 : 0.5
 
@@ -1896,10 +1911,10 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
 
   const earlyKj = activities
     .filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo)
-    .reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+    .reduce((s, a) => s + effectiveLoad(a), 0)
   const lateKj = activities
     .filter(a => a.start_date >= fifteenDaysAgo)
-    .reduce((s, a) => s + (a.kilojoules ?? 0), 0)
+    .reduce((s, a) => s + effectiveLoad(a), 0)
   const loadTrend = earlyKj > 0 ? Math.round((lateKj - earlyKj) / earlyKj * 100) : 0
 
   const weekActivities = activities.filter(a => a.start_date >= weekStart && !isWeightTraining(a))
@@ -1919,8 +1934,10 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
     : recoveryDetail.pct
   const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
   const twentyEightDaysAgo = new Date(now - 28 * 86400000).toISOString()
-  const acute7kj   = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? (a.moving_time ?? 0) / 60), 0)
-  const chronic28kj = activities.filter(a => a.start_date >= twentyEightDaysAgo).reduce((s, a) => s + (a.kilojoules ?? (a.moving_time ?? 0) / 60), 0)
+  const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const chronic28kj = activities.filter(a => a.start_date >= twentyEightDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= twentyEightDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
   const acwr = chronic28kj / 4 > 5 ? Math.round((acute7kj / (chronic28kj / 4)) * 10) / 10 : null
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
