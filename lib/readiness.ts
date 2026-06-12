@@ -37,43 +37,101 @@ export function computeSleepScore(r: HealthRow): number | null {
   return Math.round((parts.reduce((s, [v, w]) => s + v * w, 0) / totalWeight) * 100)
 }
 
-// Physiology readiness: sleep 40% + HRV 35% + RHR 25%
-// Uses the most recent row that has each metric (last night's sleep may not
-// have today's RHR yet, so each metric falls back independently).
+// Physiology readiness: Sleep 50% + HRV vs baseline 30% + RHR vs baseline 20%
+// HRV and RHR use personal 30-day baseline when ≥4 historical readings are available;
+// otherwise falls back to absolute scoring. Each metric degrades gracefully if absent.
 export function computePhysiologyReadiness(rows: HealthRow[]): {
   score: number | null
   label: string
   color: string
+  explanation: string
 } {
-  const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
-  const latestWithHR    = rows.find(r => r.hartslag_rust  != null) ?? null
-  const latestWithHRV   = rows.find(r => r.hrv_rmssd      != null) ?? null
+  const noData = { score: null, label: '–', color: 'rgba(255,255,255,0.3)', explanation: '' }
 
-  const hrv        = latestWithHRV?.hrv_rmssd ?? null
-  const restingHR  = latestWithHR?.hartslag_rust ?? null
-  const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
+  // Sleep (0–1)
+  const sleepRow = rows.find(r => r.slaap_minuten != null) ?? null
+  const sleepScore = sleepRow ? computeSleepScore(sleepRow) : null
+  const sleepComponent = sleepScore != null ? sleepScore / 100 : null
 
-  if (!hrv && !restingHR && !sleepScore) return { score: null, label: '–', color: 'rgba(255,255,255,0.3)' }
+  // HRV — baseline-relative when ≥4 historical readings, absolute fallback
+  const hrvRows = rows.filter(r => r.hrv_rmssd != null)
+  const todayHRV = hrvRows[0]?.hrv_rmssd ?? null
+  let hrvComponent: number | null = null
+  let hrvDevPct: number | null = null
+  if (todayHRV != null) {
+    const hist = hrvRows.slice(1, 31).map(r => r.hrv_rmssd as number)
+    if (hist.length >= 4) {
+      const baseline = hist.reduce((a, b) => a + b, 0) / hist.length
+      hrvDevPct = Math.round(((todayHRV - baseline) / baseline) * 100)
+      // ±30% deviation spans [0, 1]; at baseline = 0.5
+      hrvComponent = Math.max(0, Math.min(1, 0.5 + (todayHRV - baseline) / baseline / 0.6))
+    } else {
+      hrvComponent = todayHRV / (todayHRV + 50)
+    }
+  }
 
-  let score = 0, weight = 0
-  if (hrv)        { score += (hrv / (hrv + 50)) * 35; weight += 35 }
-  if (restingHR)  { score += Math.max(0, Math.min((100 - restingHR) / 50, 1)) * 25; weight += 25 }
-  if (sleepScore) { score += (sleepScore / 100) * 40; weight += 40 }
-  const val = weight > 0 ? Math.round((score / weight) * 100) : null
+  // RHR — baseline-relative when ≥4 historical readings, absolute fallback
+  const rhrRows = rows.filter(r => r.hartslag_rust != null)
+  const todayRHR = rhrRows[0]?.hartslag_rust ?? null
+  let rhrComponent: number | null = null
+  let rhrDevPct: number | null = null
+  if (todayRHR != null) {
+    const hist = rhrRows.slice(1, 31).map(r => r.hartslag_rust as number)
+    if (hist.length >= 4) {
+      const baseline = hist.reduce((a, b) => a + b, 0) / hist.length
+      rhrDevPct = Math.round(((todayRHR - baseline) / baseline) * 100)
+      // Higher than baseline = worse; ±15% spans [0, 1]; at baseline = 0.5
+      rhrComponent = Math.max(0, Math.min(1, 0.5 - (todayRHR - baseline) / baseline / 0.3))
+    } else {
+      rhrComponent = Math.max(0, Math.min(1, (100 - todayRHR) / 50))
+    }
+  }
 
-  const label = val === null ? '–'
-    : val >= 80 ? 'Peak'
-    : val >= 65 ? 'Good'
-    : val >= 50 ? 'Moderate'
+  // Graceful degradation — redistribute weights proportionally over available metrics
+  const metrics: Array<[number | null, number, string]> = [
+    [sleepComponent, 50, 'sleep'],
+    [hrvComponent,   30, 'hrv'],
+    [rhrComponent,   20, 'rhr'],
+  ]
+  const available = metrics.filter(([v]) => v != null) as Array<[number, number, string]>
+  if (available.length === 0) return noData
+
+  const totalWeight = available.reduce((s, [, w]) => s + w, 0)
+  const score = Math.round(available.reduce((s, [v, w]) => s + v * w, 0) / totalWeight * 100)
+
+  // Dynamic explanation — find the metric with the biggest shortfall
+  const deficits = available.map(([v, w, name]) => ({ name, deficit: w * (1 - v), v }))
+  deficits.sort((a, b) => b.deficit - a.deficit)
+  const top = deficits[0]
+  let explanation = ''
+  if (top.name === 'hrv') {
+    if (hrvDevPct !== null && hrvDevPct < -10)
+      explanation = `Readiness wordt vooral verlaagd door een lagere HRV dan normaal (${hrvDevPct}% onder jouw baseline).`
+    else if (hrvDevPct !== null && hrvDevPct > 10)
+      explanation = `HRV ligt boven je gebruikelijke niveau (+${hrvDevPct}%) — goed teken voor herstel.`
+  } else if (top.name === 'rhr') {
+    if (rhrDevPct !== null && rhrDevPct > 8)
+      explanation = `Rusthartslag is hoger dan normaal (+${rhrDevPct}%) — wijst op verminderd herstel.`
+    else if (rhrDevPct !== null && rhrDevPct < -8)
+      explanation = `Rusthartslag ligt lager dan normaal — goed teken voor herstel.`
+  } else if (top.name === 'sleep') {
+    if (top.v < 0.55)
+      explanation = 'Slaapkwaliteit draagt het meest bij aan een lagere readiness vandaag.'
+    else if (top.v > 0.80)
+      explanation = 'Slaapkwaliteit ligt boven je gebruikelijke niveau.'
+  }
+
+  const label = score >= 80 ? 'Peak'
+    : score >= 65 ? 'Good'
+    : score >= 50 ? 'Moderate'
     : 'Low'
 
-  const color = val === null ? 'rgba(255,255,255,0.3)'
-    : val >= 80 ? '#4ade80'
-    : val >= 65 ? '#2dd4bf'
-    : val >= 50 ? '#fb923c'
+  const color = score >= 80 ? '#4ade80'
+    : score >= 65 ? '#2dd4bf'
+    : score >= 50 ? '#fb923c'
     : '#f87171'
 
-  return { score: val, label, color }
+  return { score, label, color, explanation }
 }
 
 // HRV baseline stats from the last 30 days.

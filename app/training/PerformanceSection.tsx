@@ -79,7 +79,7 @@ export function PerformanceSection() {
     ? hoursSince < 12 ? 45 : hoursSince < 24 ? 65 : hoursSince < 48 ? 82 : 95
     : 95
   const recoveryPct = physiologyReadiness.score !== null
-    ? Math.round(physiologyReadiness.score * 0.65 + trainingLoadPct * 0.35)
+    ? Math.round(physiologyReadiness.score * 0.70 + trainingLoadPct * 0.30)
     : trainingLoadPct
 
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()

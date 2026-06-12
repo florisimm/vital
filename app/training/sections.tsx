@@ -1831,13 +1831,19 @@ function RecoveryDetailCard({
   physiology,
 }: {
   recovery: { pct: number; label: string; factors: string[] }
-  physiology: { score: number | null; label: string; color: string }
+  physiology: { score: number | null; label: string; color: string; explanation: string }
 }) {
   const unified = physiology.score !== null
-    ? Math.round(physiology.score * 0.65 + recovery.pct * 0.35)
+    ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
     : recovery.pct
   const label = physiology.score !== null ? physiology.label : recovery.label
   const c = unified >= 70 ? '#4ade80' : unified >= 45 ? '#fb923c' : '#f87171'
+
+  // Show fatigue explanation when training load is the dominant drag
+  const fatigueIsDominant = recovery.pct < 55 && (physiology.score === null || recovery.pct < physiology.score - 20)
+  const explanation = fatigueIsDominant
+    ? 'Readiness wordt vooral beperkt door hoge trainingsvermoeidheid van de afgelopen dagen.'
+    : physiology.explanation
 
   return (
     <Card>
@@ -1850,7 +1856,9 @@ function RecoveryDetailCard({
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <div className="h-full rounded-full" style={{ width: `${unified}%`, background: c }} />
         </div>
-        {physiology.score !== null && (
+        {explanation ? (
+          <p className="text-[12px] text-white/40 leading-relaxed pt-0.5">{explanation}</p>
+        ) : physiology.score !== null && (
           <span className="text-[12px] text-white/35 pt-0.5">
             Physiology {physiology.score}% · Training load {recovery.pct}%
           </span>
@@ -2084,7 +2092,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const weekVolume = weekHevy.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
 
   const unifiedReadinessPct = physiologyReadiness.score !== null
-    ? Math.round(physiologyReadiness.score * 0.65 + recoveryDetail.pct * 0.35)
+    ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
 
   const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
