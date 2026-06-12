@@ -573,17 +573,25 @@ export default function TodayPage() {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const rows = gezondheid ?? []
 
-  const coach    = buildCoach(rows, data)
-  const focus    = buildFocusItems(data)
-  const risksOps = buildRisksOps(data, rows)
+  // Prefer steps from the health-gezondheid cache (kept fresh by DataProvider auto-sync)
+  // over the today-fetch result, which may have run before today's Fitbit sync completed.
+  const todayStr = new Date().toISOString().split('T')[0]
+  const todayHealthRow = rows.find(r => r.datum === todayStr)
+  const effectiveData = data && todayHealthRow?.stappen != null
+    ? { ...data, latestGezondheid: { ...(data.latestGezondheid ?? {}), stappen: todayHealthRow.stappen } }
+    : data
+
+  const coach    = buildCoach(rows, effectiveData)
+  const focus    = buildFocusItems(effectiveData)
+  const risksOps = buildRisksOps(effectiveData, rows)
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
       <CoachCard coach={coach} />
       <FocusCard items={focus} />
       <RisksOpsCard items={risksOps} />
-      <ProgressCard data={data} />
-      <UpcomingCard events={data?.calendarEvents ?? []} />
+      <ProgressCard data={effectiveData} />
+      <UpcomingCard events={effectiveData?.calendarEvents ?? []} />
     </PremiumScreen>
   )
 }

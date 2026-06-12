@@ -214,9 +214,9 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
     ? 1 : recentRuns.length > 0 ? 0.6 : 0.5
 
   const score = Math.round(consistency * 40 + loadScore * 30 + trendScore * 30)
-  // Unified status vocabulary used everywhere in the Training section
-  const label = loadRatio > 1.4 ? 'Overreaching' : score >= 75 ? 'Productive' : score >= 50 ? 'Maintaining' : 'Recovering'
-  const color = loadRatio > 1.4 ? '#f87171' : score >= 75 ? '#4ade80' : score >= 50 ? '#facc15' : '#fb923c'
+  // Load-based labels — describe the data, no physiological conclusions
+  const label = loadRatio > 1.5 ? 'Very High Load' : loadRatio > 1.3 ? 'High Load' : loadRatio > 1.1 ? 'Elevated Load' : 'Normal Load'
+  const color = loadRatio > 1.5 ? '#f87171' : loadRatio > 1.3 ? '#fb923c' : loadRatio > 1.1 ? '#facc15' : '#4ade80'
 
   return {
     score, label, color, loadRatio,
@@ -733,7 +733,7 @@ function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[]): stri
   const weekKm = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
 
   if (loadRatio > 1.3)
-    return `Training load is ${Math.round(loadRatio * 100)}% of your recent baseline — elevated. Consider keeping today easy to avoid overreaching.`
+    return `Training load is ${Math.round(loadRatio * 100)}% of your recent baseline. Consider an easy day to support recovery.`
   if (weekRuns === 0 && weekStrength === 0)
     return 'No sessions logged this week yet. Even a short workout maintains your fitness base — consistency beats intensity long-term.'
   const parts: string[] = []
@@ -1537,8 +1537,8 @@ function computeTodaysFocus(
   if (recoveryPct < 40 || perf.loadRatio > 1.4) {
     return {
       emoji: '😴',
-      label: 'Rest Day',
-      sub: perf.loadRatio > 1.4 ? 'Training load is high — rest recommended' : 'Body needs rest',
+      label: 'Recovery Day',
+      sub: perf.loadRatio > 1.4 ? 'Training load is well above your recent baseline' : 'Readiness indicators suggest rest today',
     }
   }
 
@@ -1575,15 +1575,15 @@ function computeTodaysFocus(
 
   if (recoveryPct >= 82 && perf.score >= 70) {
     return weekRuns <= weekStrength
-      ? { emoji: '🏃', label: 'Tempo Run', sub: 'Recovery optimal · performance on track' }
-      : { emoji: '💪', label: 'Strength Session', sub: 'Recovery optimal · performance on track' }
+      ? { emoji: '🏃', label: 'Hard Training Appropriate', sub: 'Recovery high · load within normal range' }
+      : { emoji: '💪', label: 'Hard Training Appropriate', sub: 'Recovery high · load within normal range' }
   }
   if (recoveryPct >= 65) {
     return weekStrength < 2
-      ? { emoji: '💪', label: 'Gym Session', sub: 'Limited strength training this week' }
-      : { emoji: '🚴', label: 'Recovery Ride', sub: 'Moderate recovery · light training recommended' }
+      ? { emoji: '💪', label: 'Moderate Training Recommended', sub: 'Recovery adequate · keep intensity controlled' }
+      : { emoji: '🚴', label: 'Easy Training Recommended', sub: 'Recovery moderate · lighter session preferred' }
   }
-  return { emoji: '🏃', label: 'Easy Run', sub: 'Recovery in progress · keep the pace easy' }
+  return { emoji: '🏃', label: 'Easy Training Recommended', sub: 'Recovery below baseline · keep effort low' }
 }
 
 // Strength effort derived from volume and sets — replaces the fixed 0.85 guess.
@@ -1714,7 +1714,7 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
   })()
 
   const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-  const rl = readinessPct >= 70 ? 'Good to train' : readinessPct >= 45 ? 'Train light' : 'Rest recommended'
+  const rl = readinessPct >= 70 ? 'Ready to train' : readinessPct >= 45 ? 'Easy training recommended' : 'Recovery recommended'
 
   return (
     <Card>
