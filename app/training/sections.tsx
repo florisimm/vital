@@ -1530,64 +1530,142 @@ function computeTodaysFocus(
   recoveryPct: number,
   perf: { score: number; label: string; color: string; loadRatio: number }
 ): { emoji: string; label: string; sub: string } {
-  const weekStart = startOfWeek()
-  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
-  const weekRuns = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
+  const todayStr    = new Date().toISOString().slice(0, 10)
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const weekStart   = startOfWeek()
+  const events      = calendarEvents ?? []
 
-  // Low recovery = rest; high load alone = lighter session, not full rest
-  if (recoveryPct < 40) {
-    return { emoji: '😴', label: 'Recovery Day', sub: 'Readiness indicators suggest rest today' }
+  function evtDate(e: any) { return (e.start_datetime || e.start_date).slice(0, 10) }
+  function evtTime(e: any) { return e.start_datetime ? ` om ${formatClockTime(e.start_datetime)}` : '' }
+
+  function sportEmoji(title: string): string {
+    const t = title.toLowerCase()
+    if (t.includes('hyrox'))                              return '🏋️'
+    if (['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','bicep','tricep','shoulder'].some(k => t.includes(k))) return '💪'
+    if (['run','loop','hardloop','tempo','interval'].some(k => t.includes(k))) return '🏃'
+    if (['ride','fiet','cycl','bike','cycling'].some(k => t.includes(k)))     return '🚴'
+    if (['swim','zwem'].some(k => t.includes(k)))         return '🏊'
+    return '📅'
   }
-  if (perf.loadRatio > 1.4) {
+
+  function isSportEvent(e: any): boolean {
+    const t = (e.title ?? '').toLowerCase()
+    return ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox',
+            'run','loop','hardloop','ride','fiet','cycl','bike','swim','zwem','interval',
+            'tempo','training','workout','sport'].some(k => t.includes(k))
+  }
+
+  function isHeavyEvent(title: string): boolean {
+    const t = title.toLowerCase()
+    return t.includes('hyrox') || t.includes('interval') || t.includes('tempo')
+      || t.includes('race') || t.includes('wedstrijd')
+      || ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','bicep','tricep','shoulder'].some(k => t.includes(k))
+  }
+
+  function isEasyEvent(title: string): boolean {
+    const t = title.toLowerCase()
+    return ['easy','rustig','zone 2','zone2','herstel','recovery','duurloop'].some(k => t.includes(k))
+  }
+
+  const lowRecovery = recoveryPct < 50
+  const highLoad    = perf.loadRatio > 1.4
+  const loadPct     = Math.round((perf.loadRatio - 1) * 100)
+
+  const todayEvents    = events.filter(e => evtDate(e) === todayStr    && isSportEvent(e))
+    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+  const tomorrowEvents = events.filter(e => evtDate(e) === tomorrowStr && isSportEvent(e))
+    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+
+  // ── Today has planned sessions ──────────────────────────────────────────────
+  if (todayEvents.length > 0) {
+    const ev    = todayEvents[0]
+    const time  = evtTime(ev)
+    const heavy = isHeavyEvent(ev.title)
+    const easy  = isEasyEvent(ev.title)
+
+    if ((lowRecovery || highLoad) && !easy) {
+      const reason = lowRecovery && highLoad
+        ? 'Je herstel is laag en de trainingsbelasting is hoog'
+        : lowRecovery
+          ? 'Je huidige herstel is laag'
+          : `Je trainingsbelasting ligt ${loadPct}% boven je baseline`
+      const fwd = tomorrowEvents.length === 0
+        ? ' Morgen staat er niets gepland — een goed moment om deze sessie te verplaatsen.'
+        : tomorrowEvents[0] ? ` Morgen staat ${tomorrowEvents[0].title} gepland — extra herstel vandaag kan helpen.` : ''
+      return {
+        emoji: sportEmoji(ev.title),
+        label: `${ev.title}${time}`,
+        sub: `${reason}. Overweeg deze training te verzachten of te verplaatsen.${fwd}`,
+      }
+    }
+
+    if (recoveryPct >= 80 && !highLoad) {
+      return {
+        emoji: sportEmoji(ev.title),
+        label: `${ev.title}${time}`,
+        sub: heavy
+          ? 'Je herstel is goed — deze zware sessie past binnen je huidige belastbaarheid.'
+          : 'Je herstel is goed — deze training past prima bij je huidige conditie.',
+      }
+    }
+
+    // moderate recovery or easy session type
+    return {
+      emoji: sportEmoji(ev.title),
+      label: `${ev.title}${time}`,
+      sub: easy
+        ? 'Je geplande rustige training past goed bij je huidige herstelstatus.'
+        : heavy
+          ? 'Je herstel is redelijk — houd de intensiteit gecontroleerd.'
+          : 'Je geplande training past bij je huidige herstelstatus.',
+    }
+  }
+
+  // ── No today events — look at tomorrow ─────────────────────────────────────
+  if (tomorrowEvents.length > 0) {
+    const tm = tomorrowEvents[0]
+    if (isHeavyEvent(tm.title)) {
+      if (lowRecovery || highLoad) {
+        return {
+          emoji: '😴',
+          label: 'Recovery Day',
+          sub: `Rust vandaag creëert extra herstelruimte voor de geplande ${tm.title} morgen.`,
+        }
+      }
+      return {
+        emoji: '🚶',
+        label: 'Easy Training Recommended',
+        sub: `Morgen staat ${tm.title} gepland. Een lichte training vandaag past daarbij.`,
+      }
+    }
+    // easy event tomorrow — same advice as no-event path below
+  }
+
+  // ── No events — fallback on readiness + load ────────────────────────────────
+  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
+  const weekRuns     = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
+
+  if (recoveryPct < 40) {
+    return { emoji: '😴', label: 'Recovery Day', sub: 'Je herstelscores wijzen op een rustdag.' }
+  }
+  if (highLoad) {
     return {
       emoji: '🚶',
       label: 'Easy Training Recommended',
-      sub: `Training load is ${Math.round((perf.loadRatio - 1) * 100)}% above your recent baseline`,
+      sub: `Trainingsbelasting ligt ${loadPct}% boven je gebruikelijke niveau.`,
     }
   }
-
-  const now = new Date().toISOString()
-  const threeDaysAhead = new Date(Date.now() + 3 * 86400000).toISOString()
-  const nextEvent = (calendarEvents ?? [])
-    .filter((e: any) => { const dt = e.start_datetime || e.start_date; return dt >= now && dt <= threeDaysAhead })
-    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
-
-  if (nextEvent) {
-    const title = (nextEvent.title ?? '') as string
-    const tl = title.toLowerCase()
-    const dateStr = nextEvent.start_datetime || nextEvent.start_date
-    const eventDate = dateStr.slice(0, 10)
-    const todayDate = new Date().toISOString().slice(0, 10)
-    const tomorrowDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
-    const dayLabel = eventDate === todayDate ? 'Today' : eventDate === tomorrowDate ? 'Tomorrow'
-      : new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })
-    const time = nextEvent.start_datetime
-      ? ' · ' + formatClockTime(nextEvent.start_datetime)
-      : ''
-    const when = dayLabel + time
-    if (tl.includes('strength') || tl.includes('gym') || tl.includes('kracht') || tl.includes('push') || tl.includes('pull') || tl.includes('legs')) {
-      return { emoji: '💪', label: title, sub: when }
-    }
-    if (tl.includes('run') || tl.includes('loop') || tl.includes('tempo') || tl.includes('interval') || tl.includes('hardloop')) {
-      return { emoji: '🏃', label: title, sub: when }
-    }
-    if (tl.includes('ride') || tl.includes('fiet') || tl.includes('cycl') || tl.includes('bike')) {
-      return { emoji: '🚴', label: title, sub: when }
-    }
-    return { emoji: '📅', label: title, sub: when }
-  }
-
   if (recoveryPct >= 82 && perf.score >= 70) {
     return weekRuns <= weekStrength
-      ? { emoji: '🏃', label: 'Hard Training Appropriate', sub: 'Recovery high · load within normal range' }
-      : { emoji: '💪', label: 'Hard Training Appropriate', sub: 'Recovery high · load within normal range' }
+      ? { emoji: '🏃', label: 'Hard Training Appropriate', sub: 'Herstel is goed — belasting ligt binnen normaal bereik.' }
+      : { emoji: '💪', label: 'Hard Training Appropriate', sub: 'Herstel is goed — belasting ligt binnen normaal bereik.' }
   }
   if (recoveryPct >= 65) {
     return weekStrength < 2
-      ? { emoji: '💪', label: 'Moderate Training Recommended', sub: 'Recovery adequate · keep intensity controlled' }
-      : { emoji: '🚴', label: 'Easy Training Recommended', sub: 'Recovery moderate · lighter session preferred' }
+      ? { emoji: '💪', label: 'Moderate Training Recommended', sub: 'Herstel is voldoende — houd de intensiteit gecontroleerd.' }
+      : { emoji: '🚴', label: 'Easy Training Recommended',     sub: 'Herstel is matig — een lichtere sessie heeft de voorkeur.' }
   }
-  return { emoji: '🏃', label: 'Easy Training Recommended', sub: 'Recovery below baseline · keep effort low' }
+  return { emoji: '🏃', label: 'Easy Training Recommended', sub: 'Herstel ligt onder je normale niveau — houd de inspanning laag.' }
 }
 
 // Strength effort derived from volume and sets — replaces the fixed 0.85 guess.
