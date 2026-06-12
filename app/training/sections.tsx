@@ -22,6 +22,15 @@ export type HevyWorkout = {
   exercises: Array<{ title: string; sets: Array<{ weight_kg: number; reps: number }> }> | null
 }
 
+type SportBreakdown = {
+  key: string; label: string; acwr: number | null
+  hasHistory: boolean; daysWithData: number; weeksWithData: number
+}
+type ACWRDetail = {
+  total: number | null; totalHasHistory: boolean
+  sports: SportBreakdown[]; explanation: string
+}
+
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 export function startOfWeek() {
@@ -81,6 +90,10 @@ function isWeightTraining(a: Activity) {
   return a.sport_type?.toLowerCase() === 'weighttraining'
 }
 
+function isCycling(a: Activity) {
+  return a.sport_type?.toLowerCase().includes('ride')
+}
+
 // Consistent load unit (minutes) with zone-2 dampening.
 // Avoids mixing real kilojoules (available on recent Strava syncs) with the
 // moving_time fallback on older records, which would inflate acute:chronic ratios.
@@ -94,6 +107,69 @@ function hevyLoad(h: HevyWorkout): number {
   // Duration-only for consistency — volume_kg is missing on older synced records,
   // which would make the chronic baseline artificially low vs recent sessions.
   return (h.duration ?? 3600) / 60
+}
+
+function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number): ACWRDetail {
+  const t7  = new Date(now - 7  * 86400000).toISOString()
+  const t28 = new Date(now - 28 * 86400000).toISOString()
+  const wk  = (iso: string) => { const d = new Date(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) }
+  const dy  = (iso: string) => iso.slice(0, 10)
+
+  function calcBreakdown(acts: Activity[], hevyW: HevyWorkout[]) {
+    const a28 = acts.filter(a => a.start_date >= t28)
+    const h28 = hevyW.filter(h => h.start_time >= t28)
+    if (!a28.length && !h28.length) return { acwr: null, hasHistory: false, daysWithData: 0, weeksWithData: 0 }
+    const acute   = a28.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
+                  + h28.filter(h => h.start_time >= t7).reduce((s, h) => s + hevyLoad(h), 0)
+    const chronic = a28.reduce((s, a) => s + effectiveLoad(a), 0)
+                  + h28.reduce((s, h) => s + hevyLoad(h), 0)
+    const wkSet  = new Set([...a28.map(a => wk(a.start_date)), ...h28.map(h => wk(h.start_time))])
+    const dySet  = new Set([...a28.map(a => dy(a.start_date)), ...h28.map(h => dy(h.start_time))])
+    const weeks  = Math.max(1, wkSet.size)
+    const hist   = weeks >= 4
+    const acwr   = hist && chronic / 4 > 5 ? Math.round((acute / (chronic / 4)) * 10) / 10 : null
+    return { acwr, hasHistory: hist, daysWithData: dySet.size, weeksWithData: weeks }
+  }
+
+  const hevyMain  = hevy.filter(h => !h.title.toLowerCase().includes('hyrox'))
+  const hevyHyrox = hevy.filter(h => h.title.toLowerCase().includes('hyrox'))
+  const categorised = new Set([
+    ...activities.filter(a => isWeightTraining(a) || isCycling(a) || isRun(a)).map(a => a.id),
+  ])
+
+  const buckets: { key: string; label: string; acts: Activity[]; hevyW: HevyWorkout[] }[] = [
+    { key: 'strength', label: 'Strength', acts: activities.filter(isWeightTraining), hevyW: hevyMain  },
+    { key: 'cycling',  label: 'Cycling',  acts: activities.filter(isCycling),         hevyW: []        },
+    { key: 'running',  label: 'Running',  acts: activities.filter(isRun),             hevyW: []        },
+    { key: 'hyrox',    label: 'HYROX',    acts: [],                                   hevyW: hevyHyrox },
+    { key: 'other',    label: 'Other',    acts: activities.filter(a => !categorised.has(a.id)), hevyW: [] },
+  ]
+
+  const sports: SportBreakdown[] = buckets
+    .map(({ key, label, acts, hevyW }) => ({ key, label, ...calcBreakdown(acts, hevyW) }))
+    .filter(s => s.daysWithData > 0)
+
+  const total = calcBreakdown(activities, hevy)
+
+  // Dynamic explanation
+  const elevated  = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
+  const newSports = sports.filter(s => !s.hasHistory && s.daysWithData > 0)
+  let explanation = ''
+  if (!total.hasHistory) {
+    explanation = 'ACWR wordt betrouwbaar na 4 weken consistente trainingshistorie.'
+  } else if (elevated.length > 0) {
+    const top = elevated[0]
+    const pct = Math.round(((top.acwr ?? 1) - 1) * 100)
+    explanation = !top.hasHistory
+      ? `Je ACWR wordt verhoogd door ${top.label} (+${pct}%). Omdat dit een relatief nieuwe activiteit is, kan de waarde tijdelijk vertekend zijn.`
+      : `De stijging komt voornamelijk van ${top.label}, ${pct}% boven je 4-weeks gemiddelde.`
+  } else if (newSports.length > 0) {
+    explanation = `Je traint recent ${newSports.map(s => s.label.toLowerCase()).join(' en ')}. ACWR wordt opgebouwd zodra er 4 weken data beschikbaar is.`
+  } else {
+    explanation = 'Je trainingsbelasting ligt dicht bij je gebruikelijke niveau.'
+  }
+
+  return { total: total.acwr, totalHasHistory: total.hasHistory, sports, explanation }
 }
 
 function formatPace100m(speedMs: number): string {
@@ -1780,9 +1856,9 @@ function RecoveryDetailCard({
   )
 }
 
-function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, acwr, rampRate, hasFullHistory }: {
+function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, rampRate }: {
   weekCompleted: number; weekPlanned: number; weekKm: number; weekDurationSecs: number
-  weekVolume: number; acwr: number | null; rampRate: number | null; hasFullHistory: boolean
+  weekVolume: number; rampRate: number | null
 }) {
   const stats = [
     weekCompleted > 0 && `${weekCompleted} session${weekCompleted !== 1 ? 's' : ''}${weekPlanned > 0 ? ` (${weekPlanned} planned)` : ''}`,
@@ -1800,14 +1876,6 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
     : rampRate > 10 ? 'moderate increase'
     : rampRate < -10 ? 'decreasing'
     : 'stable'
-
-  const acwrColor = acwr == null ? '#4ade80'
-    : acwr > 1.5 ? '#f87171' : acwr > 1.3 ? '#fb923c' : acwr < 0.8 ? '#60a5fa' : '#4ade80'
-  const acwrLabel = acwr == null ? ''
-    : acwr > 1.5 ? '— hoog blessurerisico'
-    : acwr > 1.3 ? '— verhoogde belasting'
-    : acwr < 0.8 ? '— onderbelasting'
-    : '— optimaal'
 
   return (
     <Card>
@@ -1832,27 +1900,75 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
             <span className="text-[13px] text-white/40">vs last week — {rampLabel}</span>
           </div>
         )}
-
-        {hasFullHistory ? (
-          acwr !== null && (
-            <div className="flex items-center gap-2 pt-1 border-t border-white/[0.06]">
-              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">ACWR</span>
-              <span className="text-[15px] font-bold" style={{ color: acwrColor }}>{acwr.toFixed(2)}</span>
-              <span className="text-[13px] text-white/40">{acwrLabel}</span>
-            </div>
-          )
-        ) : (
-          <div className="flex flex-col gap-1 pt-2 border-t border-white/[0.06]">
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">ACWR</span>
-              <span className="text-[13px] text-white/50">Baseline wordt opgebouwd</span>
-            </div>
-            <p className="text-[11px] text-white/25 leading-relaxed">
-              Betrouwbaar na 4 weken trainingshistorie. Een hoge belasting in de eerste weken wijst niet automatisch op overbelasting.
-            </p>
-          </div>
-        )}
       </div>
+    </Card>
+  )
+}
+
+function ACWRCard({ detail }: { detail: ACWRDetail }) {
+  const [expanded, setExpanded] = useState(false)
+  const { total, totalHasHistory, sports, explanation } = detail
+
+  const col = (v: number | null) =>
+    v == null ? 'rgba(255,255,255,0.4)'
+    : v > 1.5 ? '#f87171' : v > 1.3 ? '#fb923c' : v < 0.8 ? '#60a5fa' : '#4ade80'
+
+  const status = total == null
+    ? (totalHasHistory ? null : 'Baseline wordt opgebouwd')
+    : total > 1.5 ? 'Hoog blessurerisico'
+    : total > 1.3 ? 'Verhoogde belasting'
+    : total < 0.8 ? 'Onderbelasting'
+    : 'Optimaal'
+
+  return (
+    <Card>
+      <button className="w-full text-left active:opacity-70 transition-opacity" onClick={() => setExpanded(e => !e)}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">ACWR</span>
+          <ChevronRight size={14} className="text-white/25 transition-transform duration-200"
+            style={{ transform: expanded ? 'rotate(90deg)' : 'none' }} />
+        </div>
+        {total !== null ? (
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[28px] font-bold leading-none" style={{ color: col(total) }}>{total.toFixed(2)}</span>
+            <span className="text-[15px] font-semibold" style={{ color: col(total) }}>{status}</span>
+          </div>
+        ) : (
+          <span className="text-[15px] text-white/50">{status ?? 'Geen data'}</span>
+        )}
+        {explanation && (
+          <p className="text-[12px] text-white/40 leading-relaxed mt-1.5">{explanation}</p>
+        )}
+        {!totalHasHistory && !explanation && (
+          <p className="text-[11px] text-white/25 leading-relaxed mt-1.5">
+            Betrouwbaar na 4 weken trainingshistorie. Een hoge belasting in de eerste weken wijst niet automatisch op overbelasting.
+          </p>
+        )}
+      </button>
+
+      {expanded && sports.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-white/[0.06] flex flex-col gap-2.5">
+          {sports.map(s => (
+            <div key={s.key} className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[14px] text-white/70">{s.label}</span>
+                {!s.hasHistory && s.daysWithData > 0 && (
+                  <span className="text-[11px] text-white/30">
+                    {s.daysWithData} van 28 dagen · baseline opgebouwd
+                  </span>
+                )}
+              </div>
+              <div className="shrink-0">
+                {s.acwr !== null ? (
+                  <span className="text-[15px] font-bold" style={{ color: col(s.acwr) }}>{s.acwr.toFixed(2)}</span>
+                ) : (
+                  <span className="text-[12px] text-white/30">opbouw</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   )
 }
@@ -1934,14 +2050,6 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
 
   const now = Date.now()
   const weekStart = startOfWeek()
-  const fifteenDaysAgo = new Date(now - 15 * 86400000).toISOString()
-  const thirtyDaysAgo = new Date(now - 30 * 86400000).toISOString()
-
-  const earlyKj = activities.filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= thirtyDaysAgo && h.start_time < fifteenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const lateKj = activities.filter(a => a.start_date >= fifteenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= fifteenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const loadTrend = earlyKj > 0 ? Math.max(-200, Math.min(200, Math.round((lateKj - earlyKj) / earlyKj * 100))) : 0
 
   const weekActivities = activities.filter(a => a.start_date >= weekStart && !isWeightTraining(a))
   const weekHevy = hevy.filter(h => h.start_time >= weekStart)
@@ -1958,31 +2066,17 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const unifiedReadinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.65 + recoveryDetail.pct * 0.35)
     : recoveryDetail.pct
+
   const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
-  const twentyEightDaysAgo = new Date(now - 28 * 86400000).toISOString()
+  const fourteenDaysAgo  = new Date(now - 14 * 86400000).toISOString()
   const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
     + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const chronic28kj = activities.filter(a => a.start_date >= twentyEightDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= twentyEightDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-
-  // Divide by actual weeks with data, not always 4 — avoids inflated ACWR for new users
-  const weekSet = new Set<string>()
-  const toWeekKey = (iso: string) => { const d = new Date(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) }
-  activities.filter(a => a.start_date >= twentyEightDaysAgo).forEach(a => weekSet.add(toWeekKey(a.start_date)))
-  hevy.filter(h => h.start_time >= twentyEightDaysAgo).forEach(h => weekSet.add(toWeekKey(h.start_time)))
-  const weeksWithData = Math.max(1, weekSet.size)
-  const hasFullHistory = weeksWithData >= 4
-
-  const fourteenDaysAgoStr = new Date(now - 14 * 86400000).toISOString()
-  const prev7kj = activities.filter(a => a.start_date >= fourteenDaysAgoStr && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= fourteenDaysAgoStr && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
   const rampRate = prev7kj > 5
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
-
-  const acwr = hasFullHistory && chronic28kj / 4 > 5
-    ? Math.round((acute7kj / (chronic28kj / 4)) * 10) / 10
-    : null
+  const acwrDetail = computeACWRDetail(activities, hevy, now)
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
   const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
@@ -2015,12 +2109,13 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
         weekKm={weekKm}
         weekDurationSecs={weekDurationSecs}
         weekVolume={weekVolume}
-        acwr={acwr}
         rampRate={rampRate}
-        hasFullHistory={hasFullHistory}
       />
 
-      {/* 6. Top Insights */}
+      {/* 6. ACWR */}
+      <ACWRCard detail={acwrDetail} />
+
+      {/* 7. Top Insights */}
       <TopInsightsCard insights={topInsights} />
     </div>
   )
