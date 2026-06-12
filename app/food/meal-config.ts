@@ -20,7 +20,7 @@ export function formatDayLabel(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
 }
 
-export const MEAL_ORDER = ['ontbijt', 'snack_ochtend', 'lunch', 'snack_middag', 'avondeten', 'snack_avond', 'supps']
+export const MEAL_ORDER = ['ontbijt', 'snack_ochtend', 'lunch', 'snack_middag', 'avondeten', 'snack_avond']
 
 export const MEAL_LABELS: Record<string, string> = {
   ontbijt:       'Breakfast',
@@ -29,7 +29,6 @@ export const MEAL_LABELS: Record<string, string> = {
   snack_middag:  'Snacks After Lunch',
   avondeten:     'Dinner',
   snack_avond:   'Snacks After Dinner',
-  supps:         'Supplements',
 }
 
 export const MEAL_ICONS: Record<string, string> = {
@@ -39,12 +38,11 @@ export const MEAL_ICONS: Record<string, string> = {
   snack_middag:  '🥗',
   avondeten:     '🌙',
   snack_avond:   '🍿',
-  supps:         '💊',
 }
 
 export const MEAL_LABELS_SHORT: Record<string, string> = {
   ontbijt: 'Breakfast', snack_ochtend: 'Morning', lunch: 'Lunch',
-  snack_middag: 'Afternoon', avondeten: 'Dinner', snack_avond: 'Evening', supps: 'Supps',
+  snack_middag: 'Afternoon', avondeten: 'Dinner', snack_avond: 'Evening',
 }
 
 export type MacroKey = 'kcal' | 'protein' | 'carbs' | 'fat'
