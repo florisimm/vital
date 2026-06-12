@@ -4,6 +4,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { computePhysiologyReadiness, computeHRVBaseline, computeSleepScore, type HealthRow } from '@/lib/readiness'
+import { formatTime } from '@/lib/timeFormat'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -59,13 +60,13 @@ async function fetchTodayData() {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatSubtitle() {
-  const s = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+  const s = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
   return s.toUpperCase()
 }
 
 function fmtTime(dt: string | null): string | null {
   if (!dt) return null
-  return new Date(dt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+  return formatTime(dt)
 }
 
 function tod0(): Date { const d = new Date(); d.setHours(0,0,0,0); return d }
@@ -124,37 +125,37 @@ function buildCoach(rows: HealthRow[], data: any) {
   // Paragraph
   let paragraph = ''
   if (readiness.score !== null && readiness.score >= 75) {
-    paragraph = 'Herstel is sterk vandaag.'
+    paragraph = 'Recovery is strong today.'
     if (todayEvent) {
       const isCardio = CARDIO_KW.some(kw => todayEvent.title.toLowerCase().includes(kw))
-      paragraph += ` Een ${isCardio ? 'cardiosessie' : 'training'} ondersteunt herstel en helpt je weekvolume opbouwen.`
+      paragraph += ` A ${isCardio ? 'cardio session' : 'workout'} will support recovery and build weekly volume.`
     } else {
-      paragraph += ' Dit is een goede dag voor een kwaliteitssessie.'
+      paragraph += ' Good day for a quality session.'
     }
-    paragraph += proteinLeft > 30 ? ` Je loopt nog ${proteinLeft}g achter op eiwit.` : ' Voeding ligt op schema.'
+    paragraph += proteinLeft > 30 ? ` Still ${proteinLeft}g short on protein.` : ' Nutrition is on track.'
   } else if (readiness.score !== null && readiness.score >= 50) {
-    paragraph = 'Readiness is matig vandaag.'
-    if (sleepScore !== null && sleepScore < 60) paragraph += ' Slaap was niet optimaal.'
+    paragraph = 'Readiness is moderate today.'
+    if (sleepScore !== null && sleepScore < 60) paragraph += ' Sleep was not optimal.'
     if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -10) {
-      paragraph += ` HRV ligt ${Math.abs(hrvBaseline.deviationPct)}% onder je baseline.`
+      paragraph += ` HRV is ${Math.abs(hrvBaseline.deviationPct)}% below baseline.`
     }
-    paragraph += ' Houd de intensiteit beperkt en prioriteer herstel.'
-    if (proteinLeft > 30) paragraph += ` Nog ${proteinLeft}g eiwit te gaan.`
+    paragraph += ' Keep intensity low and prioritise recovery.'
+    if (proteinLeft > 30) paragraph += ` ${proteinLeft}g of protein left to go.`
   } else if (readiness.score !== null) {
-    paragraph = 'Readiness is laag.'
-    if (sleepScore !== null && sleepScore < 55) paragraph += ' Slaap was slecht.'
-    paragraph += ' Overweeg een rustdag of lichte wandeling.'
-    if (proteinLeft > 30) paragraph += ` Prioriteer ${proteinLeft}g eiwit voor herstel.`
+    paragraph = 'Readiness is low.'
+    if (sleepScore !== null && sleepScore < 55) paragraph += ' Sleep was poor.'
+    paragraph += ' Consider a rest day or light walk.'
+    if (proteinLeft > 30) paragraph += ` Prioritise ${proteinLeft}g protein for recovery.`
   } else {
     if (todayEvent) {
-      paragraph = `${todayEvent.title} staat vandaag op het programma.`
+      paragraph = `${todayEvent.title} is on the schedule today.`
       paragraph += proteinLeft > 30
-        ? ` Haal nog ${proteinLeft}g eiwit voor betere prestaties.`
-        : ' Voeding ligt op schema.'
+        ? ` Get ${proteinLeft}g more protein for better performance.`
+        : ' Nutrition is on track.'
     } else if (proteinLeft > 40) {
-      paragraph = `Eiwitinname loopt achter. Haal nog ${proteinLeft}g voor het einde van de dag.`
+      paragraph = `Protein intake is behind. Get ${proteinLeft}g more before end of day.`
     } else {
-      paragraph = 'Je ligt op schema vandaag. Blijf consistent.'
+      paragraph = 'You are on track today. Stay consistent.'
     }
   }
 
@@ -167,28 +168,28 @@ function buildCoach(rows: HealthRow[], data: any) {
 
   if (foodLogToday.length > 0) {
     const calPct = targetKcal > 0 ? totalKcal / targetKcal : 0
-    if (calPct > expectedFrac + 0.15)       bullets.push('Je ligt voor op je calorieplanning')
-    else if (calPct >= expectedFrac - 0.12) bullets.push('Calorieën liggen op schema')
-    else                                     bullets.push('Calorie-inname loopt achter op schema')
+    if (calPct > expectedFrac + 0.15)       bullets.push('Calorie intake is ahead of schedule')
+    else if (calPct >= expectedFrac - 0.12) bullets.push('Calories are on track')
+    else                                     bullets.push('Calorie intake is behind schedule')
   }
 
   if (foodLogToday.length > 0) {
     if (proteinLeft <= 0) {
-      bullets.push('Eiwitdoel al behaald vandaag')
+      bullets.push('Protein goal already reached today')
     } else {
       const hoursLeft     = Math.max(1, 22 - hour)
       const neededPerHour = proteinLeft / hoursLeft
-      if (neededPerHour <= 15)      bullets.push('Een eiwitrijke avondmaaltijd haalt je doel waarschijnlijk')
-      else if (neededPerHour <= 30) bullets.push('Prioriteer eiwit bij elke resterende maaltijd')
-      else                          bullets.push('Eiwit is het grootste aandachtspunt vandaag')
+      if (neededPerHour <= 15)      bullets.push('A protein-rich dinner will likely hit your goal')
+      else if (neededPerHour <= 30) bullets.push('Prioritise protein at every remaining meal')
+      else                          bullets.push('Protein is the main focus today')
     }
   }
 
   if (steps > 0) {
     const projected = Math.round(steps * (18 / Math.max(1, hour - 6)))
-    if (steps >= stepGoal)           bullets.push('Stappendoel al behaald')
-    else if (projected >= stepGoal)  bullets.push('Stappendoel is haalbaar op huidig tempo')
-    else                             bullets.push('Je grootste aandachtspunt zijn stappen')
+    if (steps >= stepGoal)           bullets.push('Step goal already reached')
+    else if (projected >= stepGoal)  bullets.push('Step goal is achievable at current pace')
+    else                             bullets.push('Steps are your biggest focus today')
   }
 
   return { status, title, paragraph, bullets: bullets.slice(0, 3) }
@@ -212,7 +213,7 @@ function buildFocusItems(data: any) {
     const t    = todayEvent.title.toLowerCase()
     const isGym = STRENGTH_KW.some(k => t.includes(k)) && !CARDIO_KW.some(k => t.includes(k))
     items.push({
-      label: time ? `${todayEvent.title} om ${time}` : todayEvent.title,
+      label: time ? `${todayEvent.title} at ${time}` : todayEvent.title,
       done,
       href: isGym
         ? '/training/strength'
@@ -228,7 +229,7 @@ function buildFocusItems(data: any) {
   const targetProtein = Number(settings?.macro_protein ?? 180)
   const proteinLeft   = Math.max(0, targetProtein - totalProtein)
   items.push({
-    label: proteinLeft > 0 ? `Nog ${Math.round(proteinLeft)}g eiwit` : 'Eiwitdoel behaald',
+    label: proteinLeft > 0 ? `${Math.round(proteinLeft)}g protein left` : 'Protein goal reached',
     done:  proteinLeft <= 0,
     href:  '/food',
   })
@@ -238,7 +239,7 @@ function buildFocusItems(data: any) {
   if (steps > 0) {
     const stepsLeft = Math.max(0, stepGoal - steps)
     items.push({
-      label: stepsLeft > 0 ? `Nog ${stepsLeft.toLocaleString('nl-NL')} stappen` : 'Stappendoel behaald',
+      label: stepsLeft > 0 ? `${stepsLeft.toLocaleString('en-US')} steps left` : 'Step goal reached',
       done:  stepsLeft <= 0,
       href:  '/health/activity',
     })
@@ -277,8 +278,8 @@ function buildRisksOps(data: any, rows: HealthRow[]) {
   }
   if (streak >= 2) {
     items.push(todayProtein >= targetProtein
-      ? { type: 'opportunity', text: `${streak + 1} dagen op rij eiwitdoel behaald` }
-      : { type: 'opportunity', text: `Behaal eiwit vandaag voor een streak van ${streak + 1} dagen` }
+      ? { type: 'opportunity', text: `Protein goal hit ${streak + 1} days in a row` }
+      : { type: 'opportunity', text: `Hit protein today for a ${streak + 1}-day streak` }
     )
   }
 
@@ -296,7 +297,7 @@ function buildRisksOps(data: any, rows: HealthRow[]) {
       return d >= tom0() && d <= endOfWeek && CARDIO_KW.some(kw => e.title.toLowerCase().includes(kw))
     })
     if (!moreCardio) {
-      items.push({ type: 'opportunity', text: 'Weekdoel cardio afronden na de sessie van vanavond' })
+      items.push({ type: 'opportunity', text: "Finish weekly cardio after tonight's session" })
     }
   }
 
@@ -304,19 +305,19 @@ function buildRisksOps(data: any, rows: HealthRow[]) {
   if (steps > 0 && steps < stepGoal) {
     const projected = Math.round(steps * (18 / Math.max(1, hour - 6)))
     if (hour >= 8 && projected < stepGoal * 0.9) {
-      items.push({ type: 'watch', text: `Op huidig tempo eindig je op ~${projected.toLocaleString('nl-NL')} stappen` })
+      items.push({ type: 'watch', text: `At current pace you'll end at ~${projected.toLocaleString('en-US')} steps` })
     } else if (steps >= stepGoal * 0.9) {
-      items.push({ type: 'opportunity', text: `Nog ${(stepGoal - steps).toLocaleString('nl-NL')} stappen voor dagdoel` })
+      items.push({ type: 'opportunity', text: `${(stepGoal - steps).toLocaleString('en-US')} steps to daily goal` })
     }
   } else if (steps >= stepGoal) {
-    items.push({ type: 'opportunity', text: 'Stappendoel al behaald vandaag' })
+    items.push({ type: 'opportunity', text: 'Step goal already reached today' })
   }
 
   // Calorie risk — over target
   const totalKcal  = foodLogToday.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0)
   const targetKcal = Number(settings?.macro_kcal ?? 2000)
   if (foodLogToday.length > 0 && totalKcal > targetKcal * 1.12) {
-    items.push({ type: 'risk', text: `Calorieën ${Math.round(totalKcal - targetKcal)} boven dagdoel` })
+    items.push({ type: 'risk', text: `${Math.round(totalKcal - targetKcal)} kcal over daily goal` })
   }
 
   // Sleep trend (3+ days declining)
@@ -325,7 +326,7 @@ function buildRisksOps(data: any, rows: HealthRow[]) {
     const scores = sleepRows.map(r => computeSleepScore(r) ?? 0)
     if (scores[0] < scores[1] && scores[1] < scores[2] && scores[0] < 65) {
       const days = sleepRows.length >= 4 && scores[2] < scores[3] ? 4 : 3
-      items.push({ type: 'risk', text: `Slaapkwaliteit daalt al ${days} dagen op rij` })
+      items.push({ type: 'risk', text: `Sleep quality declining for ${days} days in a row` })
     }
   }
 
@@ -466,20 +467,20 @@ function ProgressCard({ data }: { data: any }) {
     if (target <= 0 || current === 0) return undefined
     const pct  = current / target
     const diff = pct - expectedFrac
-    if (pct >= 1)        return { note: 'Behaald',    color: '#2dd4bf' }
-    if (diff > 0.15)     return { note: 'Voor',       color: '#2dd4bf' }
-    if (diff >= -0.1)    return { note: 'Op schema',  color: 'rgba(255,255,255,0.4)' }
-    if (diff >= -0.25)   return { note: 'Achter',     color: '#fb923c' }
-    return               { note: 'Ver achter',        color: '#f87171' }
+    if (pct >= 1)        return { note: 'Done',       color: '#2dd4bf' }
+    if (diff > 0.15)     return { note: 'Ahead',      color: '#2dd4bf' }
+    if (diff >= -0.1)    return { note: 'On track',   color: 'rgba(255,255,255,0.4)' }
+    if (diff >= -0.25)   return { note: 'Behind',     color: '#fb923c' }
+    return               { note: 'Way behind',        color: '#f87171' }
   }
 
   function stepsNote(current: number, target: number): { note: string; color: string } | undefined {
     if (current === 0) return undefined
-    if (current >= target) return { note: 'Behaald', color: '#2dd4bf' }
+    if (current >= target) return { note: 'Done',     color: '#2dd4bf' }
     const projected = Math.round(current * (18 / Math.max(1, hour - 6)))
-    if (projected >= target)              return { note: 'Op schema',  color: 'rgba(255,255,255,0.4)' }
-    if (projected >= target * 0.85)      return { note: 'Bijna',      color: '#fb923c' }
-    return                                { note: 'Achter',            color: '#f87171' }
+    if (projected >= target)              return { note: 'On track',   color: 'rgba(255,255,255,0.4)' }
+    if (projected >= target * 0.85)      return { note: 'Almost',     color: '#fb923c' }
+    return                                { note: 'Behind',            color: '#f87171' }
   }
 
   const kcalN   = macroNote(t.kcal,    Number(settings.macro_kcal    ?? 2000))
@@ -494,11 +495,11 @@ function ProgressCard({ data }: { data: any }) {
       <a href="/food" className="block active:opacity-70 transition-opacity">
         <div className="flex flex-col gap-4 px-4 py-4 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
           <ProgressBar label="Kcal"    current={t.kcal}    target={Number(settings.macro_kcal    ?? 2000)} unit=""  color="rgb(251,146,60)"  note={kcalN?.note}  noteColor={kcalN?.color} />
-          <ProgressBar label="Eiwit"   current={t.protein} target={Number(settings.macro_protein ?? 180)}  unit="g" color="rgb(45,212,191)"  note={eiwitN?.note} noteColor={eiwitN?.color} />
+          <ProgressBar label="Protein" current={t.protein} target={Number(settings.macro_protein ?? 180)}  unit="g" color="rgb(45,212,191)"  note={eiwitN?.note} noteColor={eiwitN?.color} />
           <ProgressBar label="Carbs"   current={t.carbs}   target={Number(settings.macro_carbs   ?? 250)}  unit="g" color="rgb(163,230,53)"  note={carbsN?.note} noteColor={carbsN?.color} />
-          <ProgressBar label="Vet"     current={t.fat}     target={Number(settings.macro_fat     ?? 70)}   unit="g" color="rgb(250,204,21)"  note={vetN?.note}   noteColor={vetN?.color} />
+          <ProgressBar label="Fat"     current={t.fat}     target={Number(settings.macro_fat     ?? 70)}   unit="g" color="rgb(250,204,21)"  note={vetN?.note}   noteColor={vetN?.color} />
           {steps > 0 && (
-            <ProgressBar label="Stappen" current={steps} target={stepGoal} unit="" color="rgb(129,140,248)" note={stapsN?.note} noteColor={stapsN?.color} />
+            <ProgressBar label="Steps"   current={steps} target={stepGoal} unit="" color="rgb(129,140,248)" note={stapsN?.note} noteColor={stapsN?.color} />
           )}
         </div>
       </a>
@@ -513,9 +514,9 @@ function UpcomingCard({ events }: { events: any[] }) {
 
   function dayLabel(e: any): string {
     const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
-    if (d >= tod0() && d < tom0()) return 'Vandaag'
-    if (d >= tom0() && d < daTom) return 'Morgen'
-    const s = d.toLocaleDateString('nl-NL', { weekday: 'long' })
+    if (d >= tod0() && d < tom0()) return 'Today'
+    if (d >= tom0() && d < daTom) return 'Tomorrow'
+    const s = d.toLocaleDateString('en-US', { weekday: 'long' })
     return s.charAt(0).toUpperCase() + s.slice(1)
   }
 
