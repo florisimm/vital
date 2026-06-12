@@ -733,7 +733,7 @@ function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[]): stri
   const weekKm = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
 
   if (loadRatio > 1.3)
-    return `Training load is ${Math.round(loadRatio * 100)}% of your recent baseline. Consider an easy day to support recovery.`
+    return `Training load is ${Math.round((loadRatio - 1) * 100)}% above your recent baseline. A lighter day may help recovery.`
   if (weekRuns === 0 && weekStrength === 0)
     return 'No sessions logged this week yet. Even a short workout maintains your fitness base — consistency beats intensity long-term.'
   const parts: string[] = []
@@ -1534,11 +1534,15 @@ function computeTodaysFocus(
   const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
   const weekRuns = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
 
-  if (recoveryPct < 40 || perf.loadRatio > 1.4) {
+  // Low recovery = rest; high load alone = lighter session, not full rest
+  if (recoveryPct < 40) {
+    return { emoji: '😴', label: 'Recovery Day', sub: 'Readiness indicators suggest rest today' }
+  }
+  if (perf.loadRatio > 1.4) {
     return {
-      emoji: '😴',
-      label: 'Recovery Day',
-      sub: perf.loadRatio > 1.4 ? 'Training load is well above your recent baseline' : 'Readiness indicators suggest rest today',
+      emoji: '🚶',
+      label: 'Easy Training Recommended',
+      sub: `Training load is ${Math.round((perf.loadRatio - 1) * 100)}% above your recent baseline`,
     }
   }
 
@@ -1767,8 +1771,10 @@ function WeekSummaryCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs,
             <span className="text-[17px] font-semibold text-white/50">workout{weekCompleted !== 1 ? 's' : ''}</span>
           </div>
           <div className="flex items-center gap-1.5 pb-1">
-            <div className="w-[8px] h-[8px] rounded-full" style={{ background: perf.color }} />
-            <span className="text-[14px] font-semibold" style={{ color: perf.color }}>{perf.label}</span>
+            <div className="w-[8px] h-[8px] rounded-full shrink-0" style={{ background: perf.color }} />
+            <span className="text-[14px] font-semibold" style={{ color: perf.color }}>
+              {perf.label}{perf.loadRatio > 1.1 ? ` · +${Math.round((perf.loadRatio - 1) * 100)}%` : ''}
+            </span>
           </div>
         </div>
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
