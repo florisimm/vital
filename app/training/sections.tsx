@@ -1780,18 +1780,34 @@ function RecoveryDetailCard({
   )
 }
 
-function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, earlyKj, loadTrend, acwr }: {
+function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, acwr, rampRate, hasFullHistory }: {
   weekCompleted: number; weekPlanned: number; weekKm: number; weekDurationSecs: number
-  weekVolume: number; earlyKj: number; loadTrend: number; acwr: number | null
+  weekVolume: number; acwr: number | null; rampRate: number | null; hasFullHistory: boolean
 }) {
-  const trendSign = loadTrend > 0 ? '+' : ''
-  const trendColor = loadTrend > 10 ? '#4ade80' : loadTrend < -10 ? '#f87171' : 'rgba(255,255,255,0.5)'
   const stats = [
     weekCompleted > 0 && `${weekCompleted} session${weekCompleted !== 1 ? 's' : ''}${weekPlanned > 0 ? ` (${weekPlanned} planned)` : ''}`,
     weekDurationSecs > 0 && `${formatDuration(weekDurationSecs)} total`,
     weekKm > 0 && `${weekKm.toFixed(1)} km running`,
     weekVolume > 0 && `${Math.round(weekVolume).toLocaleString('en-US')} kg lifted`,
   ].filter(Boolean) as string[]
+
+  const rampColor = rampRate == null ? 'rgba(255,255,255,0.5)'
+    : rampRate > 40 ? '#f87171' : rampRate > 20 ? '#fb923c' : rampRate > 10 ? '#facc15'
+    : rampRate < -10 ? '#60a5fa' : '#4ade80'
+  const rampLabel = rampRate == null ? ''
+    : rampRate > 40 ? 'very high — monitor recovery'
+    : rampRate > 20 ? 'high — build gradually'
+    : rampRate > 10 ? 'moderate increase'
+    : rampRate < -10 ? 'decreasing'
+    : 'stable'
+
+  const acwrColor = acwr == null ? '#4ade80'
+    : acwr > 1.5 ? '#f87171' : acwr > 1.3 ? '#fb923c' : acwr < 0.8 ? '#60a5fa' : '#4ade80'
+  const acwrLabel = acwr == null ? ''
+    : acwr > 1.5 ? '— hoog blessurerisico'
+    : acwr > 1.3 ? '— verhoogde belasting'
+    : acwr < 0.8 ? '— onderbelasting'
+    : '— optimaal'
 
   return (
     <Card>
@@ -1806,24 +1822,34 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
         ) : (
           <span className="text-[14px] text-white/30">No workouts this week</span>
         )}
-        {earlyKj > 0 && (
+
+        {rampRate !== null && (
           <div className="flex items-center gap-2 pt-1 border-t border-white/[0.06]">
-            <span className="text-[15px] font-bold" style={{ color: trendColor }}>{trendSign}{loadTrend}%</span>
-            <span className="text-[13px] text-white/40">vs last 14 days —</span>
-            <span className="text-[13px] text-white/40">
-              {Math.abs(loadTrend) <= 10 ? 'stable' : loadTrend > 10 ? 'increasing' : 'declining'}
+            <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Ramp</span>
+            <span className="text-[15px] font-bold" style={{ color: rampColor }}>
+              {rampRate > 0 ? '+' : ''}{rampRate}%
             </span>
+            <span className="text-[13px] text-white/40">vs last week — {rampLabel}</span>
           </div>
         )}
-        {acwr !== null && (
-          <div className="flex items-center gap-2 pt-1 border-t border-white/[0.06]">
-            <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">ACWR</span>
-            <span className="text-[15px] font-bold" style={{ color: acwr > 1.4 ? '#f87171' : acwr > 1.3 ? '#fb923c' : acwr < 0.8 ? '#60a5fa' : '#4ade80' }}>
-              {acwr.toFixed(2)}
-            </span>
-            <span className="text-[13px] text-white/40">
-              {acwr > 1.4 ? '— high injury risk' : acwr > 1.3 ? '— caution' : acwr < 0.8 ? '— undertraining' : '— optimal load'}
-            </span>
+
+        {hasFullHistory ? (
+          acwr !== null && (
+            <div className="flex items-center gap-2 pt-1 border-t border-white/[0.06]">
+              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">ACWR</span>
+              <span className="text-[15px] font-bold" style={{ color: acwrColor }}>{acwr.toFixed(2)}</span>
+              <span className="text-[13px] text-white/40">{acwrLabel}</span>
+            </div>
+          )
+        ) : (
+          <div className="flex flex-col gap-1 pt-2 border-t border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">ACWR</span>
+              <span className="text-[13px] text-white/50">Baseline wordt opgebouwd</span>
+            </div>
+            <p className="text-[11px] text-white/25 leading-relaxed">
+              Betrouwbaar na 4 weken trainingshistorie. Een hoge belasting in de eerste weken wijst niet automatisch op overbelasting.
+            </p>
           </div>
         )}
       </div>
@@ -1945,9 +1971,17 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   activities.filter(a => a.start_date >= twentyEightDaysAgo).forEach(a => weekSet.add(toWeekKey(a.start_date)))
   hevy.filter(h => h.start_time >= twentyEightDaysAgo).forEach(h => weekSet.add(toWeekKey(h.start_time)))
   const weeksWithData = Math.max(1, weekSet.size)
-  // Require 3+ weeks of history for a meaningful baseline; fewer weeks gives false alarms
-  const acwr = weeksWithData >= 3 && chronic28kj / weeksWithData > 5
-    ? Math.round((acute7kj / (chronic28kj / weeksWithData)) * 10) / 10
+  const hasFullHistory = weeksWithData >= 4
+
+  const fourteenDaysAgoStr = new Date(now - 14 * 86400000).toISOString()
+  const prev7kj = activities.filter(a => a.start_date >= fourteenDaysAgoStr && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= fourteenDaysAgoStr && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const rampRate = prev7kj > 5
+    ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
+    : null
+
+  const acwr = hasFullHistory && chronic28kj / 4 > 5
+    ? Math.round((acute7kj / (chronic28kj / 4)) * 10) / 10
     : null
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
@@ -1981,9 +2015,9 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
         weekKm={weekKm}
         weekDurationSecs={weekDurationSecs}
         weekVolume={weekVolume}
-        earlyKj={earlyKj}
-        loadTrend={loadTrend}
         acwr={acwr}
+        rampRate={rampRate}
+        hasFullHistory={hasFullHistory}
       />
 
       {/* 6. Top Insights */}
