@@ -40,7 +40,7 @@ async function fetchTodayData() {
     supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
     supabase.from('food_log').select('date,protein').eq('user_id', user.id).gte('date', sevenDaysAgoStr).order('date', { ascending: false }),
     supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal').eq('user_id', user.id).maybeSingle(),
-    supabase.from('calendar_events').select('id,title,start_date,start_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
+    supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
     supabase.from('hevy_workouts').select('id,title,start_time').eq('user_id', user.id).gte('start_time', todayIso),
     supabase.from('strava_activities').select('id,name,sport_type,start_date').eq('user_id', user.id).gte('start_date', today),
   ])
@@ -544,7 +544,9 @@ function UpcomingCard({ events }: { events: any[] }) {
                     style={{ background: 'rgba(255,255,255,0.04)' }}
                   >
                     {time && (
-                      <span className="text-[12px] font-semibold text-white/30 shrink-0 tabular-nums">{time}</span>
+                      <span className="text-[12px] font-semibold text-white/30 shrink-0 tabular-nums">
+                        {time}{fmtTime(e.end_datetime) ? ` – ${fmtTime(e.end_datetime)}` : ''}
+                      </span>
                     )}
                     <span className="text-[14px] text-white/65">{e.title}</span>
                   </a>
