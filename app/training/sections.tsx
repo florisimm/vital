@@ -109,7 +109,7 @@ function hevyLoad(h: HevyWorkout): number {
   return (h.duration ?? 3600) / 60
 }
 
-function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number): ACWRDetail {
+function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
   const t7  = new Date(now - 7  * 86400000).toISOString()
   const t28 = new Date(now - 28 * 86400000).toISOString()
   const dy  = (iso: string) => iso.slice(0, 10)
@@ -124,17 +124,11 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
     const chronic28 = a28.reduce((s, a) => s + effectiveLoad(a), 0)
                     + h28.reduce((s, h) => s + hevyLoad(h), 0)
 
-    // Calendar days elapsed since oldest training in window (determines confidence)
-    const allDates = [...a28.map(a => a.start_date), ...h28.map(h => h.start_time)]
-    const oldestMs = Math.min(...allDates.map(d => new Date(d).getTime()))
-    const elapsedDays = Math.min(28, (now - oldestMs) / 86400000)
-
-    const dySet = new Set([...a28.map(a => dy(a.start_date)), ...h28.map(h => dy(h.start_time))])
+    const dySet    = new Set([...a28.map(a => dy(a.start_date)), ...h28.map(h => dy(h.start_time))])
+    const sessions = a28.length + h28.length
     const confidence: 'low' | 'medium' | 'high' =
-      elapsedDays < 15 ? 'low' : elapsedDays < 28 ? 'medium' : 'high'
+      sessions <= 4 ? 'low' : sessions <= 10 ? 'medium' : 'high'
 
-    // Always divide by 4 (standard ACWR formula); with less history the ratio is less reliable
-    // which is reflected in confidence, not by hiding the value
     const acwr = chronic28 / 4 > 5 ? Math.round((acute / (chronic28 / 4)) * 10) / 10 : null
 
     return { acwr, confidence, daysWithData: dySet.size }
@@ -160,7 +154,7 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
 
   const total = calcBreakdown(activities, hevy)
 
-  // Dynamic explanation — identifies top contributing sport and data quality
+  // Dynamic explanation — prioritises ramp rate context, then sport contribution
   const elevated = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
   let explanation = ''
   if (total.acwr === null) {
@@ -169,14 +163,17 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
       : 'Geen trainingsdata beschikbaar in de afgelopen 28 dagen.'
   } else if (elevated.length > 0) {
     const top = elevated[0]
-    const pct = Math.round(((top.acwr ?? 1) - 1) * 100)
-    if (top.confidence !== 'high') {
+    if (rampRate !== null && Math.abs(rampRate) > 10) {
+      const sign = rampRate > 0 ? '+' : ''
+      explanation = `Je trainingsbelasting steeg ${sign}${rampRate}% ten opzichte van vorige week. De grootste bijdrage komt van ${top.label} (ACWR ${top.acwr?.toFixed(2)}).`
+    } else if (top.confidence !== 'high') {
       explanation = `Je ACWR wordt voornamelijk verhoogd door ${top.label}. Deze activiteit heeft nog beperkte historische data waardoor de score tijdelijk hoger kan uitvallen.`
     } else {
+      const pct = Math.round(((top.acwr ?? 1) - 1) * 100)
       explanation = `De stijging komt voornamelijk van ${top.label}, ${pct}% boven je 4-weeks gemiddelde.`
     }
   } else if (total.confidence === 'low') {
-    explanation = 'ACWR is gebaseerd op minder dan 2 weken data. De waarde wordt nauwkeuriger naarmate er meer historische data beschikbaar is.'
+    explanation = 'ACWR is gebaseerd op weinig sessies. De waarde wordt nauwkeuriger naarmate er meer trainingsdata beschikbaar is.'
   } else {
     explanation = 'Je trainingsbelasting ligt dicht bij je gebruikelijke niveau.'
   }
@@ -1926,10 +1923,16 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
     : v > 1.5 ? '#f87171' : v > 1.3 ? '#fb923c' : v < 0.8 ? '#60a5fa' : '#4ade80'
 
   const status = total == null ? null
-    : total > 1.5 ? 'Hoog risico'
-    : total > 1.3 ? 'Verhoogde belasting'
-    : total < 0.8 ? 'Onderbelasting'
+    : total > 1.5 && confidence === 'high'   ? 'Hoog risico'
+    : total > 1.5 && confidence === 'low'    ? 'Baseline wordt opgebouwd'
+    : total > 1.3                            ? 'Verhoogde belasting'
+    : total < 0.8                            ? 'Onderbelasting'
     : 'Optimaal'
+
+  // Neutral status color when ACWR is high but data is too sparse to trust
+  const statusColor = total !== null && total > 1.5 && confidence === 'low'
+    ? 'rgba(255,255,255,0.5)'
+    : col(total)
 
   const confLabel = confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low'
   const confColor = confidence === 'high' ? '#4ade80' : confidence === 'medium' ? '#facc15' : '#fb923c'
@@ -1946,7 +1949,7 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
           {total !== null ? (
             <>
               <span className="text-[28px] font-bold leading-none" style={{ color: col(total) }}>{total.toFixed(2)}</span>
-              {status && <span className="text-[15px] font-semibold" style={{ color: col(total) }}>{status}</span>}
+              {status && <span className="text-[15px] font-semibold" style={{ color: statusColor }}>{status}</span>}
             </>
           ) : (
             <span className="text-[15px] text-white/40">Geen data</span>
@@ -2093,7 +2096,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const rampRate = prev7kj > 5
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
-  const acwrDetail = computeACWRDetail(activities, hevy, now)
+  const acwrDetail = computeACWRDetail(activities, hevy, now, rampRate)
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
   const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
