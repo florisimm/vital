@@ -1523,149 +1523,184 @@ function ActivityDetailSheet({ title, rows, onClose }: { title: string; rows: De
   )
 }
 
+type TodaysFocus = {
+  emoji: string; label: string
+  action: string; actionColor: string
+  reasons: string[]; prediction?: string
+}
+
 function computeTodaysFocus(
   activities: Activity[],
   hevy: HevyWorkout[],
   calendarEvents: any[],
   recoveryPct: number,
   perf: { score: number; label: string; color: string; loadRatio: number }
-): { emoji: string; label: string; sub: string } {
+): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
-  const weekStart   = startOfWeek()
   const events      = calendarEvents ?? []
 
-  function evtDate(e: any) { return (e.start_datetime || e.start_date).slice(0, 10) }
-  function evtTime(e: any) { return e.start_datetime ? ` om ${formatClockTime(e.start_datetime)}` : '' }
+  const ACT = {
+    proceed:  { action: 'Proceed as Planned', actionColor: '#4ade80' },
+    easier:   { action: 'Train Easier',        actionColor: '#facc15' },
+    shorten:  { action: 'Shorten Session',     actionColor: '#fb923c' },
+    moveTmr:  { action: 'Move to Tomorrow',    actionColor: '#fb923c' },
+    skip:     { action: 'Skip · Rest Today',   actionColor: '#f87171' },
+  } as const
+
+  type Intensity = 'zone2' | 'easy' | 'moderate' | 'hard' | 'very_hard'
+  const EFFORT: Record<Intensity, number> = { zone2: 0.20, easy: 0.35, moderate: 0.55, hard: 0.75, very_hard: 0.95 }
+
+  function evtDate(e: any)  { return (e.start_datetime || e.start_date).slice(0, 10) }
+  function evtTime(e: any)  { return e.start_datetime ? ` · ${formatClockTime(e.start_datetime)}` : '' }
 
   function sportEmoji(title: string): string {
     const t = title.toLowerCase()
-    if (t.includes('hyrox'))                              return '🏋️'
-    if (['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','bicep','tricep','shoulder'].some(k => t.includes(k))) return '💪'
+    if (t.includes('hyrox')) return '🏋️'
+    if (['push','pull','legs','squat','gym','kracht','strength','bench','deadlift'].some(k => t.includes(k))) return '💪'
     if (['run','loop','hardloop','tempo','interval'].some(k => t.includes(k))) return '🏃'
-    if (['ride','fiet','cycl','bike','cycling'].some(k => t.includes(k)))     return '🚴'
-    if (['swim','zwem'].some(k => t.includes(k)))         return '🏊'
+    if (['ride','fiet','cycl','bike','cycling'].some(k => t.includes(k)))      return '🚴'
+    if (['swim','zwem'].some(k => t.includes(k)))  return '🏊'
     return '📅'
   }
 
-  function isSportEvent(e: any): boolean {
+  function isSportEvt(e: any): boolean {
     const t = (e.title ?? '').toLowerCase()
     return ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox',
             'run','loop','hardloop','ride','fiet','cycl','bike','swim','zwem','interval',
             'tempo','training','workout','sport'].some(k => t.includes(k))
   }
 
-  function isHeavyEvent(title: string): boolean {
+  function classify(title: string): Intensity {
     const t = title.toLowerCase()
-    return t.includes('hyrox') || t.includes('interval') || t.includes('tempo')
-      || t.includes('race') || t.includes('wedstrijd')
-      || ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','bicep','tricep','shoulder'].some(k => t.includes(k))
+    if (['zone 2','zone2','herstel','recovery','rustig'].some(k => t.includes(k))) return 'zone2'
+    if (['easy','duurloop','lsd'].some(k => t.includes(k)))                         return 'easy'
+    if (t.includes('hyrox') || t.includes('wedstrijd') || t.includes('race'))       return 'very_hard'
+    if (['interval','tempo','threshold'].some(k => t.includes(k)))                  return 'hard'
+    if (['push','pull','legs','squat','gym','kracht','strength','bench','deadlift'].some(k => t.includes(k))) return 'hard'
+    if (['run','loop','hardloop','ride','fiet','cycl'].some(k => t.includes(k)))     return 'moderate'
+    return 'moderate'
   }
 
-  function isEasyEvent(title: string): boolean {
-    const t = title.toLowerCase()
-    return ['easy','rustig','zone 2','zone2','herstel','recovery','duurloop'].some(k => t.includes(k))
+  function predictTomorrow(intensity: Intensity): number {
+    const currentFatigue = (95 - recoveryPct) / 28
+    const decay24h = Math.exp(-24 * Math.LN2 / 36)
+    return Math.min(95, Math.max(20, Math.round(95 - decay24h * (currentFatigue + EFFORT[intensity]) * 28)))
   }
 
-  const lowRecovery = recoveryPct < 50
-  const highLoad    = perf.loadRatio > 1.4
-  const loadPct     = Math.round((perf.loadRatio - 1) * 100)
+  const loadPct  = Math.round((perf.loadRatio - 1) * 100)
+  const highLoad = perf.loadRatio > 1.4
+  const medLoad  = perf.loadRatio > 1.2
 
-  const todayEvents    = events.filter(e => evtDate(e) === todayStr    && isSportEvent(e))
+  const todayEvts    = events.filter(e => evtDate(e) === todayStr    && isSportEvt(e))
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
-  const tomorrowEvents = events.filter(e => evtDate(e) === tomorrowStr && isSportEvent(e))
+  const tomorrowEvts = events.filter(e => evtDate(e) === tomorrowStr && isSportEvt(e))
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+
+  function decide(intensity: Intensity): typeof ACT[keyof typeof ACT] {
+    if (intensity === 'zone2') return recoveryPct < 25 ? ACT.skip    : ACT.proceed
+    if (intensity === 'easy')  return recoveryPct < 35 ? ACT.skip    : ACT.proceed
+    if (intensity === 'moderate') {
+      if (recoveryPct >= 65 && !highLoad) return ACT.proceed
+      if (recoveryPct >= 50)              return ACT.easier
+      return ACT.shorten
+    }
+    if (intensity === 'hard') {
+      if (recoveryPct >= 75 && !medLoad) return ACT.proceed
+      if (recoveryPct >= 60 && !highLoad) return ACT.easier
+      if (recoveryPct >= 45)              return ACT.shorten
+      return tomorrowEvts.length === 0 ? ACT.moveTmr : ACT.skip
+    }
+    // very_hard
+    if (recoveryPct >= 80 && !medLoad)  return ACT.proceed
+    if (recoveryPct >= 65 && !highLoad) return ACT.easier
+    if (recoveryPct >= 50)              return ACT.shorten
+    return tomorrowEvts.length === 0 ? ACT.moveTmr : ACT.skip
+  }
+
+  function buildReasons(intensity: Intensity, tmEv?: any): string[] {
+    const r: string[] = []
+    if (highLoad || medLoad)      r.push(`Load +${loadPct}% boven baseline`)
+    if (recoveryPct < 70)         r.push(`Readiness ${recoveryPct}%`)
+    if (tmEv)                     r.push(`${tmEv.title} gepland morgen`)
+    if (intensity === 'zone2')    r.push('Zone 2 — lage impact op herstel')
+    return r.slice(0, 3)
+  }
 
   // ── Today has planned sessions ──────────────────────────────────────────────
-  if (todayEvents.length > 0) {
-    const ev    = todayEvents[0]
-    const time  = evtTime(ev)
-    const heavy = isHeavyEvent(ev.title)
-    const easy  = isEasyEvent(ev.title)
+  if (todayEvts.length > 0) {
+    const ev        = todayEvts[0]
+    const intensity = classify(ev.title)
+    const act       = decide(intensity)
+    const tmEv      = tomorrowEvts[0]
+    const predicted = predictTomorrow(intensity)
+    const delta     = predicted - recoveryPct
+    const prediction = act !== ACT.proceed && act !== ACT.skip
+      ? `Verwachte readiness morgen: ~${predicted}% (${delta >= 0 ? '+' : ''}${delta}%)`
+      : undefined
 
-    if ((lowRecovery || highLoad) && !easy) {
-      const reason = lowRecovery && highLoad
-        ? 'Je herstel is laag en de trainingsbelasting is hoog'
-        : lowRecovery
-          ? 'Je huidige herstel is laag'
-          : `Je trainingsbelasting ligt ${loadPct}% boven je baseline`
-      const fwd = tomorrowEvents.length === 0
-        ? ' Morgen staat er niets gepland — een goed moment om deze sessie te verplaatsen.'
-        : tomorrowEvents[0] ? ` Morgen staat ${tomorrowEvents[0].title} gepland — extra herstel vandaag kan helpen.` : ''
-      return {
-        emoji: sportEmoji(ev.title),
-        label: `${ev.title}${time}`,
-        sub: `${reason}. Overweeg deze training te verzachten of te verplaatsen.${fwd}`,
-      }
-    }
-
-    if (recoveryPct >= 80 && !highLoad) {
-      return {
-        emoji: sportEmoji(ev.title),
-        label: `${ev.title}${time}`,
-        sub: heavy
-          ? 'Je herstel is goed — deze zware sessie past binnen je huidige belastbaarheid.'
-          : 'Je herstel is goed — deze training past prima bij je huidige conditie.',
-      }
-    }
-
-    // moderate recovery or easy session type
     return {
       emoji: sportEmoji(ev.title),
-      label: `${ev.title}${time}`,
-      sub: easy
-        ? 'Je geplande rustige training past goed bij je huidige herstelstatus.'
-        : heavy
-          ? 'Je herstel is redelijk — houd de intensiteit gecontroleerd.'
-          : 'Je geplande training past bij je huidige herstelstatus.',
+      label: `${ev.title}${evtTime(ev)}`,
+      ...act,
+      reasons:    buildReasons(intensity, tmEv),
+      prediction,
     }
   }
 
   // ── No today events — look at tomorrow ─────────────────────────────────────
-  if (tomorrowEvents.length > 0) {
-    const tm = tomorrowEvents[0]
-    if (isHeavyEvent(tm.title)) {
-      if (lowRecovery || highLoad) {
+  if (tomorrowEvts.length > 0) {
+    const tm        = tomorrowEvts[0]
+    const intensity = classify(tm.title)
+    if (intensity === 'hard' || intensity === 'very_hard') {
+      if (recoveryPct < 50 || highLoad) {
+        const restReasons = [
+          ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
+          recoveryPct < 50 ? `Readiness ${recoveryPct}%` : '',
+          `${tm.title} gepland morgen`,
+        ].filter(Boolean).slice(0, 3) as string[]
         return {
-          emoji: '😴',
-          label: 'Recovery Day',
-          sub: `Rust vandaag creëert extra herstelruimte voor de geplande ${tm.title} morgen.`,
+          emoji: '😴', label: 'Rest Today',
+          ...ACT.skip, reasons: restReasons,
+          prediction: `Extra herstelruimte verhoogt readiness voor ${tm.title} morgen.`,
         }
       }
       return {
-        emoji: '🚶',
-        label: 'Easy Training Recommended',
-        sub: `Morgen staat ${tm.title} gepland. Een lichte training vandaag past daarbij.`,
+        emoji: '🚶', label: 'Light Training',
+        ...ACT.easier,
+        reasons: [`${tm.title} gepland morgen`, ...(medLoad ? [`Load +${loadPct}% boven baseline`] : [])].slice(0, 3) as string[],
       }
     }
-    // easy event tomorrow — same advice as no-event path below
   }
 
   // ── No events — fallback on readiness + load ────────────────────────────────
+  const weekStart    = startOfWeek()
   const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
   const weekRuns     = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
 
-  if (recoveryPct < 40) {
-    return { emoji: '😴', label: 'Recovery Day', sub: 'Je herstelscores wijzen op een rustdag.' }
+  if (recoveryPct < 40) return {
+    emoji: '😴', label: 'Rest Today', ...ACT.skip,
+    reasons: [`Readiness ${recoveryPct}%`, ...(highLoad ? [`Load +${loadPct}% boven baseline`] : [])],
   }
-  if (highLoad) {
-    return {
-      emoji: '🚶',
-      label: 'Easy Training Recommended',
-      sub: `Trainingsbelasting ligt ${loadPct}% boven je gebruikelijke niveau.`,
-    }
+  if (highLoad) return {
+    emoji: '🚶', label: 'Easy Training Recommended', ...ACT.easier,
+    reasons: [`Load +${loadPct}% boven baseline`, `Readiness ${recoveryPct}%`],
   }
-  if (recoveryPct >= 82 && perf.score >= 70) {
-    return weekRuns <= weekStrength
-      ? { emoji: '🏃', label: 'Hard Training Appropriate', sub: 'Herstel is goed — belasting ligt binnen normaal bereik.' }
-      : { emoji: '💪', label: 'Hard Training Appropriate', sub: 'Herstel is goed — belasting ligt binnen normaal bereik.' }
+  if (recoveryPct >= 82 && perf.score >= 70) return {
+    emoji: weekRuns <= weekStrength ? '🏃' : '💪',
+    label: 'Hard Training Appropriate', ...ACT.proceed,
+    reasons: [`Readiness ${recoveryPct}%`, 'Belasting binnen normaal bereik'],
   }
-  if (recoveryPct >= 65) {
-    return weekStrength < 2
-      ? { emoji: '💪', label: 'Moderate Training Recommended', sub: 'Herstel is voldoende — houd de intensiteit gecontroleerd.' }
-      : { emoji: '🚴', label: 'Easy Training Recommended',     sub: 'Herstel is matig — een lichtere sessie heeft de voorkeur.' }
+  if (recoveryPct >= 65) return {
+    emoji: weekStrength < 2 ? '💪' : '🚴',
+    label: weekStrength < 2 ? 'Moderate Training Recommended' : 'Easy Training Recommended',
+    ...(weekStrength < 2 ? ACT.proceed : ACT.easier),
+    reasons: [`Readiness ${recoveryPct}%`],
   }
-  return { emoji: '🏃', label: 'Easy Training Recommended', sub: 'Herstel ligt onder je normale niveau — houd de inspanning laag.' }
+  return {
+    emoji: '🏃', label: 'Easy Training Recommended', ...ACT.easier,
+    reasons: [`Readiness ${recoveryPct}%`, ...(medLoad ? [`Load +${loadPct}% boven baseline`] : [])],
+  }
 }
 
 // Strength effort derived from volume and sets — replaces the fixed 0.85 guess.
@@ -1776,7 +1811,7 @@ const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'streng
 const CARDIO_KW = ['run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval', 'tempo']
 
 function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
-  focus: { emoji: string; label: string; sub: string }
+  focus: TodaysFocus
   calendarEvents: any[]
   readinessPct: number
 }) {
@@ -1802,13 +1837,35 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
     <Card>
       <div className="flex flex-col gap-3">
         <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today's Plan</span>
-        <div className="flex items-center gap-4">
-          <span className="text-[36px] leading-none">{focus.emoji}</span>
-          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+
+        <div className="flex items-start gap-3">
+          <span className="text-[32px] leading-none mt-0.5">{focus.emoji}</span>
+          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
             <span className="text-[17px] font-semibold text-white leading-snug">{focus.label}</span>
-            <span className="text-[13px] text-white/50">{focus.sub}</span>
+            <span
+              className="self-start px-2.5 py-0.5 rounded-full text-[12px] font-bold text-black"
+              style={{ background: focus.actionColor }}
+            >
+              {focus.action}
+            </span>
           </div>
         </div>
+
+        {focus.reasons.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {focus.reasons.map((r, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <span className="text-[13px] text-white/30 mt-px leading-none">·</span>
+                <span className="text-[13px] text-white/55 leading-snug">{r}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {focus.prediction && (
+          <span className="text-[12px] text-white/40 italic leading-snug">{focus.prediction}</span>
+        )}
+
         <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full" style={{ background: rc }} />
