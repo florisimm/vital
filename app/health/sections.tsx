@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight } from 'lucide-react'
 import { Card, SectionHeader, MetricTile } from '@/components/ui'
 import { healthFetcher } from './fetcher'
+import { fetchFoodData } from '@/app/food/fetchers'
 import { computePhysiologyReadiness, computeHRVBaseline, computeIllnessFlag } from '@/lib/readiness'
 
 export type GezondheidsRow = {
@@ -677,15 +678,21 @@ function buildHeartInsight(restingHR: number | null, hrv: number | null, trend: 
   return parts[0]
 }
 
-function buildWeightInsight(weights: number[], weeklyRate: number | null, change: number): string {
+function buildWeightInsight(weights: number[], weeklyRate: number | null, change: number, protein: number, proteinTarget: number): string {
   if (weights.length < 2) return weights.length === 0
     ? 'Log your weight regularly to track trends over time.'
     : 'Add more weigh-ins to see your trend.'
+  const protOk = proteinTarget > 0 && protein >= proteinTarget * 0.9
+  const protLow = proteinTarget > 0 && protein < proteinTarget * 0.7
   if (weeklyRate !== null) {
-    if (weeklyRate < -1.0) return `Losing ${Math.abs(weeklyRate).toFixed(2)} kg/week — that's fast. Make sure you're eating enough protein to preserve muscle.`
-    if (weeklyRate < -0.1) return `Steady progress — losing about ${Math.abs(weeklyRate).toFixed(2)} kg/week. Sustainable and on track.`
+    if (weeklyRate < -1.0) {
+      if (protLow) return `Losing ${Math.abs(weeklyRate).toFixed(2)} kg/week and only ${Math.round(protein)}g protein today — well below your ${proteinTarget}g target. Prioritise protein to preserve muscle.`
+      if (protOk) return `Losing ${Math.abs(weeklyRate).toFixed(2)} kg/week — that's fast, but protein looks good at ${Math.round(protein)}g today.`
+      return `Losing ${Math.abs(weeklyRate).toFixed(2)} kg/week — that's fast. Today: ${Math.round(protein)}g / ${proteinTarget}g protein.`
+    }
+    if (weeklyRate < -0.1) return `Steady progress — losing about ${Math.abs(weeklyRate).toFixed(2)} kg/week.${protOk ? ` Protein on track at ${Math.round(protein)}g today.` : protein > 0 ? ` Today: ${Math.round(protein)}g / ${proteinTarget}g protein.` : ''}`
     if (weeklyRate > 0.6) return `Gaining ${weeklyRate.toFixed(2)} kg/week. Check if this aligns with your goal.`
-    if (Math.abs(weeklyRate) <= 0.1) return `Weight is stable${change !== 0 ? ` (${change > 0 ? '+' : ''}${change.toFixed(1)} kg over this period)` : ''}. Consistent logging gives the most accurate picture.`
+    if (Math.abs(weeklyRate) <= 0.1) return `Weight is stable. ${protOk ? `Protein on track at ${Math.round(protein)}g today.` : protein > 0 ? `Today: ${Math.round(protein)}g / ${proteinTarget}g protein.` : 'Consistent logging gives the most accurate picture.'}`
   }
   return change > 0
     ? `Up ${change.toFixed(1)} kg over this period.`
@@ -800,6 +807,10 @@ export function HeartSection() {
 
 export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
   const [period, setPeriod] = useState<7 | 14 | 30>(14)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const { data: foodData } = useSWR(`food-log-${todayStr}`, () => fetchFoodData(todayStr))
+  const todayProtein = (foodData?.foodLog ?? []).reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
+  const proteinTarget: number = foodData?.targets?.protein ?? 0
 
   const weightRows = rows.filter(r => r.gewicht != null).slice(0, period).reverse()
   const weights = weightRows.map(r => Number(r.gewicht))
@@ -824,7 +835,7 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
   return (
     <div className="flex flex-col gap-6">
 
-      <AiInsight text={buildWeightInsight(weights, weeklyRate, change)} />
+      <AiInsight text={buildWeightInsight(weights, weeklyRate, change, todayProtein, proteinTarget)} />
 
       {/* Hero */}
       <div className="flex flex-col gap-2">
