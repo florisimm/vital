@@ -1940,7 +1940,14 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
     + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
   const chronic28kj = activities.filter(a => a.start_date >= twentyEightDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
     + hevy.filter(h => h.start_time >= twentyEightDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const acwr = chronic28kj / 4 > 5 ? Math.round((acute7kj / (chronic28kj / 4)) * 10) / 10 : null
+
+  // Divide by actual weeks with data, not always 4 — avoids inflated ACWR for new users
+  const weekSet = new Set<string>()
+  const toWeekKey = (iso: string) => { const d = new Date(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) }
+  activities.filter(a => a.start_date >= twentyEightDaysAgo).forEach(a => weekSet.add(toWeekKey(a.start_date)))
+  hevy.filter(h => h.start_time >= twentyEightDaysAgo).forEach(h => weekSet.add(toWeekKey(h.start_time)))
+  const weeksWithData = Math.max(1, weekSet.size)
+  const acwr = chronic28kj / weeksWithData > 5 ? Math.round((acute7kj / (chronic28kj / weeksWithData)) * 10) / 10 : null
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
   const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
