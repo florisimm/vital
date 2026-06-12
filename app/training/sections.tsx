@@ -1911,13 +1911,11 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const fifteenDaysAgo = new Date(now - 15 * 86400000).toISOString()
   const thirtyDaysAgo = new Date(now - 30 * 86400000).toISOString()
 
-  const earlyKj = activities
-    .filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo)
-    .reduce((s, a) => s + effectiveLoad(a), 0)
-  const lateKj = activities
-    .filter(a => a.start_date >= fifteenDaysAgo)
-    .reduce((s, a) => s + effectiveLoad(a), 0)
-  const loadTrend = earlyKj > 0 ? Math.round((lateKj - earlyKj) / earlyKj * 100) : 0
+  const earlyKj = activities.filter(a => a.start_date >= thirtyDaysAgo && a.start_date < fifteenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= thirtyDaysAgo && h.start_time < fifteenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const lateKj = activities.filter(a => a.start_date >= fifteenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= fifteenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const loadTrend = earlyKj > 0 ? Math.max(-200, Math.min(200, Math.round((lateKj - earlyKj) / earlyKj * 100))) : 0
 
   const weekActivities = activities.filter(a => a.start_date >= weekStart && !isWeightTraining(a))
   const weekHevy = hevy.filter(h => h.start_time >= weekStart)
@@ -1947,7 +1945,10 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   activities.filter(a => a.start_date >= twentyEightDaysAgo).forEach(a => weekSet.add(toWeekKey(a.start_date)))
   hevy.filter(h => h.start_time >= twentyEightDaysAgo).forEach(h => weekSet.add(toWeekKey(h.start_time)))
   const weeksWithData = Math.max(1, weekSet.size)
-  const acwr = chronic28kj / weeksWithData > 5 ? Math.round((acute7kj / (chronic28kj / weeksWithData)) * 10) / 10 : null
+  // Require 3+ weeks of history for a meaningful baseline; fewer weeks gives false alarms
+  const acwr = weeksWithData >= 3 && chronic28kj / weeksWithData > 5
+    ? Math.round((acute7kj / (chronic28kj / weeksWithData)) * 10) / 10
+    : null
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
   const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
