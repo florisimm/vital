@@ -662,6 +662,36 @@ export function RecoverySection() {
 
 // ─── Heart ────────────────────────────────────────────────────────────────────
 
+function buildHeartInsight(restingHR: number | null, hrv: number | null, trend: number | null, hrvBaseline: { baseline: number | null; deviationPct: number | null }): string {
+  if (!restingHR && !hrv) return 'Sync Fitbit to see your heart rate and HRV data.'
+  const parts: string[] = []
+  if (hrvBaseline.deviationPct !== null) {
+    if (hrvBaseline.deviationPct <= -15) parts.push(`HRV is ${Math.abs(hrvBaseline.deviationPct)}% below your baseline — your body is still recovering. Keep today easy.`)
+    else if (hrvBaseline.deviationPct >= 15) parts.push(`HRV is ${hrvBaseline.deviationPct}% above baseline — recovery looks strong.`)
+  }
+  if (trend !== null) {
+    if (trend >= 4) parts.push(`Resting HR is ${trend} bpm above your 7-day average — consider an extra rest day or earlier sleep.`)
+    else if (trend <= -4) parts.push(`Resting HR trending down — a sign of improving cardiovascular fitness.`)
+  }
+  if (parts.length === 0 && restingHR) parts.push(`Resting HR at ${restingHR} bpm${hrv ? ` · HRV ${Math.round(hrv)} ms` : ''} — within normal range.`)
+  return parts[0]
+}
+
+function buildWeightInsight(weights: number[], weeklyRate: number | null, change: number): string {
+  if (weights.length < 2) return weights.length === 0
+    ? 'Log your weight regularly to track trends over time.'
+    : 'Add more weigh-ins to see your trend.'
+  if (weeklyRate !== null) {
+    if (weeklyRate < -1.0) return `Losing ${Math.abs(weeklyRate).toFixed(2)} kg/week — that's fast. Make sure you're eating enough protein to preserve muscle.`
+    if (weeklyRate < -0.1) return `Steady progress — losing about ${Math.abs(weeklyRate).toFixed(2)} kg/week. Sustainable and on track.`
+    if (weeklyRate > 0.6) return `Gaining ${weeklyRate.toFixed(2)} kg/week. Check if this aligns with your goal.`
+    if (Math.abs(weeklyRate) <= 0.1) return `Weight is stable${change !== 0 ? ` (${change > 0 ? '+' : ''}${change.toFixed(1)} kg over this period)` : ''}. Consistent logging gives the most accurate picture.`
+  }
+  return change > 0
+    ? `Up ${change.toFixed(1)} kg over this period.`
+    : `Down ${Math.abs(change).toFixed(1)} kg over this period — keep it up.`
+}
+
 export function HeartSection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
 
@@ -695,6 +725,7 @@ export function HeartSection() {
 
   return (
     <div className="flex flex-col gap-6">
+      <AiInsight text={buildHeartInsight(restingHR, hrv, trend, hrvBaseline)} />
       <div className="grid grid-cols-2 gap-3">
         <MetricTile title="Resting HR" value={restingHR ? String(restingHR) : '–'} unit={restingHR ? 'bpm' : ''} note={trend !== null ? `${trend > 0 ? '+' : ''}${trend} vs avg` : '–'} Icon={Heart}    tint="text-pink-400"  />
         <MetricTile title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note={deviationText} Icon={Activity} tint="text-green-400" />
@@ -792,6 +823,8 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
 
   return (
     <div className="flex flex-col gap-6">
+
+      <AiInsight text={buildWeightInsight(weights, weeklyRate, change)} />
 
       {/* Hero */}
       <div className="flex flex-col gap-2">
