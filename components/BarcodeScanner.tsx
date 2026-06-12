@@ -10,34 +10,40 @@ interface BarcodeScannerProps {
 
 export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState('Starting camera...')
   const detectedRef = useRef(false)
 
   useEffect(() => {
-    let reader: any
+    let readerInstance: any
     let cancelled = false
 
     async function startScanner() {
       try {
-        const { BrowserMultiFormatReader } = await import('@zxing/browser')
-        if (cancelled) return
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+        })
+        if (cancelled) {
+          stream.getTracks().forEach(t => t.stop())
+          return
+        }
+        streamRef.current = stream
 
-        reader = new BrowserMultiFormatReader()
-
-        if (!videoRef.current || cancelled) return
+        if (!videoRef.current) return
+        videoRef.current.srcObject = stream
         setStatus('Aim at barcode...')
 
-        await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: 'environment' } } },
-          videoRef.current,
-          (result: any) => {
-            if (result && !detectedRef.current) {
-              detectedRef.current = true
-              onDetected(result.getText())
-            }
+        const { BrowserMultiFormatReader } = await import('@zxing/browser')
+        if (cancelled) return
+        readerInstance = new BrowserMultiFormatReader()
+
+        readerInstance.decodeFromStream(stream, videoRef.current, (result: any) => {
+          if (result && !detectedRef.current) {
+            detectedRef.current = true
+            onDetected(result.getText())
           }
-        )
+        })
       } catch (e: any) {
         if (!cancelled) {
           if (e?.name === 'NotAllowedError') {
@@ -53,10 +59,12 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
 
     return () => {
       cancelled = true
-      try { reader?.reset() } catch {}
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
-        stream.getTracks().forEach(t => t.stop())
+      try { readerInstance?.reset() } catch {}
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      if (videoRef.current) {
         videoRef.current.srcObject = null
       }
     }
