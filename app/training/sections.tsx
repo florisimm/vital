@@ -44,7 +44,7 @@ export function startOfWeek() {
 export function formatDuration(secs: number) {
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60)
   if (h === 0 && m === 0) return '–'
-  return h > 0 ? `${h}u ${m}m` : `${m}m`
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 export function formatPace(mPerSec: number) {
@@ -297,28 +297,28 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
   let explanation = ''
   if (total.acwr === null) {
     explanation = total.daysWithData > 0
-      ? 'Trainingsbelasting te laag om ACWR te berekenen.'
-      : 'Geen trainingsdata beschikbaar in de afgelopen 28 dagen.'
+      ? 'Training load too low to calculate ACWR.'
+      : 'No training data available in the past 28 days.'
   } else if (newSports.length > 0 && total.acwr > 1.2) {
-    explanation = `De belasting steeg door recent toegevoegde ${newSports.join(' en ')}-sessies. Het lichaam adapteert — monitor herstel de komende weken.`
-    if (total.confidence !== 'high') explanation += ' Beperkte historische data — ACWR wordt nauwkeuriger naarmate er meer sessies zijn.'
+    explanation = `Load increased due to recently added ${newSports.join(' and ')} sessions. The body is adapting — monitor recovery over the coming weeks.`
+    if (total.confidence !== 'high') explanation += ' Limited historical data — ACWR becomes more accurate as more sessions are recorded.'
   } else if (elevated.length > 0) {
     const top = elevated[0]
     const totalAcuteLoad = sports.reduce((s, sp) => s + sp.acuteLoad, 0)
     const contribPct = totalAcuteLoad > 0 ? Math.round((top.acuteLoad / totalAcuteLoad) * 100) : null
     let line = contribPct !== null
-      ? `${top.label} draagt momenteel ${contribPct}% bij aan de verhoogde ACWR.`
-      : `De stijging komt voornamelijk van ${top.label} (ACWR ${top.acwr?.toFixed(2)}).`
+      ? `${top.label} currently contributes ${contribPct}% to the elevated ACWR.`
+      : `The increase is primarily from ${top.label} (ACWR ${top.acwr?.toFixed(2)}).`
     if (rampRate !== null && Math.abs(rampRate) > 10) {
       const sign = rampRate > 0 ? '+' : ''
-      line += ` Ramp rate: ${sign}${rampRate}% vs vorige week.`
+      line += ` Ramp rate: ${sign}${rampRate}% vs last week.`
     }
-    if (top.confidence !== 'high') line += ' Beperkte data — waarde stabiliseert met meer sessies.'
+    if (top.confidence !== 'high') line += ' Limited data — value stabilises with more sessions.'
     explanation = line
   } else if (total.confidence === 'low') {
-    explanation = 'ACWR is gebaseerd op weinig sessies. De waarde wordt nauwkeuriger naarmate er meer trainingsdata beschikbaar is.'
+    explanation = 'ACWR is based on few sessions. The value becomes more accurate as more training data is available.'
   } else {
-    explanation = 'Je trainingsbelasting ligt dicht bij je gebruikelijke niveau.'
+    explanation = 'Your training load is close to your usual level.'
   }
 
   return { total: total.acwr, confidence: total.confidence, sports, explanation }
@@ -937,32 +937,32 @@ function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[], calen
   // High load — reference specific upcoming sessions
   if (loadRatio > 1.3) {
     if (todayEvts.length > 0 && tomorrowEvts.length > 0)
-      return `${todayEvts[0].title} staat vandaag gepland. Door de huidige trainingsbelasting (+${loadPct}%) kan een lichtere sessie het herstel voor ${tomorrowEvts[0].title} van morgen verbeteren.`
+      return `${todayEvts[0].title} is planned for today. With current training load (+${loadPct}%), a lighter session can improve recovery for ${tomorrowEvts[0].title} tomorrow.`
     if (todayEvts.length > 0)
-      return `${todayEvts[0].title} staat vandaag gepland. Trainingsbelasting is +${loadPct}% boven je baseline — overweeg de intensiteit aan te passen.`
+      return `${todayEvts[0].title} is planned for today. Training load is +${loadPct}% above baseline — consider adjusting intensity.`
     if (tomorrowEvts.length > 0)
-      return `${tomorrowEvts[0].title} staat morgen gepland. Een hersteldag vandaag vergroot de kans op een kwalitatieve sessie (+${loadPct}% huidige belasting).`
-    return `Trainingsbelasting is +${loadPct}% boven je baseline. Een lichtere dag kan het herstel bevorderen.`
+      return `${tomorrowEvts[0].title} is planned for tomorrow. A recovery day today increases the chance of a quality session (+${loadPct}% current load).`
+    return `Training load is +${loadPct}% above baseline. A lighter day can aid recovery.`
   }
 
   // No activity yet this week
   if (weekRuns === 0 && weekStrength === 0) {
     if (todayEvts.length > 0)
-      return `${todayEvts[0].title} staat vandaag gepland — goed moment om de week te starten. Consistentie bouwt het meeste resultaat op lange termijn.`
-    return 'Nog geen sessies deze week. Zelfs een korte training houdt de conditie op peil — consistentie is belangrijker dan intensiteit.'
+      return `${todayEvts[0].title} is planned for today — good time to start the week. Consistency builds the best long-term results.`
+    return 'No sessions yet this week. Even a short workout maintains fitness — consistency matters more than intensity.'
   }
 
   // Back-to-back planned sessions
   if (todayEvts.length > 0 && tomorrowEvts.length > 0)
-    return `${todayEvts[0].title} vandaag, ${tomorrowEvts[0].title} morgen — druk schema. Zorg voor voldoende herstel en voeding tussen de sessies.`
+    return `${todayEvts[0].title} today, ${tomorrowEvts[0].title} tomorrow — busy schedule. Make sure to get adequate recovery and nutrition between sessions.`
 
   // Normal summary with planning context
   const parts: string[] = []
-  if (weekRuns > 0) parts.push(`${weekRuns}× hardlopen${weekKm > 0 ? ` (${weekKm.toFixed(1)} km)` : ''}`)
-  if (weekStrength > 0) parts.push(`${weekStrength}× kracht`)
-  const summary = parts.join(' en ') + ' deze week.'
-  if (todayEvts.length > 0) return `${summary} ${todayEvts[0].title} staat nog gepland vandaag.`
-  if (tomorrowEvts.length > 0) return `${summary} ${tomorrowEvts[0].title} gepland morgen — bereid je voor.`
+  if (weekRuns > 0) parts.push(`${weekRuns}× running${weekKm > 0 ? ` (${weekKm.toFixed(1)} km)` : ''}`)
+  if (weekStrength > 0) parts.push(`${weekStrength}× strength`)
+  const summary = parts.join(' and ') + ' this week.'
+  if (todayEvts.length > 0) return `${summary} ${todayEvts[0].title} still planned for today.`
+  if (tomorrowEvts.length > 0) return `${summary} ${tomorrowEvts[0].title} planned for tomorrow — get ready.`
   return summary
 }
 
@@ -1224,7 +1224,7 @@ function LastRunCard({ run, allRuns }: { run: Activity; allRuns: Activity[] }) {
             <button onClick={() => setShowAll(false)}
               className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
               style={{ background: 'rgba(255,255,255,0.10)' }}>
-              Terug
+              Back
             </button>
             <span className="text-[17px] font-semibold text-white">Runs</span>
             <div className="w-[70px]" />
@@ -1357,7 +1357,7 @@ function LastRideCard({ ride, allRides }: { ride: Activity; allRides: Activity[]
             <button onClick={() => setShowAll(false)}
               className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
               style={{ background: 'rgba(255,255,255,0.10)' }}>
-              Terug
+              Back
             </button>
             <span className="text-[17px] font-semibold text-white">Rides</span>
             <div className="w-[70px]" />
@@ -1543,7 +1543,7 @@ function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkou
             <button onClick={() => setShowAll(false)}
               className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
               style={{ background: 'rgba(255,255,255,0.10)' }}>
-              Terug
+              Back
             </button>
             <span className="text-[17px] font-semibold text-white">Workouts</span>
             <div className="w-[70px]" />
@@ -1932,14 +1932,14 @@ function computeTodaysFocus(
 
   function buildReasons(intensity: Intensity): string[] {
     const r: string[] = []
-    if (highLoad || medLoad)   r.push(`Load +${loadPct}% boven baseline`)
+    if (highLoad || medLoad)   r.push(`Load +${loadPct}% above baseline`)
     if (recoveryPct < 70)      r.push(`Readiness ${recoveryPct}%`)
     if (upcomingHard) {
       const d = evtDate(upcomingHard)
-      const dayLbl = d === tomorrowStr ? 'morgen' : d === day2Str ? 'overmorgen' : 'binnenkort'
-      r.push(`${upcomingHard.title} gepland ${dayLbl} — extra herstel verhoogt de sessiekwaliteit`)
+      const dayLbl = d === tomorrowStr ? 'tomorrow' : d === day2Str ? 'day after tomorrow' : 'soon'
+      r.push(`${upcomingHard.title} planned ${dayLbl} — extra recovery improves session quality`)
     } else if (intensity === 'zone2' && r.length < 2) {
-      r.push('Zone 2 — lage impact op herstel')
+      r.push('Zone 2 — low recovery impact')
     }
     return r.slice(0, 3)
   }
@@ -1953,7 +1953,7 @@ function computeTodaysFocus(
     const predicted = predictTomorrow(intensity, actKey)
     const delta     = predicted - recoveryPct
     const prediction = actKey !== 'proceed'
-      ? `Verwachte readiness morgen: ~${predicted}% (${delta >= 0 ? '+' : ''}${delta}%)`
+      ? `Expected readiness tomorrow: ~${predicted}% (${delta >= 0 ? '+' : ''}${delta}%)`
       : undefined
 
     return {
@@ -1970,26 +1970,26 @@ function computeTodaysFocus(
   if (nextPlanned) {
     const npIntensity = classify(nextPlanned.title)
     const npDate      = evtDate(nextPlanned)
-    const npDayLbl    = npDate === tomorrowStr ? 'morgen' : npDate === day2Str ? 'overmorgen' : 'binnenkort'
+    const npDayLbl    = npDate === tomorrowStr ? 'tomorrow' : npDate === day2Str ? 'day after tomorrow' : 'soon'
     if (npIntensity === 'hard' || npIntensity === 'very_hard') {
       if (recoveryPct < 50 || highLoad) {
         const restReasons = [
-          ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
+          ...(highLoad ? [`Load +${loadPct}% above baseline`] : []),
           recoveryPct < 50 ? `Readiness ${recoveryPct}%` : '',
-          `${nextPlanned.title} gepland ${npDayLbl} — extra herstel verhoogt de sessiekwaliteit`,
+          `${nextPlanned.title} planned ${npDayLbl} — extra recovery improves session quality`,
         ].filter(Boolean).slice(0, 3) as string[]
         return {
           emoji: '😴', label: 'Rest Today',
           ...ACT.skip, reasons: restReasons,
-          prediction: `Extra herstelruimte verhoogt readiness voor ${nextPlanned.title} ${npDayLbl}.`,
+          prediction: `Extra recovery improves readiness for ${nextPlanned.title} ${npDayLbl}.`,
         }
       }
       return {
         emoji: '🚶', label: 'Light Training',
         ...ACT.easier,
         reasons: [
-          `${nextPlanned.title} gepland ${npDayLbl} — schone benen verhogen de sessiekwaliteit`,
-          ...(medLoad ? [`Load +${loadPct}% boven baseline`] : []),
+          `${nextPlanned.title} planned ${npDayLbl} — fresh legs improve session quality`,
+          ...(medLoad ? [`Load +${loadPct}% above baseline`] : []),
         ].slice(0, 3) as string[],
       }
     }
@@ -2004,10 +2004,10 @@ function computeTodaysFocus(
 
   // Hard rest: very low readiness
   if (recoveryPct < 40) return {
-    emoji: '😴', label: 'Rustdag aanbevolen', ...ACT.skip,
+    emoji: '😴', label: 'Rest Day Recommended', ...ACT.skip,
     reasons: [
       `Readiness ${recoveryPct}%`,
-      ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
+      ...(highLoad ? [`Load +${loadPct}% above baseline`] : []),
     ],
   }
 
@@ -2015,8 +2015,8 @@ function computeTodaysFocus(
   if (recoveryPct < 55 || rs >= 5) return {
     emoji: '🚶', label: 'Active Recovery', ...ACT.recover,
     reasons: [
-      recoveryPct < 55 ? `Readiness ${recoveryPct}% — lichte beweging bevordert herstel` : `Risicoscore hoog — actief herstel aanbevolen`,
-      ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
+      recoveryPct < 55 ? `Readiness ${recoveryPct}% — light movement aids recovery` : `Risk score high — active recovery recommended`,
+      ...(highLoad ? [`Load +${loadPct}% above baseline`] : []),
     ],
   }
 
@@ -2035,55 +2035,55 @@ function computeTodaysFocus(
 
   // Leg day — most demanding, suggest when recovered and not overdone this week
   if (legsReady && strengthBalance) return {
-    emoji: '🏋️', label: 'Leg Day aangeraden', ...ACT.proceed,
+    emoji: '🏋️', label: 'Leg Day Recommended', ...ACT.proceed,
     reasons: [
-      'Benen hersteld en klaar voor belasting',
-      weekStrength < 2 ? 'Nog weinig krachttraining deze week' : 'Goede verdeling voor de week',
+      'Legs recovered and ready to train',
+      weekStrength < 2 ? 'Low strength volume so far this week' : 'Good balance for the week',
     ],
   }
 
   // Zone 2 cardio — aerobic base building
   if (cardioReady && weekRuns + weekRides < 3 && !legsReady) return {
-    emoji: '🏃', label: 'Zone 2 Cardio aangeraden', ...ACT.proceed,
+    emoji: '🏃', label: 'Zone 2 Cardio Recommended', ...ACT.proceed,
     reasons: [
-      `Readiness ${recoveryPct}% — zone 2 bouwt aerobe basis`,
-      'Weinig cardio deze week — goed moment voor duurtraining',
+      `Readiness ${recoveryPct}% — zone 2 builds aerobic base`,
+      'Low cardio this week — good time for endurance training',
     ],
   }
 
   // Push day
   if (pushReady && strengthBalance) return {
-    emoji: '💪', label: 'Push Day aangeraden', ...ACT.proceed,
+    emoji: '💪', label: 'Push Day Recommended', ...ACT.proceed,
     reasons: [
-      'Borst en schouders hersteld',
-      pullReady ? 'Push/Pull afwisseling voor optimale herstelbalans' : 'Goed moment voor druk werk',
+      'Chest and shoulders recovered',
+      pullReady ? 'Push/pull alternation for optimal recovery balance' : 'Good time for pressing work',
     ],
   }
 
   // Pull day
   if (pullReady && strengthBalance) return {
-    emoji: '💪', label: 'Pull Day aangeraden', ...ACT.proceed,
+    emoji: '💪', label: 'Pull Day Recommended', ...ACT.proceed,
     reasons: [
-      'Rug hersteld — rijen en pull-ups aanbevolen',
-      armsReady ? 'Armen ook hersteld — combineer met bicep werk' : 'Focus op compound rug oefeningen',
+      'Back recovered — rows and pull-ups recommended',
+      armsReady ? 'Arms also recovered — combine with bicep work' : 'Focus on compound back exercises',
     ],
   }
 
   // Zone 2 cardio fallback
   if (cardioReady) return {
-    emoji: '🚴', label: 'Zone 2 Cardio aangeraden', ...ACT.proceed,
-    reasons: [`Readiness ${recoveryPct}% — duurtraining of herstelrit aanbevolen`],
+    emoji: '🚴', label: 'Zone 2 Cardio Recommended', ...ACT.proceed,
+    reasons: [`Readiness ${recoveryPct}% — endurance or recovery ride recommended`],
   }
 
   // Default: light training or rest
   if (recoveryPct >= 70) return {
     emoji: '🏃', label: 'Light Training', ...ACT.easier,
-    reasons: ['Geen specifieke spiergroepen volledig hersteld', 'Lichte intensiteit aanbevolen'],
+    reasons: ['No specific muscle groups fully recovered', 'Light intensity recommended'],
   }
 
   return {
-    emoji: '😴', label: 'Rustdag aanbevolen', ...ACT.skip,
-    reasons: [`Readiness ${recoveryPct}% — volledig herstel aanbevolen`],
+    emoji: '😴', label: 'Rest Day Recommended', ...ACT.skip,
+    reasons: [`Readiness ${recoveryPct}% — full recovery recommended`],
   }
 }
 
@@ -2274,15 +2274,15 @@ function buildWeekPrediction(
   const acwr = acwrDetail.total
   if (acwr !== null && acwr > 1.3) {
     if (rampRate !== null && rampRate > 20)
-      return 'Load blijft hoog de komende dagen — plan een hersteldag.'
+      return 'Load remains high over the coming days — plan a recovery day.'
     const projected = Math.max(1.0, acwr - (acwr - 1.0) * 0.56)
-    return `ACWR daalt naar ~${projected.toFixed(2)} binnen 4 dagen bij gelijkblijvende belasting.`
+    return `ACWR will drop to ~${projected.toFixed(2)} within 4 days at current load.`
   }
   if (recoveryPct < 60) {
     const daysNeeded = Math.max(1, Math.ceil((70 - recoveryPct) / 8))
     const target = new Date(Date.now() + daysNeeded * 86400000)
-    const dayName = target.toLocaleDateString('nl-NL', { weekday: 'long' })
-    return `Readiness verwacht >70% ${dayName}.`
+    const dayName = target.toLocaleDateString('en-US', { weekday: 'long' })
+    return `Readiness expected >70% by ${dayName}.`
   }
   return null
 }
@@ -2309,10 +2309,10 @@ function WeekSummaryCard({ weekCompleted, weekPlanned, weekUpcomingPlanned, week
           <div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[40px] font-bold text-white leading-none">{weekCompleted}</span>
-              <span className="text-[17px] font-semibold text-white/50">voltooid</span>
+              <span className="text-[17px] font-semibold text-white/50">completed</span>
             </div>
             {weekUpcomingPlanned > 0 && (
-              <span className="text-[13px] text-white/40 mt-0.5 block">{weekUpcomingPlanned} gepland</span>
+              <span className="text-[13px] text-white/40 mt-0.5 block">{weekUpcomingPlanned} planned</span>
             )}
           </div>
           <div className="flex items-center gap-1.5 pb-1">
@@ -2393,7 +2393,7 @@ function RecoveryDetailCard({
   // Show fatigue explanation when training load is the dominant drag
   const fatigueIsDominant = recovery.pct < 55 && (physiology.score === null || recovery.pct < physiology.score - 20)
   const explanation = fatigueIsDominant
-    ? 'Readiness wordt vooral beperkt door hoge trainingsvermoeidheid van de afgelopen dagen.'
+    ? 'Readiness is primarily limited by high training fatigue from recent days.'
     : physiology.explanation
 
   return (
@@ -2488,10 +2488,10 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
     : /* low */                 1.0 + (total - 1.0) * 0.50
 
   const status = effTotal == null ? null
-    : effTotal > 1.5 ? (confidence === 'high' ? 'Hoog risico' : confidence === 'medium' ? 'Verhoogde belasting' : 'Monitor')
-    : effTotal > 1.3 ? (confidence === 'high' ? 'Verhoogde belasting' : 'Monitor')
-    : effTotal < 0.8 ? 'Onderbelasting'
-    : 'Optimaal'
+    : effTotal > 1.5 ? (confidence === 'high' ? 'High risk' : confidence === 'medium' ? 'Elevated load' : 'Monitor')
+    : effTotal > 1.3 ? (confidence === 'high' ? 'Elevated load' : 'Monitor')
+    : effTotal < 0.8 ? 'Underloaded'
+    : 'Optimal'
 
   const statusColor = effTotal !== null && effTotal > 1.5 && confidence !== 'high'
     ? 'rgba(255,255,255,0.5)'
@@ -2515,7 +2515,7 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
               {status && <span className="text-[15px] font-semibold" style={{ color: statusColor }}>{status}</span>}
             </>
           ) : (
-            <span className="text-[15px] text-white/40">Geen data</span>
+            <span className="text-[15px] text-white/40">No data</span>
           )}
           <span className="ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0"
             style={{ color: confColor, backgroundColor: `${confColor}22` }}>
@@ -2538,7 +2538,7 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[14px] text-white/70">{s.label}</span>
                     <span className="text-[11px]" style={{ color: sConfColor }}>
-                      {sConfLabel} · {s.daysWithData} trainingsdagen
+                      {sConfLabel} · {s.daysWithData} training days
                     </span>
                   </div>
                   <div className="shrink-0">
