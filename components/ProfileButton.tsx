@@ -57,6 +57,12 @@ export function ProfileButton() {
   const [fitbitSyncMessage, setFitbitSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [timeFormat, setTimeFormat] = useState<'24h' | '12h'>('24h')
 
+  // Training preferences
+  const [editingTraining, setEditingTraining] = useState(false)
+  const [trainingSaving, setTrainingSaving] = useState(false)
+  const [trainingGoal, setTrainingGoal] = useState<string | null>(null)
+  const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
+
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
   const [editingMacroCalc, setEditingMacroCalc] = useState(false)
@@ -126,7 +132,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -142,6 +148,9 @@ export function ProfileButton() {
           if (data?.macro_protein) setSavedMacroProtein(data.macro_protein)
           if (data?.macro_carbs) setSavedMacroCarbs(data.macro_carbs)
           if (data?.macro_fat) setSavedMacroFat(data.macro_fat)
+          if (data?.training_goal) setTrainingGoal(data.training_goal)
+          if (data?.training_frequencies && typeof data.training_frequencies === 'object')
+            setTrainingFrequencies({ gym: 0, running: 0, cycling: 0, swimming: 0, ...data.training_frequencies })
         })
     })
   }, [open])
@@ -390,6 +399,21 @@ export function ProfileButton() {
 
   function togglePage(href: string) {
     setHiddenPages(prev => prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href])
+  }
+
+  async function saveTraining() {
+    if (!userId) return
+    setTrainingSaving(true)
+    await createClient()
+      .from('user_settings')
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies })
+      .eq('user_id', userId)
+    setTrainingSaving(false)
+    setEditingTraining(false)
+  }
+
+  function setFreq(sport: string, delta: number) {
+    setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
   }
 
   async function requestNotifications() {
@@ -665,6 +689,86 @@ export function ProfileButton() {
               </div>
             )
           })()}
+
+          {/* Training preferences overlay */}
+          {editingTraining && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingTraining(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Training</span>
+                <button onClick={saveTraining} disabled={trainingSaving}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
+                  {trainingSaving ? '…' : 'Save'}
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+
+                {/* Weekly frequency */}
+                <ProfileSection title="Weekly frequency">
+                  {([
+                    { key: 'gym',      label: 'Gym / Strength', icon: '🏋️' },
+                    { key: 'running',  label: 'Running',        icon: '🏃' },
+                    { key: 'cycling',  label: 'Cycling',        icon: '🚴' },
+                    { key: 'swimming', label: 'Swimming',       icon: '🏊' },
+                  ] as const).map(({ key, label, icon }, i, arr) => {
+                    const val = trainingFrequencies[key] ?? 0
+                    return (
+                      <ProfileRow key={key} separator={i < arr.length - 1}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[18px] w-6 text-center shrink-0">{icon}</span>
+                          <span className="flex-1 text-[17px] text-white">{label}</span>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => setFreq(key, -1)}
+                              disabled={val === 0}
+                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                              style={{ background: 'rgba(255,255,255,0.10)' }}>
+                              −
+                            </button>
+                            <span className="text-[17px] font-semibold text-white w-6 text-center">
+                              {val === 0 ? '–' : `${val}×`}
+                            </span>
+                            <button
+                              onClick={() => setFreq(key, +1)}
+                              disabled={val === 7}
+                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                              style={{ background: 'rgba(255,255,255,0.10)' }}>
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </ProfileRow>
+                    )
+                  })}
+                </ProfileSection>
+
+                {/* Goal */}
+                <div className="flex flex-col gap-3">
+                  <span className="text-[13px] font-medium text-white/40 px-1">Goal</span>
+                  <div className="flex flex-col gap-2.5">
+                    {([
+                      { key: 'lose_weight',  emoji: '🔥', title: 'Lose weight',      desc: 'Calorie deficit, preserve muscle' },
+                      { key: 'build_muscle', emoji: '💪', title: 'Build muscle',      desc: 'Progressive overload, calorie surplus' },
+                      { key: 'get_fitter',   emoji: '🏃', title: 'Get fitter',        desc: 'Improve endurance and cardiovascular fitness' },
+                      { key: 'maintain',     emoji: '⚖️', title: 'Maintain',          desc: 'Keep current weight and performance' },
+                      { key: 'performance',  emoji: '🏆', title: 'Performance',       desc: 'Train for a race or competition' },
+                    ]).map(({ key, emoji, title, desc }) => (
+                      <CalcCard key={key} emoji={emoji} title={title} desc={desc}
+                        selected={trainingGoal === key}
+                        onSelect={() => setTrainingGoal(prev => prev === key ? null : key)} />
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
 
           {/* Macro mode choice overlay */}
           {editingMacroMode && (
@@ -1132,6 +1236,17 @@ export function ProfileButton() {
 
             {/* Preferences */}
             <ProfileSection title="Preferences">
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full" onClick={() => setEditingTraining(true)}>
+                  <span className="text-[17px] text-white">Training</span>
+                  <div className="flex items-center gap-2">
+                    {trainingGoal && (
+                      <span className="text-[13px] text-white/40 capitalize">{trainingGoal.replace('_', ' ')}</span>
+                    )}
+                    <ChevronRight size={18} className="text-white/25 shrink-0" />
+                  </div>
+                </button>
+              </ProfileRow>
               <ProfileRow separator>
                 <button className="flex items-center justify-between w-full" onClick={openMacroChoice}>
                   <span className="text-[17px] text-white">Macro Targets</span>
