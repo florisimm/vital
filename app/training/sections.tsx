@@ -155,13 +155,27 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
 
   const total = calcBreakdown(activities, hevy)
 
-  // Dynamic explanation — prioritises ramp rate context, then sport contribution
+  // Detect recently-added activity categories (present last 4w, absent prior 4w)
+  const t56 = new Date(now - 56 * 86400000).toISOString()
+  const newSports = (['Cycling','Running','Strength','HYROX'] as const).filter(label => {
+    const bucket = buckets.find(b => b.label === label)
+    if (!bucket) return false
+    const recent = bucket.acts.filter(a => a.start_date >= t28).length + bucket.hevyW.filter(h => h.start_time >= t28).length
+    const prior  = bucket.acts.filter(a => a.start_date >= t56 && a.start_date < t28).length
+                 + bucket.hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).length
+    return recent >= 2 && prior === 0
+  })
+
+  // Dynamic explanation — new sports first, then contribution %, then ramp rate
   const elevated = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
   let explanation = ''
   if (total.acwr === null) {
     explanation = total.daysWithData > 0
       ? 'Trainingsbelasting te laag om ACWR te berekenen.'
       : 'Geen trainingsdata beschikbaar in de afgelopen 28 dagen.'
+  } else if (newSports.length > 0 && total.acwr > 1.2) {
+    explanation = `De belasting steeg door recent toegevoegde ${newSports.join(' en ')}-sessies. Het lichaam adapteert — monitor herstel de komende weken.`
+    if (total.confidence !== 'high') explanation += ' Beperkte historische data — ACWR wordt nauwkeuriger naarmate er meer sessies zijn.'
   } else if (elevated.length > 0) {
     const top = elevated[0]
     const totalAcuteLoad = sports.reduce((s, sp) => s + sp.acuteLoad, 0)
@@ -1573,7 +1587,9 @@ function computeTodaysFocus(
   hevy: HevyWorkout[],
   calendarEvents: any[],
   recoveryPct: number,
-  perf: { score: number; label: string; color: string; loadRatio: number }
+  perf: { score: number; label: string; color: string; loadRatio: number },
+  acwrDetail: ACWRDetail,
+  rampRate: number | null,
 ): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
@@ -1582,15 +1598,50 @@ function computeTodaysFocus(
   const events      = calendarEvents ?? []
 
   const ACT = {
-    proceed:  { action: 'Proceed as Planned', actionColor: '#4ade80' },
-    easier:   { action: 'Train Easier',        actionColor: '#facc15' },
-    shorten:  { action: 'Shorten Session',     actionColor: '#fb923c' },
-    moveTmr:  { action: 'Move to Tomorrow',    actionColor: '#fb923c' },
-    skip:     { action: 'Skip · Rest Today',   actionColor: '#f87171' },
+    proceed:  { action: 'Proceed as Planned',      actionColor: '#4ade80' },
+    easier:   { action: 'Train Easier',             actionColor: '#facc15' },
+    shorten:  { action: 'Shorten Session',          actionColor: '#fb923c' },
+    recover:  { action: 'Recovery Session Instead', actionColor: '#2dd4bf' },
+    moveTmr:  { action: 'Move to Tomorrow',         actionColor: '#fb923c' },
+    skip:     { action: 'Skip · Rest Today',        actionColor: '#f87171' },
   } as const
 
   type Intensity = 'zone2' | 'easy' | 'moderate' | 'hard' | 'very_hard'
   const EFFORT: Record<Intensity, number> = { zone2: 0.20, easy: 0.35, moderate: 0.55, hard: 0.75, very_hard: 0.95 }
+  // Effort multiplier per action — drives action-aware tomorrow prediction
+  const ACT_MOD: Record<keyof typeof ACT, number> = {
+    proceed: 1.0, easier: 0.50, shorten: 0.35, recover: 0.20, moveTmr: 0.05, skip: 0.0,
+  }
+
+  // Confidence-adjusted ACWR: pull toward 1.0 for medium/low confidence
+  const adjustedACWR = acwrDetail.total === null ? null
+    : acwrDetail.confidence === 'high'   ? acwrDetail.total
+    : acwrDetail.confidence === 'medium' ? 1.0 + (acwrDetail.total - 1.0) * 0.75
+    : /* low */                            1.0 + (acwrDetail.total - 1.0) * 0.50
+
+  const acwrHigh     = adjustedACWR !== null && adjustedACWR > 1.5
+  const acwrElevated = adjustedACWR !== null && adjustedACWR > 1.3
+  const rampHigh     = rampRate !== null && rampRate > 30
+  const rampElevated = rampRate !== null && rampRate > 15
+
+  // Established strength pattern: normal weekly routine does not inflate risk
+  const weekSt = startOfWeek()
+  const t28    = new Date(Date.now() - 28 * 86400000).toISOString()
+  const avgWeeklyStrength = hevy.filter(h => h.start_time >= t28).length / 4
+  const thisWeekStrength  = hevy.filter(h => h.start_time >= weekSt).length
+  const establishedStrength = avgWeeklyStrength >= 2 && thisWeekStrength <= avgWeeklyStrength * 1.25
+
+  // Consecutive training days (days before today with a workout)
+  const todayMs = new Date().setHours(0, 0, 0, 0)
+  const trainedDates = new Set([
+    ...activities.map(a => a.start_date.slice(0, 10)),
+    ...hevy.map(h => h.start_time.slice(0, 10)),
+  ])
+  let consecutiveDays = 0
+  for (let i = 1; i <= 7; i++) {
+    if (trainedDates.has(new Date(todayMs - i * 86400000).toISOString().slice(0, 10))) consecutiveDays++
+    else break
+  }
 
   function evtDate(e: any)  { return (e.start_datetime || e.start_date).slice(0, 10) }
   function evtTime(e: any)  { return e.start_datetime ? ` · ${formatClockTime(e.start_datetime)}` : '' }
@@ -1623,15 +1674,33 @@ function computeTodaysFocus(
     return 'moderate'
   }
 
-  function predictTomorrow(intensity: Intensity): number {
-    const currentFatigue = (95 - recoveryPct) / 28
-    const decay24h = Math.exp(-24 * Math.LN2 / 36)
-    return Math.min(95, Math.max(20, Math.round(95 - decay24h * (currentFatigue + EFFORT[intensity]) * 28)))
+  function predictTomorrow(intensity: Intensity, actKey: keyof typeof ACT): number {
+    const effectiveEffort = EFFORT[intensity] * ACT_MOD[actKey]
+    const currentFatigue  = (95 - recoveryPct) / 28
+    const decay24h        = Math.exp(-24 * Math.LN2 / 36)
+    return Math.min(95, Math.max(20, Math.round(95 - decay24h * (currentFatigue + effectiveEffort) * 28)))
   }
 
   const loadPct  = Math.round((perf.loadRatio - 1) * 100)
   const highLoad = perf.loadRatio > 1.4
   const medLoad  = perf.loadRatio > 1.2
+
+  // Multi-factor risk score — drives recommendation escalation
+  function riskScore(): number {
+    let s = 0
+    if (recoveryPct < 45) s += 3
+    else if (recoveryPct < 60) s += 2
+    else if (recoveryPct < 70) s += 1
+    if (acwrHigh) s += 3
+    else if (acwrElevated && !establishedStrength) s += 2
+    else if (acwrElevated) s += 1
+    if (rampHigh && !establishedStrength) s += 2
+    else if (rampHigh) s += 1
+    else if (rampElevated && !establishedStrength) s += 1
+    if (consecutiveDays >= 5) s += 2
+    else if (consecutiveDays >= 3) s += 1
+    return s
+  }
 
   const todayEvts    = events.filter(e => evtDate(e) === todayStr    && isSportEvt(e))
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
@@ -1643,25 +1712,34 @@ function computeTodaysFocus(
     const i = classify(e.title); return i === 'hard' || i === 'very_hard'
   }) ?? null
 
-  function decide(intensity: Intensity): typeof ACT[keyof typeof ACT] {
-    if (intensity === 'zone2') return recoveryPct < 25 ? ACT.skip    : ACT.proceed
-    if (intensity === 'easy')  return recoveryPct < 35 ? ACT.skip    : ACT.proceed
+  function decide(intensity: Intensity): keyof typeof ACT {
+    const rs = riskScore()
+    const canMoveTmr = tomorrowEvts.length === 0 && day2Evts.length === 0
+
+    if (intensity === 'zone2') return recoveryPct < 25 ? 'skip' : 'proceed'
+    if (intensity === 'easy')  return recoveryPct < 35 ? 'skip' : rs >= 5 ? 'recover' : 'proceed'
+
     if (intensity === 'moderate') {
-      if (recoveryPct >= 65 && !highLoad) return ACT.proceed
-      if (recoveryPct >= 50)              return ACT.easier
-      return ACT.shorten
+      if (rs >= 7) return canMoveTmr ? 'moveTmr' : 'skip'
+      if (rs >= 5) return 'recover'
+      if (rs >= 3) return 'shorten'
+      if (rs >= 1) return 'easier'
+      return 'proceed'
     }
     if (intensity === 'hard') {
-      if (recoveryPct >= 75 && !medLoad) return ACT.proceed
-      if (recoveryPct >= 60 && !highLoad) return ACT.easier
-      if (recoveryPct >= 45)              return ACT.shorten
-      return tomorrowEvts.length === 0 ? ACT.moveTmr : ACT.skip
+      if (rs >= 8) return 'skip'
+      if (rs >= 6) return canMoveTmr ? 'moveTmr' : 'skip'
+      if (rs >= 4) return 'recover'
+      if (rs >= 2) return 'shorten'
+      if (rs >= 1) return 'easier'
+      return 'proceed'
     }
     // very_hard
-    if (recoveryPct >= 80 && !medLoad)  return ACT.proceed
-    if (recoveryPct >= 65 && !highLoad) return ACT.easier
-    if (recoveryPct >= 50)              return ACT.shorten
-    return tomorrowEvts.length === 0 ? ACT.moveTmr : ACT.skip
+    if (rs >= 7) return 'skip'
+    if (rs >= 5) return canMoveTmr ? 'moveTmr' : 'skip'
+    if (rs >= 3) return 'recover'
+    if (rs >= 1) return 'shorten'
+    return recoveryPct >= 80 && !acwrElevated ? 'proceed' : 'easier'
   }
 
   function buildReasons(intensity: Intensity): string[] {
@@ -1682,10 +1760,11 @@ function computeTodaysFocus(
   if (todayEvts.length > 0) {
     const ev        = todayEvts[0]
     const intensity = classify(ev.title)
-    const act       = decide(intensity)
-    const predicted = predictTomorrow(intensity)
+    const actKey    = decide(intensity)
+    const act       = ACT[actKey]
+    const predicted = predictTomorrow(intensity, actKey)
     const delta     = predicted - recoveryPct
-    const prediction = act !== ACT.proceed && act !== ACT.skip
+    const prediction = actKey !== 'proceed'
       ? `Verwachte readiness morgen: ~${predicted}% (${delta >= 0 ? '+' : ''}${delta}%)`
       : undefined
 
@@ -1894,7 +1973,6 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
   })()
 
   const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-  const rl = readinessPct >= 70 ? 'Ready to train' : readinessPct >= 45 ? 'Easy training recommended' : 'Recovery recommended'
 
   return (
     <Card>
@@ -1932,7 +2010,7 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
         <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full" style={{ background: rc }} />
-            <span className="text-[13px] font-semibold" style={{ color: rc }}>{rl}</span>
+            <span className="text-[13px] font-semibold" style={{ color: rc }}>Readiness</span>
             <span className="text-[13px] text-white/30">· {readinessPct}%</span>
           </div>
           <a href={ctaHref}
@@ -2161,17 +2239,21 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
     v == null ? 'rgba(255,255,255,0.4)'
     : v > 1.5 ? '#f87171' : v > 1.3 ? '#fb923c' : v < 0.8 ? '#60a5fa' : '#4ade80'
 
-  const status = total == null ? null
-    : total > 1.5 && confidence === 'high'   ? 'Hoog risico'
-    : total > 1.5 && confidence === 'low'    ? 'Baseline wordt opgebouwd'
-    : total > 1.3                            ? 'Verhoogde belasting'
-    : total < 0.8                            ? 'Onderbelasting'
+  // Confidence-sensitive status: shrink ACWR toward 1.0 for effective classification
+  const effTotal = total === null ? null
+    : confidence === 'high'   ? total
+    : confidence === 'medium' ? 1.0 + (total - 1.0) * 0.75
+    : /* low */                 1.0 + (total - 1.0) * 0.50
+
+  const status = effTotal == null ? null
+    : effTotal > 1.5 ? (confidence === 'high' ? 'Hoog risico' : confidence === 'medium' ? 'Verhoogde belasting' : 'Monitor')
+    : effTotal > 1.3 ? (confidence === 'high' ? 'Verhoogde belasting' : 'Monitor')
+    : effTotal < 0.8 ? 'Onderbelasting'
     : 'Optimaal'
 
-  // Neutral status color when ACWR is high but data is too sparse to trust
-  const statusColor = total !== null && total > 1.5 && confidence === 'low'
+  const statusColor = effTotal !== null && effTotal > 1.5 && confidence !== 'high'
     ? 'rgba(255,255,255,0.5)'
-    : col(total)
+    : col(effTotal)
 
   const confLabel = confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low'
   const confColor = confidence === 'high' ? '#4ade80' : confidence === 'medium' ? '#facc15' : '#fb923c'
@@ -2185,9 +2267,9 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
             style={{ transform: expanded ? 'rotate(90deg)' : 'none' }} />
         </div>
         <div className="flex items-center gap-3 mb-1.5">
-          {total !== null ? (
+          {total !== null && effTotal !== null ? (
             <>
-              <span className="text-[28px] font-bold leading-none" style={{ color: col(total) }}>{total.toFixed(2)}</span>
+              <span className="text-[28px] font-bold leading-none" style={{ color: col(effTotal) }}>{total.toFixed(2)}</span>
               {status && <span className="text-[15px] font-semibold" style={{ color: statusColor }}>{status}</span>}
             </>
           ) : (
@@ -2343,7 +2425,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const acwrDetail = computeACWRDetail(activities, hevy, now, rampRate)
   const weekPrediction = buildWeekPrediction(acwrDetail, rampRate, unifiedReadinessPct)
 
-  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate)
   const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
 
   return (
