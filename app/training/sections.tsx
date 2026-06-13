@@ -104,10 +104,20 @@ function effectiveLoad(a: Activity): number {
   return mins * (isZone2 ? 0.5 : 1)
 }
 
+function isAccessorySession(h: HevyWorkout): boolean {
+  const t = (h.title ?? '').toLowerCase()
+  return ['abs', 'core', 'mobility', 'stretch', 'recovery', 'herstel',
+          'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
+          'yoga', 'foam'].some(k => t.includes(k))
+}
+
 function hevyLoad(h: HevyWorkout): number {
-  // Duration-only for consistency — volume_kg is missing on older synced records,
-  // which would make the chronic baseline artificially low vs recent sessions.
-  return (h.duration ?? 3600) / 60
+  const mins = (h.duration ?? 3600) / 60
+  // Accessory/recovery sessions (abs, mobility, stretching, etc.) contribute 25% load
+  // unless the session exceeds 30 minutes — prevents a stable Push/Pull routine from
+  // showing elevated ACWR solely because of light add-on work.
+  if (isAccessorySession(h) && mins <= 30) return mins * 0.25
+  return mins
 }
 
 function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
