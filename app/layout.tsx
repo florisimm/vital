@@ -3,6 +3,7 @@ import './globals.css'
 import { BottomNav } from '@/components/BottomNav'
 import { DataProvider } from '@/components/DataProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { SWRProvider } from '@/components/SWRProvider'
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vital.app'
 
@@ -49,11 +50,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               'rgb(5, 6, 8)',
           }}
         />
-        <DataProvider />
-        <div className="relative">
-          {children}
-        </div>
-        <BottomNav />
+        <SWRProvider>
+          <DataProvider />
+          <div className="relative">
+            {children}
+          </div>
+          <BottomNav />
+        </SWRProvider>
       </body>
     </html>
   )
