@@ -25,7 +25,7 @@ export type HevyWorkout = {
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
   confidence: 'low' | 'medium' | 'high'; daysWithData: number
-  acuteLoad: number; isNew: boolean
+  acuteLoad: number; isNew: boolean; hasPrimaryLoad: boolean
 }
 type ACWRDetail = {
   total: number | null; confidence: 'low' | 'medium' | 'high'
@@ -169,16 +169,20 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
                        + hevyW.filter(h => h.start_time >= t28).reduce((s, h) => s + hevyLoad(h), 0)
       const priorLoad  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).reduce((s, a) => s + effectiveLoad(a), 0)
                        + hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).reduce((s, h) => s + hevyLoad(h), 0)
+      // Primary load: at least one non-accessory session in the last 28 days
+      const hasPrimaryLoad = acts.filter(a => a.start_date >= t28).length > 0
+        || hevyW.filter(h => h.start_time >= t28 && !isAccessorySession(h)).length > 0
       // "New" = at least 2 recent sessions AND (no prior baseline OR load exceeds 125% of own 4-week baseline)
-      return { key, label, ...bd, isNew: recentN >= 2 && (priorLoad === 0 || recentLoad > priorLoad * 1.25) }
+      return { key, label, ...bd, isNew: recentN >= 2 && (priorLoad === 0 || recentLoad > priorLoad * 1.25), hasPrimaryLoad }
     })
     .filter(s => s.daysWithData > 0)
 
   const total = calcBreakdown(activities, hevy)
 
   // Dynamic explanation — new sports first, then contribution %, then ramp rate
-  const newSports = sports.filter(s => s.isNew).map(s => s.label)
-  const elevated = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
+  // Only primary training sessions can trigger elevated-load warnings
+  const newSports = sports.filter(s => s.isNew && s.hasPrimaryLoad).map(s => s.label)
+  const elevated  = sports.filter(s => s.acwr !== null && s.acwr > 1.3 && s.hasPrimaryLoad).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
   let explanation = ''
   if (total.acwr === null) {
     explanation = total.daysWithData > 0
@@ -1650,7 +1654,7 @@ function computeTodaysFocus(
   // elevatedSports:    sports above ACWR 1.2 with recent acute load
   // rampAllEstablished: no new sport contributing elevated load (or no elevated sports at all → treat as established)
   // rampMostlyNew:     >50% of elevated acute load is from newly introduced sports
-  const elevatedSports     = acwrDetail.sports.filter(s => s.acwr !== null && s.acwr > 1.2 && s.acuteLoad > 0)
+  const elevatedSports     = acwrDetail.sports.filter(s => s.acwr !== null && s.acwr > 1.2 && s.acuteLoad > 0 && s.hasPrimaryLoad)
   const totalElevatedLoad  = elevatedSports.reduce((sum, s) => sum + s.acuteLoad, 0)
   const newElevatedLoad    = elevatedSports.filter(s => s.isNew).reduce((sum, s) => sum + s.acuteLoad, 0)
   const rampAllEstablished = elevatedSports.length === 0
@@ -2447,9 +2451,9 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
   const fourteenDaysAgo  = new Date(now - 14 * 86400000).toISOString()
   const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+    + hevy.filter(h => h.start_time >= sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
   const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
   const rampRate = prev7kj > 5
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
