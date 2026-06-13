@@ -7,6 +7,8 @@ const TTL_MS = 24 * 60 * 60 * 1000
 const PERSIST_KEYS = new Set(['today', 'training', 'health-gezondheid', 'food-log', 'products'])
 
 function makeProvider() {
+  if (typeof window === 'undefined') return new Map()
+
   let map: Map<string, any>
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
