@@ -25,7 +25,7 @@ export type HevyWorkout = {
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
   confidence: 'low' | 'medium' | 'high'; daysWithData: number
-  acuteLoad: number
+  acuteLoad: number; isNew: boolean
 }
 type ACWRDetail = {
   total: number | null; confidence: 'low' | 'medium' | 'high'
@@ -149,24 +149,22 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
     { key: 'other',    label: 'Other',    acts: activities.filter(a => !categorised.has(a.id)), hevyW: [] },
   ]
 
+  const t56 = new Date(now - 56 * 86400000).toISOString()
+
   const sports: SportBreakdown[] = buckets
-    .map(({ key, label, acts, hevyW }) => ({ key, label, ...calcBreakdown(acts, hevyW) }))
+    .map(({ key, label, acts, hevyW }) => {
+      const bd = calcBreakdown(acts, hevyW)
+      const recentN = acts.filter(a => a.start_date >= t28).length + hevyW.filter(h => h.start_time >= t28).length
+      const priorN  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).length
+                    + hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).length
+      return { key, label, ...bd, isNew: recentN >= 2 && priorN === 0 }
+    })
     .filter(s => s.daysWithData > 0)
 
   const total = calcBreakdown(activities, hevy)
 
-  // Detect recently-added activity categories (present last 4w, absent prior 4w)
-  const t56 = new Date(now - 56 * 86400000).toISOString()
-  const newSports = (['Cycling','Running','Strength','HYROX'] as const).filter(label => {
-    const bucket = buckets.find(b => b.label === label)
-    if (!bucket) return false
-    const recent = bucket.acts.filter(a => a.start_date >= t28).length + bucket.hevyW.filter(h => h.start_time >= t28).length
-    const prior  = bucket.acts.filter(a => a.start_date >= t56 && a.start_date < t28).length
-                 + bucket.hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).length
-    return recent >= 2 && prior === 0
-  })
-
   // Dynamic explanation — new sports first, then contribution %, then ramp rate
+  const newSports = sports.filter(s => s.isNew).map(s => s.label)
   const elevated = sports.filter(s => s.acwr !== null && s.acwr > 1.3).sort((a, b) => (b.acwr ?? 0) - (a.acwr ?? 0))
   let explanation = ''
   if (total.acwr === null) {
@@ -1613,18 +1611,30 @@ function computeTodaysFocus(
     proceed: 1.0, easier: 0.50, shorten: 0.35, recover: 0.20, moveTmr: 0.05, skip: 0.0,
   }
 
-  // Confidence-adjusted ACWR: pull toward 1.0 for medium/low confidence
-  const adjustedACWR = acwrDetail.total === null ? null
-    : acwrDetail.confidence === 'high'   ? acwrDetail.total
-    : acwrDetail.confidence === 'medium' ? 1.0 + (acwrDetail.total - 1.0) * 0.75
-    : /* low */                            1.0 + (acwrDetail.total - 1.0) * 0.50
-
-  const acwrHigh     = adjustedACWR !== null && adjustedACWR > 1.5
-  const acwrElevated = adjustedACWR !== null && adjustedACWR > 1.3
   const rampHigh     = rampRate !== null && rampRate > 30
   const rampElevated = rampRate !== null && rampRate > 15
 
-  // Established strength pattern: normal weekly routine does not inflate risk
+  // Per-sport weighted ACWR risk:
+  //   new sports  → 1.5× weight (body not yet adapted)
+  //   established (≥10 training days) → 0.7× weight (routine load, lower risk)
+  //   confidence shrinkage applied per sport before weighting
+  function weightedACWRRisk(): number {
+    const active = acwrDetail.sports.filter(s => s.acwr !== null && s.acuteLoad > 0)
+    if (active.length === 0) return 0
+    let wSum = 0, loadSum = 0
+    for (const sp of active) {
+      if (sp.acwr === null) continue
+      const eff = sp.confidence === 'high'   ? sp.acwr
+        : sp.confidence === 'medium' ? 1.0 + (sp.acwr - 1.0) * 0.75
+        : /* low */                    1.0 + (sp.acwr - 1.0) * 0.50
+      const w = sp.isNew ? 1.5 : sp.daysWithData >= 10 ? 0.7 : 1.0
+      wSum    += Math.max(0, eff - 1.0) * w * sp.acuteLoad
+      loadSum += sp.acuteLoad
+    }
+    return loadSum > 0 ? wSum / loadSum : 0
+  }
+
+  // Established strength pattern: routine push/pull/legs does not inflate ramp risk
   const weekSt = startOfWeek()
   const t28    = new Date(Date.now() - 28 * 86400000).toISOString()
   const avgWeeklyStrength = hevy.filter(h => h.start_time >= t28).length / 4
@@ -1691,9 +1701,11 @@ function computeTodaysFocus(
     if (recoveryPct < 45) s += 3
     else if (recoveryPct < 60) s += 2
     else if (recoveryPct < 70) s += 1
-    if (acwrHigh) s += 3
-    else if (acwrElevated && !establishedStrength) s += 2
-    else if (acwrElevated) s += 1
+    // Per-sport weighted ACWR risk (new activities count more, established count less)
+    const ar = weightedACWRRisk()
+    if (ar >= 0.55) s += 3       // e.g. new sport ACWR 1.37 or established ACWR 1.79
+    else if (ar >= 0.35) s += 2  // e.g. new sport ACWR 1.23 or established ACWR 1.50
+    else if (ar >= 0.18) s += 1  // e.g. established ACWR 1.26
     if (rampHigh && !establishedStrength) s += 2
     else if (rampHigh) s += 1
     else if (rampElevated && !establishedStrength) s += 1
@@ -1739,7 +1751,7 @@ function computeTodaysFocus(
     if (rs >= 5) return canMoveTmr ? 'moveTmr' : 'skip'
     if (rs >= 3) return 'recover'
     if (rs >= 1) return 'shorten'
-    return recoveryPct >= 80 && !acwrElevated ? 'proceed' : 'easier'
+    return recoveryPct >= 80 && weightedACWRRisk() < 0.18 ? 'proceed' : 'easier'
   }
 
   function buildReasons(intensity: Intensity): string[] {
