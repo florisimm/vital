@@ -1636,11 +1636,16 @@ function computeTodaysFocus(
     return risk
   }
 
-  // Sport-aware ramp: penalty is dampened when ALL elevated sports are established patterns.
-  // This prevents a new cycling habit from reducing the penalty for an established strength pattern,
-  // and prevents established strength from reducing the penalty for new cycling.
+  // Sport-aware ramp: penalty depends on what fraction of elevated load comes from new vs established sports.
+  // elevatedSports:    sports above ACWR 1.2 with recent acute load
+  // rampAllEstablished: no new sport contributing elevated load (or no elevated sports at all → treat as established)
+  // rampMostlyNew:     >50% of elevated acute load is from newly introduced sports
   const elevatedSports     = acwrDetail.sports.filter(s => s.acwr !== null && s.acwr > 1.2 && s.acuteLoad > 0)
-  const rampAllEstablished = elevatedSports.length > 0 && elevatedSports.every(s => !s.isNew && s.daysWithData >= 10)
+  const totalElevatedLoad  = elevatedSports.reduce((sum, s) => sum + s.acuteLoad, 0)
+  const newElevatedLoad    = elevatedSports.filter(s => s.isNew).reduce((sum, s) => sum + s.acuteLoad, 0)
+  const rampAllEstablished = elevatedSports.length === 0
+    || (newElevatedLoad === 0 && elevatedSports.every(s => s.daysWithData >= 10))
+  const rampMostlyNew      = totalElevatedLoad > 0 && newElevatedLoad / totalElevatedLoad > 0.50
 
   // Consecutive training days (days before today with a workout)
   const todayMs = new Date().setHours(0, 0, 0, 0)
@@ -1699,17 +1704,19 @@ function computeTodaysFocus(
   // Multi-factor risk score — drives recommendation escalation
   function riskScore(): number {
     let s = 0
-    if (recoveryPct < 45)      s += 3
-    else if (recoveryPct < 60) s += 2
-    else if (recoveryPct < 70) s += 1
-    else if (recoveryPct > 85) s -= 1  // High readiness partially offsets elevated ACWR / ramp
-    // Per-sport weighted ACWR risk (new activities count more, established count less)
+    if      (recoveryPct < 45)  s += 3
+    else if (recoveryPct < 60)  s += 2
+    else if (recoveryPct < 70)  s += 1
+    else if (recoveryPct > 90)  s -= 2  // Exceptional recovery — offsets elevated ACWR / ramp / consecutive days
+    else if (recoveryPct > 85)  s -= 1  // Strong recovery — partially offsets other risk factors
+    // Per-sport weighted ACWR risk, weighted by load share
     const ar = weightedACWRRisk()
     if (ar >= 0.55) s += 3       // weighted ACWR ≥ 1.55 (dominant sport very high)
     else if (ar >= 0.35) s += 2  // weighted ACWR ≥ 1.35 (dominant sport high)
     else if (ar >= 0.18) s += 1  // weighted ACWR ≥ 1.18 (elevated)
-    // Ramp penalty: dampened when all elevated sports are established (≥10 training days, not new)
-    if (rampHigh)                          s += rampAllEstablished ? 1 : 2
+    // Ramp rate: >30% — all established → +1, mixed/mostly new → +2
+    //            >15% — all established → +0, mixed/mostly new → +1
+    if (rampHigh)                         s += rampAllEstablished ? 1 : 2
     else if (rampElevated && !rampAllEstablished) s += 1
     if (consecutiveDays >= 5) s += 2
     else if (consecutiveDays >= 3) s += 1
