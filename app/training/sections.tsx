@@ -26,6 +26,7 @@ type SportBreakdown = {
   key: string; label: string; acwr: number | null
   confidence: 'low' | 'medium' | 'high'; daysWithData: number
   acuteLoad: number; isNew: boolean; hasPrimaryLoad: boolean
+  loadComposition: { primary: number; isolation: number; accessory: number } | null
 }
 type ACWRDetail = {
   total: number | null; confidence: 'low' | 'medium' | 'high'
@@ -105,34 +106,78 @@ function effectiveLoad(a: Activity): number {
 }
 
 const COMPOUND_KEYWORDS = [
-  'squat', 'deadlift', 'rdl', 'bench', 'row', 'press',
-  'pull-up', 'pullup', 'pull up', 'chin-up', 'chinup', 'chin up', 'lunge',
+  'squat', 'deadlift', 'rdl', 'bench', 'incline', 'overhead press', 'ohp',
+  'shoulder press', 'military press', 'row', 'pull-up', 'pullup', 'pull up',
+  'chin-up', 'chinup', 'chin up', 'lunge', 'hip thrust',
 ]
+const ISOLATION_KEYWORDS = [
+  'curl', 'tricep', 'lateral raise', 'rear delt', 'face pull',
+  'calf', 'leg extension', 'leg curl', 'fly', 'flye', 'shrug', 'kickback',
+]
+const RECOVERY_TITLE_KEYWORDS = [
+  'stretch', 'mobility', 'foam', 'recover', 'herstel',
+  'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
+]
+const ACCESSORY_TITLE_KEYWORDS = ['abs', 'core', 'yoga']
 
-function isAccessorySession(h: HevyWorkout): boolean {
-  // Exercise composition: >70% compound-lift sets → never accessory, regardless of title
+// Returns a 0.10–1.0 load factor for a Hevy workout based on exercise composition.
+// With exercise data: compound × 1.0 + isolation × 0.6 + other × 0.25 (weighted by set counts).
+// Without exercise data: title-based — recovery → 0.10, accessory → 0.25, primary → 1.0.
+function sessionLoadFactor(h: HevyWorkout): number {
   if (h.exercises && h.exercises.length > 0) {
-    const totalSets    = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
-    const compoundSets = h.exercises.reduce((s, ex) => {
-      const t = (ex.title ?? '').toLowerCase()
-      return s + (COMPOUND_KEYWORDS.some(k => t.includes(k)) ? (ex.sets?.length ?? 0) : 0)
-    }, 0)
-    if (totalSets > 0 && compoundSets / totalSets > 0.70) return false
+    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
+    if (totalSets > 0) {
+      let cSets = 0, iSets = 0
+      for (const ex of h.exercises) {
+        const t = (ex.title ?? '').toLowerCase()
+        const n = ex.sets?.length ?? 0
+        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       cSets += n
+        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) iSets += n
+      }
+      return (cSets * 1.0 + iSets * 0.6 + (totalSets - cSets - iSets) * 0.25) / totalSets
+    }
   }
-  // Title / workout-type detection
   const t = (h.title ?? '').toLowerCase()
-  return ['abs', 'core', 'mobility', 'stretch', 'recovery', 'herstel',
-          'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
-          'yoga', 'foam'].some(k => t.includes(k))
+  if (RECOVERY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.10
+  if (ACCESSORY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.25
+  return 1.0
+}
+
+// Splits hevyLoad(h) into compound / isolation / accessory components (sum = hevyLoad(h)).
+function sessionLoadBreakdown(h: HevyWorkout): { compound: number; isolation: number; accessory: number } {
+  const mins = (h.duration ?? 3600) / 60
+  if (h.exercises && h.exercises.length > 0) {
+    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
+    if (totalSets > 0) {
+      let cSets = 0, iSets = 0
+      for (const ex of h.exercises) {
+        const t = (ex.title ?? '').toLowerCase()
+        const n = ex.sets?.length ?? 0
+        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       cSets += n
+        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) iSets += n
+      }
+      const oSets = totalSets - cSets - iSets
+      return {
+        compound:  (cSets / totalSets) * mins * 1.0,
+        isolation: (iSets / totalSets) * mins * 0.6,
+        accessory: (oSets / totalSets) * mins * 0.25,
+      }
+    }
+  }
+  const load = hevyLoad(h)
+  return sessionLoadFactor(h) > 0.30
+    ? { compound: load, isolation: 0, accessory: 0 }
+    : { compound: 0,    isolation: 0, accessory: load }
+}
+
+// A session is treated as accessory/recovery (excluded from primary-load detection and ramp rate)
+// when its load factor is ≤ 0.30 — i.e. recovery (0.10) or accessory (0.25) sessions.
+function isAccessorySession(h: HevyWorkout): boolean {
+  return sessionLoadFactor(h) <= 0.30
 }
 
 function hevyLoad(h: HevyWorkout): number {
-  const mins = (h.duration ?? 3600) / 60
-  // Accessory/recovery sessions (abs, mobility, stretching, etc.) contribute 25% load
-  // unless the session exceeds 30 minutes — prevents a stable Push/Pull routine from
-  // showing elevated ACWR solely because of light add-on work.
-  if (isAccessorySession(h) && mins <= 30) return mins * 0.25
-  return mins
+  return (h.duration ?? 3600) / 60 * sessionLoadFactor(h)
 }
 
 function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
@@ -179,7 +224,9 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
   const sports: SportBreakdown[] = buckets
     .map(({ key, label, acts, hevyW }) => {
       const bd = calcBreakdown(acts, hevyW)
-      const recentN    = acts.filter(a => a.start_date >= t28).length + hevyW.filter(h => h.start_time >= t28).length
+      // recentN counts only primary sessions (ignores accessory/recovery) for isNew detection
+      const recentN    = acts.filter(a => a.start_date >= t28).length
+                       + hevyW.filter(h => h.start_time >= t28 && !isAccessorySession(h)).length
       const recentLoad = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a), 0)
                        + hevyW.filter(h => h.start_time >= t28).reduce((s, h) => s + hevyLoad(h), 0)
       const priorLoad  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).reduce((s, a) => s + effectiveLoad(a), 0)
@@ -187,8 +234,20 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
       // Primary load: at least one non-accessory session in the last 28 days
       const hasPrimaryLoad = acts.filter(a => a.start_date >= t28).length > 0
         || hevyW.filter(h => h.start_time >= t28 && !isAccessorySession(h)).length > 0
-      // "New" = at least 2 recent sessions AND (no prior baseline OR load exceeds 125% of own 4-week baseline)
-      return { key, label, ...bd, isNew: recentN >= 2 && (priorLoad === 0 || recentLoad > priorLoad * 1.25), hasPrimaryLoad }
+      // Load composition (weighted, 28-day window): primary / isolation / accessory %
+      const recent28hevy = hevyW.filter(h => h.start_time >= t28)
+      const compLoad  = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a), 0)
+                      + recent28hevy.reduce((s, h) => s + sessionLoadBreakdown(h).compound, 0)
+      const isoLoad   = recent28hevy.reduce((s, h) => s + sessionLoadBreakdown(h).isolation, 0)
+      const accLoad   = recent28hevy.reduce((s, h) => s + sessionLoadBreakdown(h).accessory, 0)
+      const totalComp = compLoad + isoLoad + accLoad
+      const loadComposition = totalComp > 0 ? {
+        primary:   Math.round((compLoad / totalComp) * 100),
+        isolation: Math.round((isoLoad  / totalComp) * 100),
+        accessory: Math.round((accLoad  / totalComp) * 100),
+      } : null
+      // "New" = at least 2 recent primary sessions AND (no prior baseline OR load exceeds 125% of own 4-week baseline)
+      return { key, label, ...bd, isNew: recentN >= 2 && (priorLoad === 0 || recentLoad > priorLoad * 1.25), hasPrimaryLoad, loadComposition }
     })
     .filter(s => s.daysWithData > 0)
 
@@ -2341,20 +2400,29 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
             const sConfLabel = s.confidence === 'high' ? 'High' : s.confidence === 'medium' ? 'Medium' : 'Low'
             const sConfColor = s.confidence === 'high' ? '#4ade80' : s.confidence === 'medium' ? '#facc15' : '#fb923c'
             return (
-              <div key={s.key} className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[14px] text-white/70">{s.label}</span>
-                  <span className="text-[11px]" style={{ color: sConfColor }}>
-                    {sConfLabel} · {s.daysWithData} trainingsdagen
+              <div key={s.key} className="flex flex-col gap-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[14px] text-white/70">{s.label}</span>
+                    <span className="text-[11px]" style={{ color: sConfColor }}>
+                      {sConfLabel} · {s.daysWithData} trainingsdagen
+                    </span>
+                  </div>
+                  <div className="shrink-0">
+                    {s.acwr !== null ? (
+                      <span className="text-[15px] font-bold" style={{ color: col(s.acwr) }}>{s.acwr.toFixed(2)}</span>
+                    ) : (
+                      <span className="text-[12px] text-white/30">–</span>
+                    )}
+                  </div>
+                </div>
+                {s.loadComposition && (
+                  <span className="text-[11px] text-white/30">
+                    Primary {s.loadComposition.primary}%
+                    {s.loadComposition.isolation > 0 && ` · Isolation ${s.loadComposition.isolation}%`}
+                    {s.loadComposition.accessory > 0 && ` · Accessory ${s.loadComposition.accessory}%`}
                   </span>
-                </div>
-                <div className="shrink-0">
-                  {s.acwr !== null ? (
-                    <span className="text-[15px] font-bold" style={{ color: col(s.acwr) }}>{s.acwr.toFixed(2)}</span>
-                  ) : (
-                    <span className="text-[12px] text-white/30">–</span>
-                  )}
-                </div>
+                )}
               </div>
             )
           })}
