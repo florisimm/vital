@@ -99,10 +99,27 @@ function isCycling(a: Activity) {
 // Consistent load unit (minutes) with zone-2 dampening.
 // Avoids mixing real kilojoules (available on recent Strava syncs) with the
 // moving_time fallback on older records, which would inflate acute:chronic ratios.
+function cardioZoneMultiplier(hr: number): number {
+  if (hr < 130) return 0.25  // Zone 1: recovery
+  if (hr < 150) return 0.50  // Zone 2: aerobic base
+  if (hr < 165) return 0.75  // Zone 3: aerobic threshold
+  if (hr < 175) return 1.00  // Zone 4: lactate threshold
+  return 1.25                 // Zone 5: VO2max / race effort
+}
+
 function effectiveLoad(a: Activity): number {
   const mins = (a.moving_time ?? 0) / 60
-  const isZone2 = a.average_heartrate != null && a.average_heartrate < 145
-  return mins * (isZone2 ? 0.5 : 1)
+  if (mins === 0) return 0
+  if (a.average_heartrate) return mins * cardioZoneMultiplier(a.average_heartrate)
+  if (isRun(a) && a.average_speed) {
+    const mps = a.average_speed
+    return mins * (mps > 4.0 ? 1.00 : mps > 3.2 ? 0.75 : 0.50)
+  }
+  if (isRide(a) && a.average_speed) {
+    const kmh = a.average_speed * 3.6
+    return mins * (kmh > 30 ? 1.00 : kmh > 22 ? 0.75 : 0.50)
+  }
+  return mins * 0.75
 }
 
 const COMPOUND_KEYWORDS = [
@@ -120,6 +137,20 @@ const RECOVERY_TITLE_KEYWORDS = [
 ]
 const ACCESSORY_TITLE_KEYWORDS = ['abs', 'core', 'yoga']
 
+// Per-set intensity factor using Epley %1RM estimate combined with rep-range modifier.
+// Normalised so that 8 reps at typical working weight ≈ 1.0.
+function setIntensityFactor(sets: Array<{ weight_kg: number; reps: number }>): number {
+  const valid = (sets ?? []).filter(s => s.reps > 0)
+  if (!valid.length) return 1.0
+  const avg = valid.reduce((sum, s) => {
+    if (s.weight_kg <= 0) return sum + (s.reps <= 10 ? 0.85 : 0.65)  // bodyweight
+    const pct1rm = s.reps <= 1 ? 1.0 : 30 / (30 + s.reps)
+    const repMod = s.reps <= 3 ? 1.35 : s.reps <= 6 ? 1.15 : s.reps <= 12 ? 1.0 : 0.7
+    return sum + Math.min(1.5, pct1rm * repMod)
+  }, 0) / valid.length
+  return Math.max(0.4, avg)
+}
+
 // Returns a 0.10–1.0 load factor for a Hevy workout based on exercise composition.
 // With exercise data: compound × 1.0 + isolation × 0.6 + other × 0.25 (weighted by set counts).
 // Without exercise data: title-based — recovery → 0.10, accessory → 0.25, primary → 1.0.
@@ -127,14 +158,16 @@ function sessionLoadFactor(h: HevyWorkout): number {
   if (h.exercises && h.exercises.length > 0) {
     const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
     if (totalSets > 0) {
-      let cSets = 0, iSets = 0
+      let compEff = 0, isoEff = 0, otherEff = 0
       for (const ex of h.exercises) {
         const t = (ex.title ?? '').toLowerCase()
         const n = ex.sets?.length ?? 0
-        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       cSets += n
-        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) iSets += n
+        const intensity = setIntensityFactor(ex.sets ?? [])
+        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
+        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
+        else                                                    otherEff += n * 0.25 * intensity
       }
-      return (cSets * 1.0 + iSets * 0.6 + (totalSets - cSets - iSets) * 0.25) / totalSets
+      return (compEff + isoEff + otherEff) / totalSets
     }
   }
   const t = (h.title ?? '').toLowerCase()
@@ -149,18 +182,22 @@ function sessionLoadBreakdown(h: HevyWorkout): { compound: number; isolation: nu
   if (h.exercises && h.exercises.length > 0) {
     const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
     if (totalSets > 0) {
-      let cSets = 0, iSets = 0
+      let compEff = 0, isoEff = 0, otherEff = 0
       for (const ex of h.exercises) {
         const t = (ex.title ?? '').toLowerCase()
         const n = ex.sets?.length ?? 0
-        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       cSets += n
-        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) iSets += n
+        const intensity = setIntensityFactor(ex.sets ?? [])
+        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
+        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
+        else                                                    otherEff += n * 0.25 * intensity
       }
-      const oSets = totalSets - cSets - iSets
+      const totalEff = compEff + isoEff + otherEff
+      if (totalEff === 0) return { compound: 0, isolation: 0, accessory: mins * 0.25 }
+      const load = hevyLoad(h)
       return {
-        compound:  (cSets / totalSets) * mins * 1.0,
-        isolation: (iSets / totalSets) * mins * 0.6,
-        accessory: (oSets / totalSets) * mins * 0.25,
+        compound:  (compEff / totalEff) * load,
+        isolation: (isoEff / totalEff) * load,
+        accessory: (otherEff / totalEff) * load,
       }
     }
   }
@@ -650,6 +687,48 @@ export function computeMuscleRecovery(hevy: HevyWorkout[]) {
     const hoursSince = (Date.now() - new Date(lastTrained).getTime()) / 3600000
     const recovery = hoursSince < 24 ? 20 : hoursSince < 48 ? 55 : hoursSince < 72 ? 80 : 100
     return { label, recovery }
+  })
+}
+
+export function computeMuscleGroupAdvice(hevy: HevyWorkout[]): {
+  label: string; recovery: number; weekLoad: number
+  recommendation: 'train' | 'possible' | 'rest'
+}[] {
+  const groups = [
+    { label: 'Legs',      keywords: ['squat', 'deadlift', 'leg press', 'lunge', 'rdl', 'hip thrust', 'calf', 'hamstring', 'quad', 'leg curl', 'leg extension'] },
+    { label: 'Chest',     keywords: ['bench', 'push', 'fly', 'dip', 'chest'] },
+    { label: 'Back',      keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'] },
+    { label: 'Shoulders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'] },
+    { label: 'Arms',      keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'] },
+  ]
+  const weekStart = startOfWeek()
+  const weekHevy  = hevy.filter(h => h.start_time >= weekStart && !isAccessorySession(h))
+  const sorted    = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))
+
+  return groups.map(({ label, keywords }) => {
+    let lastTrained: string | null = null
+    for (const w of sorted) {
+      if (!w.exercises) continue
+      if (w.exercises.some(ex => keywords.some(k => (ex.title ?? '').toLowerCase().includes(k)))) {
+        lastTrained = w.start_time; break
+      }
+    }
+    const hoursSince = lastTrained ? (Date.now() - new Date(lastTrained).getTime()) / 3600000 : Infinity
+    const recovery   = hoursSince < 24 ? 20 : hoursSince < 48 ? 55 : hoursSince < 72 ? 80 : 100
+
+    let weekLoad = 0
+    weekHevy.forEach(w => {
+      ;(w.exercises ?? []).forEach(ex => {
+        const t = (ex.title ?? '').toLowerCase()
+        if (!keywords.some(k => t.includes(k))) return
+        const intensity = setIntensityFactor(ex.sets ?? [])
+        const base = COMPOUND_KEYWORDS.some(k => t.includes(k)) ? 1.0 : 0.6
+        weekLoad += (ex.sets?.length ?? 0) * base * intensity
+      })
+    })
+
+    const recommendation = recovery >= 80 ? 'train' : recovery >= 55 ? 'possible' : 'rest'
+    return { label, recovery, weekLoad: Math.round(weekLoad * 10) / 10, recommendation }
   })
 }
 
@@ -1916,41 +1995,95 @@ function computeTodaysFocus(
     }
   }
 
-  // ── No events — fallback on readiness + load ────────────────────────────────
+  // ── No events — muscle-group aware recommendation ──────────────────────────
   const weekStart    = startOfWeek()
-  const weekStrength = hevy.filter(h => h.start_time >= weekStart).length
+  const weekStrength = hevy.filter(h => h.start_time >= weekStart && !isAccessorySession(h)).length
   const weekRuns     = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
+  const weekRides    = activities.filter(a => isRide(a) && a.start_date >= weekStart).length
+  const rs           = riskScore()
 
+  // Hard rest: very low readiness
   if (recoveryPct < 40) return {
-    emoji: '😴', label: 'Rest Today', ...ACT.skip,
+    emoji: '😴', label: 'Rustdag aanbevolen', ...ACT.skip,
     reasons: [
       `Readiness ${recoveryPct}%`,
       ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
-      ...(upcomingHard ? [`${upcomingHard.title} gepland — herstel nu verhoogt de kwaliteit`] : []),
-    ].slice(0, 3) as string[],
+    ],
   }
-  if (highLoad) return {
-    emoji: '🚶', label: 'Easy Training Recommended', ...ACT.easier,
+
+  // Active recovery: low readiness or high risk
+  if (recoveryPct < 55 || rs >= 5) return {
+    emoji: '🚶', label: 'Active Recovery', ...ACT.recover,
     reasons: [
-      `Load +${loadPct}% boven baseline`,
-      `Readiness ${recoveryPct}%`,
-      ...(upcomingHard ? [`${upcomingHard.title} gepland — herstel nu verhoogt de kwaliteit`] : []),
-    ].slice(0, 3) as string[],
+      recoveryPct < 55 ? `Readiness ${recoveryPct}% — lichte beweging bevordert herstel` : `Risicoscore hoog — actief herstel aanbevolen`,
+      ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
+    ],
   }
-  if (recoveryPct >= 82 && perf.score >= 70) return {
-    emoji: weekRuns <= weekStrength ? '🏃' : '💪',
-    label: 'Hard Training Appropriate', ...ACT.proceed,
-    reasons: [`Readiness ${recoveryPct}%`, 'Belasting binnen normaal bereik'],
+
+  // Muscle group advice
+  const muscleAdvice  = computeMuscleGroupAdvice(hevy)
+  const legsReady     = muscleAdvice.find(g => g.label === 'Legs')?.recommendation === 'train'
+  const chestReady    = muscleAdvice.find(g => g.label === 'Chest')?.recommendation === 'train'
+  const shoulderReady = muscleAdvice.find(g => g.label === 'Shoulders')?.recommendation === 'train'
+  const backReady     = muscleAdvice.find(g => g.label === 'Back')?.recommendation === 'train'
+  const armsReady     = muscleAdvice.find(g => g.label === 'Arms')?.recommendation === 'train'
+  const pushReady     = chestReady && shoulderReady
+  const pullReady     = backReady
+
+  const cardioReady = recoveryPct >= 65 && weekRuns + weekRides < 5
+  const strengthBalance = weekStrength < 3
+
+  // Leg day — most demanding, suggest when recovered and not overdone this week
+  if (legsReady && strengthBalance) return {
+    emoji: '🏋️', label: 'Leg Day aangeraden', ...ACT.proceed,
+    reasons: [
+      'Benen hersteld en klaar voor belasting',
+      weekStrength < 2 ? 'Nog weinig krachttraining deze week' : 'Goede verdeling voor de week',
+    ],
   }
-  if (recoveryPct >= 65) return {
-    emoji: weekStrength < 2 ? '💪' : '🚴',
-    label: weekStrength < 2 ? 'Moderate Training Recommended' : 'Easy Training Recommended',
-    ...(weekStrength < 2 ? ACT.proceed : ACT.easier),
-    reasons: [`Readiness ${recoveryPct}%`],
+
+  // Zone 2 cardio — aerobic base building
+  if (cardioReady && weekRuns + weekRides < 3 && !legsReady) return {
+    emoji: '🏃', label: 'Zone 2 Cardio aangeraden', ...ACT.proceed,
+    reasons: [
+      `Readiness ${recoveryPct}% — zone 2 bouwt aerobe basis`,
+      'Weinig cardio deze week — goed moment voor duurtraining',
+    ],
   }
+
+  // Push day
+  if (pushReady && strengthBalance) return {
+    emoji: '💪', label: 'Push Day aangeraden', ...ACT.proceed,
+    reasons: [
+      'Borst en schouders hersteld',
+      pullReady ? 'Push/Pull afwisseling voor optimale herstelbalans' : 'Goed moment voor druk werk',
+    ],
+  }
+
+  // Pull day
+  if (pullReady && strengthBalance) return {
+    emoji: '💪', label: 'Pull Day aangeraden', ...ACT.proceed,
+    reasons: [
+      'Rug hersteld — rijen en pull-ups aanbevolen',
+      armsReady ? 'Armen ook hersteld — combineer met bicep werk' : 'Focus op compound rug oefeningen',
+    ],
+  }
+
+  // Zone 2 cardio fallback
+  if (cardioReady) return {
+    emoji: '🚴', label: 'Zone 2 Cardio aangeraden', ...ACT.proceed,
+    reasons: [`Readiness ${recoveryPct}% — duurtraining of herstelrit aanbevolen`],
+  }
+
+  // Default: light training or rest
+  if (recoveryPct >= 70) return {
+    emoji: '🏃', label: 'Light Training', ...ACT.easier,
+    reasons: ['Geen specifieke spiergroepen volledig hersteld', 'Lichte intensiteit aanbevolen'],
+  }
+
   return {
-    emoji: '🏃', label: 'Easy Training Recommended', ...ACT.easier,
-    reasons: [`Readiness ${recoveryPct}%`, ...(medLoad ? [`Load +${loadPct}% boven baseline`] : [])],
+    emoji: '😴', label: 'Rustdag aanbevolen', ...ACT.skip,
+    reasons: [`Readiness ${recoveryPct}% — volledig herstel aanbevolen`],
   }
 }
 
