@@ -1617,24 +1617,23 @@ function computeTodaysFocus(
   const rampHigh     = rampRate !== null && rampRate > 30
   const rampElevated = rampRate !== null && rampRate > 15
 
-  // Per-sport weighted ACWR risk:
-  //   new sports  → 1.5× weight (body not yet adapted)
-  //   established (≥10 training days) → 0.7× weight (routine load, lower risk)
-  //   confidence shrinkage applied per sport before weighting
+  // Per-sport ACWR risk weighted by each sport's share of total 28-day load.
+  // A newly introduced sport with small load contribution does not dominate global risk.
+  // Confidence shrinkage still applies to the per-sport ACWR value itself.
   function weightedACWRRisk(): number {
     const active = acwrDetail.sports.filter(s => s.acwr !== null && s.acuteLoad > 0)
     if (active.length === 0) return 0
-    let wSum = 0, loadSum = 0
+    const totalLoad = active.reduce((sum, sp) => sum + sp.acuteLoad, 0)
+    if (totalLoad === 0) return 0
+    let risk = 0
     for (const sp of active) {
       if (sp.acwr === null) continue
       const eff = sp.confidence === 'high'   ? sp.acwr
         : sp.confidence === 'medium' ? 1.0 + (sp.acwr - 1.0) * 0.75
         : /* low */                    1.0 + (sp.acwr - 1.0) * 0.50
-      const w = sp.isNew ? 1.5 : sp.daysWithData >= 10 ? 0.7 : 1.0
-      wSum    += Math.max(0, eff - 1.0) * w * sp.acuteLoad
-      loadSum += sp.acuteLoad
+      risk += Math.max(0, eff - 1.0) * (sp.acuteLoad / totalLoad)
     }
-    return loadSum > 0 ? wSum / loadSum : 0
+    return risk
   }
 
   // Sport-aware ramp: penalty is dampened when ALL elevated sports are established patterns.
@@ -1706,9 +1705,9 @@ function computeTodaysFocus(
     else if (recoveryPct > 85) s -= 1  // High readiness partially offsets elevated ACWR / ramp
     // Per-sport weighted ACWR risk (new activities count more, established count less)
     const ar = weightedACWRRisk()
-    if (ar >= 0.55) s += 3       // e.g. new sport ACWR 1.37 or established ACWR 1.79
-    else if (ar >= 0.35) s += 2  // e.g. new sport ACWR 1.23 or established ACWR 1.50
-    else if (ar >= 0.18) s += 1  // e.g. established ACWR 1.26
+    if (ar >= 0.55) s += 3       // weighted ACWR ≥ 1.55 (dominant sport very high)
+    else if (ar >= 0.35) s += 2  // weighted ACWR ≥ 1.35 (dominant sport high)
+    else if (ar >= 0.18) s += 1  // weighted ACWR ≥ 1.18 (elevated)
     // Ramp penalty: dampened when all elevated sports are established (≥10 training days, not new)
     if (rampHigh)                          s += rampAllEstablished ? 1 : 2
     else if (rampElevated && !rampAllEstablished) s += 1
