@@ -104,7 +104,22 @@ function effectiveLoad(a: Activity): number {
   return mins * (isZone2 ? 0.5 : 1)
 }
 
+const COMPOUND_KEYWORDS = [
+  'squat', 'deadlift', 'rdl', 'bench', 'row', 'press',
+  'pull-up', 'pullup', 'pull up', 'chin-up', 'chinup', 'chin up', 'lunge',
+]
+
 function isAccessorySession(h: HevyWorkout): boolean {
+  // Exercise composition: >70% compound-lift sets → never accessory, regardless of title
+  if (h.exercises && h.exercises.length > 0) {
+    const totalSets    = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
+    const compoundSets = h.exercises.reduce((s, ex) => {
+      const t = (ex.title ?? '').toLowerCase()
+      return s + (COMPOUND_KEYWORDS.some(k => t.includes(k)) ? (ex.sets?.length ?? 0) : 0)
+    }, 0)
+    if (totalSets > 0 && compoundSets / totalSets > 0.70) return false
+  }
+  // Title / workout-type detection
   const t = (h.title ?? '').toLowerCase()
   return ['abs', 'core', 'mobility', 'stretch', 'recovery', 'herstel',
           'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
