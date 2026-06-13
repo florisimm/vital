@@ -154,10 +154,13 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
   const sports: SportBreakdown[] = buckets
     .map(({ key, label, acts, hevyW }) => {
       const bd = calcBreakdown(acts, hevyW)
-      const recentN = acts.filter(a => a.start_date >= t28).length + hevyW.filter(h => h.start_time >= t28).length
-      const priorN  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).length
-                    + hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).length
-      return { key, label, ...bd, isNew: recentN >= 2 && priorN === 0 }
+      const recentN    = acts.filter(a => a.start_date >= t28).length + hevyW.filter(h => h.start_time >= t28).length
+      const recentLoad = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a), 0)
+                       + hevyW.filter(h => h.start_time >= t28).reduce((s, h) => s + hevyLoad(h), 0)
+      const priorLoad  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).reduce((s, a) => s + effectiveLoad(a), 0)
+                       + hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).reduce((s, h) => s + hevyLoad(h), 0)
+      // "New" = at least 2 recent sessions AND (no prior baseline OR load exceeds 125% of own 4-week baseline)
+      return { key, label, ...bd, isNew: recentN >= 2 && (priorLoad === 0 || recentLoad > priorLoad * 1.25) }
     })
     .filter(s => s.daysWithData > 0)
 
@@ -1634,12 +1637,11 @@ function computeTodaysFocus(
     return loadSum > 0 ? wSum / loadSum : 0
   }
 
-  // Established strength pattern: routine push/pull/legs does not inflate ramp risk
-  const weekSt = startOfWeek()
-  const t28    = new Date(Date.now() - 28 * 86400000).toISOString()
-  const avgWeeklyStrength = hevy.filter(h => h.start_time >= t28).length / 4
-  const thisWeekStrength  = hevy.filter(h => h.start_time >= weekSt).length
-  const establishedStrength = avgWeeklyStrength >= 2 && thisWeekStrength <= avgWeeklyStrength * 1.25
+  // Sport-aware ramp: penalty is dampened when ALL elevated sports are established patterns.
+  // This prevents a new cycling habit from reducing the penalty for an established strength pattern,
+  // and prevents established strength from reducing the penalty for new cycling.
+  const elevatedSports     = acwrDetail.sports.filter(s => s.acwr !== null && s.acwr > 1.2 && s.acuteLoad > 0)
+  const rampAllEstablished = elevatedSports.length > 0 && elevatedSports.every(s => !s.isNew && s.daysWithData >= 10)
 
   // Consecutive training days (days before today with a workout)
   const todayMs = new Date().setHours(0, 0, 0, 0)
@@ -1698,17 +1700,18 @@ function computeTodaysFocus(
   // Multi-factor risk score — drives recommendation escalation
   function riskScore(): number {
     let s = 0
-    if (recoveryPct < 45) s += 3
+    if (recoveryPct < 45)      s += 3
     else if (recoveryPct < 60) s += 2
     else if (recoveryPct < 70) s += 1
+    else if (recoveryPct > 85) s -= 1  // High readiness partially offsets elevated ACWR / ramp
     // Per-sport weighted ACWR risk (new activities count more, established count less)
     const ar = weightedACWRRisk()
     if (ar >= 0.55) s += 3       // e.g. new sport ACWR 1.37 or established ACWR 1.79
     else if (ar >= 0.35) s += 2  // e.g. new sport ACWR 1.23 or established ACWR 1.50
     else if (ar >= 0.18) s += 1  // e.g. established ACWR 1.26
-    if (rampHigh && !establishedStrength) s += 2
-    else if (rampHigh) s += 1
-    else if (rampElevated && !establishedStrength) s += 1
+    // Ramp penalty: dampened when all elevated sports are established (≥10 training days, not new)
+    if (rampHigh)                          s += rampAllEstablished ? 1 : 2
+    else if (rampElevated && !rampAllEstablished) s += 1
     if (consecutiveDays >= 5) s += 2
     else if (consecutiveDays >= 3) s += 1
     return s
