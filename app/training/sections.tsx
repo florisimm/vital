@@ -25,6 +25,7 @@ export type HevyWorkout = {
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
   confidence: 'low' | 'medium' | 'high'; daysWithData: number
+  acuteLoad: number
 }
 type ACWRDetail = {
   total: number | null; confidence: 'low' | 'medium' | 'high'
@@ -117,7 +118,7 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
   function calcBreakdown(acts: Activity[], hevyW: HevyWorkout[]) {
     const a28 = acts.filter(a => a.start_date >= t28)
     const h28 = hevyW.filter(h => h.start_time >= t28)
-    if (!a28.length && !h28.length) return { acwr: null, confidence: 'low' as const, daysWithData: 0 }
+    if (!a28.length && !h28.length) return { acwr: null, confidence: 'low' as const, daysWithData: 0, acuteLoad: 0 }
 
     const acute    = a28.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
                    + h28.filter(h => h.start_time >= t7).reduce((s, h) => s + hevyLoad(h), 0)
@@ -131,7 +132,7 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
 
     const acwr = chronic28 / 4 > 5 ? Math.round((acute / (chronic28 / 4)) * 10) / 10 : null
 
-    return { acwr, confidence, daysWithData: dySet.size }
+    return { acwr, confidence, daysWithData: dySet.size, acuteLoad: acute }
   }
 
   const hevyMain  = hevy.filter(h => !h.title.toLowerCase().includes('hyrox'))
@@ -163,15 +164,17 @@ function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: num
       : 'Geen trainingsdata beschikbaar in de afgelopen 28 dagen.'
   } else if (elevated.length > 0) {
     const top = elevated[0]
+    const totalAcuteLoad = sports.reduce((s, sp) => s + sp.acuteLoad, 0)
+    const contribPct = totalAcuteLoad > 0 ? Math.round((top.acuteLoad / totalAcuteLoad) * 100) : null
+    let line = contribPct !== null
+      ? `${top.label} draagt momenteel ${contribPct}% bij aan de verhoogde ACWR.`
+      : `De stijging komt voornamelijk van ${top.label} (ACWR ${top.acwr?.toFixed(2)}).`
     if (rampRate !== null && Math.abs(rampRate) > 10) {
       const sign = rampRate > 0 ? '+' : ''
-      explanation = `Je trainingsbelasting steeg ${sign}${rampRate}% ten opzichte van vorige week. De grootste bijdrage komt van ${top.label} (ACWR ${top.acwr?.toFixed(2)}).`
-    } else if (top.confidence !== 'high') {
-      explanation = `Je ACWR wordt voornamelijk verhoogd door ${top.label}. Deze activiteit heeft nog beperkte historische data waardoor de score tijdelijk hoger kan uitvallen.`
-    } else {
-      const pct = Math.round(((top.acwr ?? 1) - 1) * 100)
-      explanation = `De stijging komt voornamelijk van ${top.label}, ${pct}% boven je 4-weeks gemiddelde.`
+      line += ` Ramp rate: ${sign}${rampRate}% vs vorige week.`
     }
+    if (top.confidence !== 'high') line += ' Beperkte data — waarde stabiliseert met meer sessies.'
+    explanation = line
   } else if (total.confidence === 'low') {
     explanation = 'ACWR is gebaseerd op weinig sessies. De waarde wordt nauwkeuriger naarmate er meer trainingsdata beschikbaar is.'
   } else {
@@ -725,24 +728,60 @@ function computeTrainingStreak(hevy: HevyWorkout[]) {
 
 // ─── AI Insight builders ──────────────────────────────────────────────────────
 
-function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[]): string {
-  const { score, label, loadRatio } = computePerformanceScore(activities, hevy)
+function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[]): string {
+  const { loadRatio } = computePerformanceScore(activities, hevy)
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const weekRuns = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).length
-  const weekStrength = hevy.filter(h => h.start_time >= sevenDaysAgo).length
-  const weekKm = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const todayStr    = new Date().toISOString().slice(0, 10)
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const nowStr      = new Date().toISOString()
 
-  if (loadRatio > 1.3)
-    return `Training load is ${Math.round((loadRatio - 1) * 100)}% above your recent baseline. A lighter day may help recovery.`
-  if (weekRuns === 0 && weekStrength === 0)
-    return 'No sessions logged this week yet. Even a short workout maintains your fitness base — consistency beats intensity long-term.'
+  const sportKw = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox',
+    'run','loop','hardloop','ride','fiet','cycl','bike','swim','zwem','interval','tempo','training','workout','sport']
+  const isSportEv = (e: any) => sportKw.some(k => (e.title ?? '').toLowerCase().includes(k))
+
+  const todayEvts = (calendarEvents ?? [])
+    .filter((e: any) => (e.start_datetime || e.start_date).slice(0, 10) === todayStr
+      && (e.start_datetime || e.start_date) >= nowStr && isSportEv(e))
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+  const tomorrowEvts = (calendarEvents ?? [])
+    .filter((e: any) => (e.start_datetime || e.start_date).slice(0, 10) === tomorrowStr && isSportEv(e))
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+
+  const weekRuns     = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).length
+  const weekStrength = hevy.filter(h => h.start_time >= sevenDaysAgo).length
+  const weekKm       = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const loadPct      = Math.round((loadRatio - 1) * 100)
+
+  // High load — reference specific upcoming sessions
+  if (loadRatio > 1.3) {
+    if (todayEvts.length > 0 && tomorrowEvts.length > 0)
+      return `${todayEvts[0].title} staat vandaag gepland. Door de huidige trainingsbelasting (+${loadPct}%) kan een lichtere sessie het herstel voor ${tomorrowEvts[0].title} van morgen verbeteren.`
+    if (todayEvts.length > 0)
+      return `${todayEvts[0].title} staat vandaag gepland. Trainingsbelasting is +${loadPct}% boven je baseline — overweeg de intensiteit aan te passen.`
+    if (tomorrowEvts.length > 0)
+      return `${tomorrowEvts[0].title} staat morgen gepland. Een hersteldag vandaag vergroot de kans op een kwalitatieve sessie (+${loadPct}% huidige belasting).`
+    return `Trainingsbelasting is +${loadPct}% boven je baseline. Een lichtere dag kan het herstel bevorderen.`
+  }
+
+  // No activity yet this week
+  if (weekRuns === 0 && weekStrength === 0) {
+    if (todayEvts.length > 0)
+      return `${todayEvts[0].title} staat vandaag gepland — goed moment om de week te starten. Consistentie bouwt het meeste resultaat op lange termijn.`
+    return 'Nog geen sessies deze week. Zelfs een korte training houdt de conditie op peil — consistentie is belangrijker dan intensiteit.'
+  }
+
+  // Back-to-back planned sessions
+  if (todayEvts.length > 0 && tomorrowEvts.length > 0)
+    return `${todayEvts[0].title} vandaag, ${tomorrowEvts[0].title} morgen — druk schema. Zorg voor voldoende herstel en voeding tussen de sessies.`
+
+  // Normal summary with planning context
   const parts: string[] = []
-  if (weekRuns > 0) parts.push(`${weekRuns} run${weekRuns > 1 ? 's' : ''}${weekKm > 0 ? ` (${weekKm.toFixed(1)} km)` : ''}`)
-  if (weekStrength > 0) parts.push(`${weekStrength} strength session${weekStrength > 1 ? 's' : ''}`)
-  const summary = parts.join(' and ') + ' this week.'
-  if (score >= 80) return `${summary} Strong week — performance at ${score}/100. Keep the momentum but protect your recovery.`
-  if (loadRatio < 0.7 && activities.length > 0) return `${summary} Load is below your baseline — a good moment to add a session safely.`
-  return `${summary} Performance at ${score}/100 — ${label.toLowerCase()}.`
+  if (weekRuns > 0) parts.push(`${weekRuns}× hardlopen${weekKm > 0 ? ` (${weekKm.toFixed(1)} km)` : ''}`)
+  if (weekStrength > 0) parts.push(`${weekStrength}× kracht`)
+  const summary = parts.join(' en ') + ' deze week.'
+  if (todayEvts.length > 0) return `${summary} ${todayEvts[0].title} staat nog gepland vandaag.`
+  if (tomorrowEvts.length > 0) return `${summary} ${tomorrowEvts[0].title} gepland morgen — bereid je voor.`
+  return summary
 }
 
 function buildRunningInsight(activities: Activity[]): string {
@@ -1538,6 +1577,8 @@ function computeTodaysFocus(
 ): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const day2Str     = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)
+  const day3Str     = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
   const events      = calendarEvents ?? []
 
   const ACT = {
@@ -1596,6 +1637,11 @@ function computeTodaysFocus(
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
   const tomorrowEvts = events.filter(e => evtDate(e) === tomorrowStr && isSportEvt(e))
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+  const day2Evts     = events.filter(e => evtDate(e) === day2Str && isSportEvt(e))
+  const day3Evts     = events.filter(e => evtDate(e) === day3Str && isSportEvt(e))
+  const upcomingHard = [...tomorrowEvts, ...day2Evts, ...day3Evts].find(e => {
+    const i = classify(e.title); return i === 'hard' || i === 'very_hard'
+  }) ?? null
 
   function decide(intensity: Intensity): typeof ACT[keyof typeof ACT] {
     if (intensity === 'zone2') return recoveryPct < 25 ? ACT.skip    : ACT.proceed
@@ -1618,12 +1664,17 @@ function computeTodaysFocus(
     return tomorrowEvts.length === 0 ? ACT.moveTmr : ACT.skip
   }
 
-  function buildReasons(intensity: Intensity, tmEv?: any): string[] {
+  function buildReasons(intensity: Intensity): string[] {
     const r: string[] = []
-    if (highLoad || medLoad)      r.push(`Load +${loadPct}% boven baseline`)
-    if (recoveryPct < 70)         r.push(`Readiness ${recoveryPct}%`)
-    if (tmEv)                     r.push(`${tmEv.title} gepland morgen`)
-    if (intensity === 'zone2')    r.push('Zone 2 — lage impact op herstel')
+    if (highLoad || medLoad)   r.push(`Load +${loadPct}% boven baseline`)
+    if (recoveryPct < 70)      r.push(`Readiness ${recoveryPct}%`)
+    if (upcomingHard) {
+      const d = evtDate(upcomingHard)
+      const dayLbl = d === tomorrowStr ? 'morgen' : d === day2Str ? 'overmorgen' : 'binnenkort'
+      r.push(`${upcomingHard.title} gepland ${dayLbl} — extra herstel verhoogt de sessiekwaliteit`)
+    } else if (intensity === 'zone2' && r.length < 2) {
+      r.push('Zone 2 — lage impact op herstel')
+    }
     return r.slice(0, 3)
   }
 
@@ -1632,7 +1683,6 @@ function computeTodaysFocus(
     const ev        = todayEvts[0]
     const intensity = classify(ev.title)
     const act       = decide(intensity)
-    const tmEv      = tomorrowEvts[0]
     const predicted = predictTomorrow(intensity)
     const delta     = predicted - recoveryPct
     const prediction = act !== ACT.proceed && act !== ACT.skip
@@ -1643,32 +1693,37 @@ function computeTodaysFocus(
       emoji: sportEmoji(ev.title),
       label: `${ev.title}${evtTime(ev)}`,
       ...act,
-      reasons:    buildReasons(intensity, tmEv),
+      reasons:    buildReasons(intensity),
       prediction,
     }
   }
 
-  // ── No today events — look at tomorrow ─────────────────────────────────────
-  if (tomorrowEvts.length > 0) {
-    const tm        = tomorrowEvts[0]
-    const intensity = classify(tm.title)
-    if (intensity === 'hard' || intensity === 'very_hard') {
+  // ── No today events — look ahead up to 3 days ──────────────────────────────
+  const nextPlanned = tomorrowEvts[0] ?? day2Evts[0] ?? day3Evts[0] ?? null
+  if (nextPlanned) {
+    const npIntensity = classify(nextPlanned.title)
+    const npDate      = evtDate(nextPlanned)
+    const npDayLbl    = npDate === tomorrowStr ? 'morgen' : npDate === day2Str ? 'overmorgen' : 'binnenkort'
+    if (npIntensity === 'hard' || npIntensity === 'very_hard') {
       if (recoveryPct < 50 || highLoad) {
         const restReasons = [
           ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
           recoveryPct < 50 ? `Readiness ${recoveryPct}%` : '',
-          `${tm.title} gepland morgen`,
+          `${nextPlanned.title} gepland ${npDayLbl} — extra herstel verhoogt de sessiekwaliteit`,
         ].filter(Boolean).slice(0, 3) as string[]
         return {
           emoji: '😴', label: 'Rest Today',
           ...ACT.skip, reasons: restReasons,
-          prediction: `Extra herstelruimte verhoogt readiness voor ${tm.title} morgen.`,
+          prediction: `Extra herstelruimte verhoogt readiness voor ${nextPlanned.title} ${npDayLbl}.`,
         }
       }
       return {
         emoji: '🚶', label: 'Light Training',
         ...ACT.easier,
-        reasons: [`${tm.title} gepland morgen`, ...(medLoad ? [`Load +${loadPct}% boven baseline`] : [])].slice(0, 3) as string[],
+        reasons: [
+          `${nextPlanned.title} gepland ${npDayLbl} — schone benen verhogen de sessiekwaliteit`,
+          ...(medLoad ? [`Load +${loadPct}% boven baseline`] : []),
+        ].slice(0, 3) as string[],
       }
     }
   }
@@ -1680,11 +1735,19 @@ function computeTodaysFocus(
 
   if (recoveryPct < 40) return {
     emoji: '😴', label: 'Rest Today', ...ACT.skip,
-    reasons: [`Readiness ${recoveryPct}%`, ...(highLoad ? [`Load +${loadPct}% boven baseline`] : [])],
+    reasons: [
+      `Readiness ${recoveryPct}%`,
+      ...(highLoad ? [`Load +${loadPct}% boven baseline`] : []),
+      ...(upcomingHard ? [`${upcomingHard.title} gepland — herstel nu verhoogt de kwaliteit`] : []),
+    ].slice(0, 3) as string[],
   }
   if (highLoad) return {
     emoji: '🚶', label: 'Easy Training Recommended', ...ACT.easier,
-    reasons: [`Load +${loadPct}% boven baseline`, `Readiness ${recoveryPct}%`],
+    reasons: [
+      `Load +${loadPct}% boven baseline`,
+      `Readiness ${recoveryPct}%`,
+      ...(upcomingHard ? [`${upcomingHard.title} gepland — herstel nu verhoogt de kwaliteit`] : []),
+    ].slice(0, 3) as string[],
   }
   if (recoveryPct >= 82 && perf.score >= 70) return {
     emoji: weekRuns <= weekStrength ? '🏃' : '💪',
@@ -1883,10 +1946,32 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
   )
 }
 
-function WeekSummaryCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs, weekVolume, perf }: {
-  weekCompleted: number; weekPlanned: number; weekKm: number
+function buildWeekPrediction(
+  acwrDetail: ACWRDetail,
+  rampRate: number | null,
+  recoveryPct: number,
+): string | null {
+  const acwr = acwrDetail.total
+  if (acwr !== null && acwr > 1.3) {
+    if (rampRate !== null && rampRate > 20)
+      return 'Load blijft hoog de komende dagen — plan een hersteldag.'
+    const projected = Math.max(1.0, acwr - (acwr - 1.0) * 0.56)
+    return `ACWR daalt naar ~${projected.toFixed(2)} binnen 4 dagen bij gelijkblijvende belasting.`
+  }
+  if (recoveryPct < 60) {
+    const daysNeeded = Math.max(1, Math.ceil((70 - recoveryPct) / 8))
+    const target = new Date(Date.now() + daysNeeded * 86400000)
+    const dayName = target.toLocaleDateString('nl-NL', { weekday: 'long' })
+    return `Readiness verwacht >70% ${dayName}.`
+  }
+  return null
+}
+
+function WeekSummaryCard({ weekCompleted, weekPlanned, weekUpcomingPlanned, weekKm, weekDurationSecs, weekVolume, perf, prediction }: {
+  weekCompleted: number; weekPlanned: number; weekUpcomingPlanned: number; weekKm: number
   weekDurationSecs: number; weekVolume: number
   perf: ReturnType<typeof computePerformanceScore>
+  prediction: string | null
 }) {
   const target = Math.max(weekPlanned, 4, weekCompleted)
   const progress = target > 0 ? Math.min(1, weekCompleted / target) : 0
@@ -1901,9 +1986,14 @@ function WeekSummaryCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs,
       <div className="flex flex-col gap-3">
         <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">This Week</span>
         <div className="flex items-end justify-between">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[40px] font-bold text-white leading-none">{weekCompleted}</span>
-            <span className="text-[17px] font-semibold text-white/50">workout{weekCompleted !== 1 ? 's' : ''}</span>
+          <div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[40px] font-bold text-white leading-none">{weekCompleted}</span>
+              <span className="text-[17px] font-semibold text-white/50">voltooid</span>
+            </div>
+            {weekUpcomingPlanned > 0 && (
+              <span className="text-[13px] text-white/40 mt-0.5 block">{weekUpcomingPlanned} gepland</span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 pb-1">
             <div className="w-[8px] h-[8px] rounded-full shrink-0" style={{ background: perf.color }} />
@@ -1915,15 +2005,15 @@ function WeekSummaryCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs,
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progress * 100}%`, background: 'rgb(45,212,191)' }} />
         </div>
-        {weekPlanned > 0 && (
-          <span className="text-[12px] text-white/30">{weekCompleted} of {weekPlanned} planned</span>
-        )}
         {stats.length > 0 && (
           <div className="flex gap-4 pt-1 border-t border-white/[0.06]">
             {stats.map((s, i) => (
               <span key={i} className="text-[14px] font-semibold text-white/70">{s}</span>
             ))}
           </div>
+        )}
+        {prediction && (
+          <p className="text-[12px] text-white/40 italic leading-relaxed">{prediction}</p>
         )}
       </div>
     </Card>
@@ -2228,6 +2318,11 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
     const dt = e.start_datetime || e.start_date
     return dt >= weekStart && dt < weekEnd
   }).length
+  const nowStr = new Date().toISOString()
+  const weekUpcomingPlanned = (calendarEvents ?? []).filter((e: any) => {
+    const dt = e.start_datetime || e.start_date
+    return dt >= nowStr && dt < weekEnd
+  }).length
   const weekKm = weekActivities.filter(isRun).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
   const weekDurationSecs = [...weekActivities, ...weekHevy].reduce((s: number, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
   const weekVolume = weekHevy.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
@@ -2246,6 +2341,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
   const acwrDetail = computeACWRDetail(activities, hevy, now, rampRate)
+  const weekPrediction = buildWeekPrediction(acwrDetail, rampRate, unifiedReadinessPct)
 
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf)
   const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
@@ -2253,7 +2349,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   return (
     <div className="flex flex-col gap-[18px]">
       {/* 1. Coach Tip */}
-      <AiInsight text={buildOverviewInsight(activities, hevy)} />
+      <AiInsight text={buildOverviewInsight(activities, hevy, calendarEvents)} />
 
       {/* 2. Today's Plan — focus + readiness + CTA */}
       <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} />
@@ -2262,10 +2358,12 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
       <WeekSummaryCard
         weekCompleted={weekCompleted}
         weekPlanned={weekPlanned}
+        weekUpcomingPlanned={weekUpcomingPlanned}
         weekKm={weekKm}
         weekDurationSecs={weekDurationSecs}
         weekVolume={weekVolume}
         perf={perf}
+        prediction={weekPrediction}
       />
 
       {/* 4. Readiness */}
