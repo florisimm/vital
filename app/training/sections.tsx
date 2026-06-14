@@ -1747,7 +1747,7 @@ function ActivityDetailSheet({ title, rows, onClose }: { title: string; rows: De
 type TodaysFocus = {
   emoji: string; label: string
   action: string; actionColor: string
-  reasons: string[]; prediction?: string
+  reasons: string[]
 }
 
 function computeTodaysFocus(
@@ -1766,12 +1766,12 @@ function computeTodaysFocus(
   const events      = calendarEvents ?? []
 
   const ACT = {
-    proceed:  { action: 'Proceed as Planned',      actionColor: '#4ade80' },
-    easier:   { action: 'Train Easier',             actionColor: '#facc15' },
-    shorten:  { action: 'Shorten Session',          actionColor: '#fb923c' },
-    recover:  { action: 'Recovery Session Instead', actionColor: '#2dd4bf' },
-    moveTmr:  { action: 'Move to Tomorrow',         actionColor: '#fb923c' },
-    skip:     { action: 'Skip · Rest Today',        actionColor: '#f87171' },
+    proceed:  { action: 'Proceed as Planned', actionColor: '#4ade80' },
+    easier:   { action: 'Train Easier',       actionColor: '#facc15' },
+    shorten:  { action: 'Shorten Session',    actionColor: '#fb923c' },
+    recover:  { action: 'Recovery Focus',     actionColor: '#2dd4bf' },
+    moveTmr:  { action: 'Move to Tomorrow',   actionColor: '#fb923c' },
+    skip:     { action: 'Recovery Focus',     actionColor: '#2dd4bf' },
   } as const
 
   type Intensity = 'zone2' | 'easy' | 'moderate' | 'hard' | 'very_hard'
@@ -1932,14 +1932,14 @@ function computeTodaysFocus(
 
   function buildReasons(intensity: Intensity): string[] {
     const r: string[] = []
-    if (highLoad || medLoad)   r.push(`Load +${loadPct}% above baseline`)
-    if (recoveryPct < 70)      r.push(`Readiness ${recoveryPct}%`)
+    if (highLoad || medLoad)   r.push(`Higher load than usual`)
+    if (recoveryPct < 70)      r.push('Recovery lower than normal')
     if (upcomingHard) {
       const d = evtDate(upcomingHard)
-      const dayLbl = d === tomorrowStr ? 'tomorrow' : d === day2Str ? 'day after tomorrow' : 'soon'
-      r.push(`${upcomingHard.title} planned ${dayLbl} — extra recovery improves session quality`)
+      const dayLbl = d === tomorrowStr ? 'tomorrow' : d === day2Str ? 'day after' : 'soon'
+      r.push(`${upcomingHard.title} planned ${dayLbl}`)
     } else if (intensity === 'zone2' && r.length < 2) {
-      r.push('Zone 2 — low recovery impact')
+      r.push('Low recovery impact')
     }
     return r.slice(0, 3)
   }
@@ -1949,19 +1949,13 @@ function computeTodaysFocus(
     const ev        = todayEvts[0]
     const intensity = classify(ev.title)
     const actKey    = decide(intensity)
-    const act       = ACT[actKey]
-    const predicted = predictTomorrow(intensity, actKey)
-    const delta     = predicted - recoveryPct
-    const prediction = actKey !== 'proceed'
-      ? `Expected readiness tomorrow: ~${predicted}% (${delta >= 0 ? '+' : ''}${delta}%)`
-      : undefined
+    const act = ACT[actKey]
 
     return {
       emoji: sportEmoji(ev.title),
       label: `${ev.title}${evtTime(ev)}`,
       ...act,
-      reasons:    buildReasons(intensity),
-      prediction,
+      reasons: buildReasons(intensity),
     }
   }
 
@@ -1974,22 +1968,21 @@ function computeTodaysFocus(
     if (npIntensity === 'hard' || npIntensity === 'very_hard') {
       if (recoveryPct < 50 || highLoad) {
         const restReasons = [
-          ...(highLoad ? [`Load +${loadPct}% above baseline`] : []),
-          recoveryPct < 50 ? `Readiness ${recoveryPct}%` : '',
-          `${nextPlanned.title} planned ${npDayLbl} — extra recovery improves session quality`,
+          recoveryPct < 50 ? 'Recovery lower than normal' : '',
+          ...(highLoad ? [`Higher load than usual`] : []),
+          `${nextPlanned.title} planned ${npDayLbl}`,
         ].filter(Boolean).slice(0, 3) as string[]
         return {
           emoji: '😴', label: 'Rest Today',
           ...ACT.skip, reasons: restReasons,
-          prediction: `Extra recovery improves readiness for ${nextPlanned.title} ${npDayLbl}.`,
         }
       }
       return {
         emoji: '🚶', label: 'Light Training',
         ...ACT.easier,
         reasons: [
-          `${nextPlanned.title} planned ${npDayLbl} — fresh legs improve session quality`,
-          ...(medLoad ? [`Load +${loadPct}% above baseline`] : []),
+          `${nextPlanned.title} planned ${npDayLbl}`,
+          ...(medLoad ? [`Higher load than usual`] : []),
         ].slice(0, 3) as string[],
       }
     }
@@ -2006,8 +1999,8 @@ function computeTodaysFocus(
   if (recoveryPct < 40) return {
     emoji: '😴', label: 'Rest Day Recommended', ...ACT.skip,
     reasons: [
-      `Readiness ${recoveryPct}%`,
-      ...(highLoad ? [`Load +${loadPct}% above baseline`] : []),
+      'Recovery too low to train',
+      ...(highLoad ? [`Higher load than usual`] : []),
     ],
   }
 
@@ -2015,8 +2008,8 @@ function computeTodaysFocus(
   if (recoveryPct < 55 || rs >= 5) return {
     emoji: '🚶', label: 'Active Recovery', ...ACT.recover,
     reasons: [
-      recoveryPct < 55 ? `Readiness ${recoveryPct}% — light movement aids recovery` : `Risk score high — active recovery recommended`,
-      ...(highLoad ? [`Load +${loadPct}% above baseline`] : []),
+      'Recovery lower than normal',
+      ...(highLoad ? [`Higher load than usual`] : []),
     ],
   }
 
@@ -2205,64 +2198,52 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
     .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
 
   const [ctaLabel, ctaHref] = (() => {
-    if (!next) return ['View training →', '/training']
+    if (!next) return ["View training →", '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
     const isCardio = CARDIO_KW.some(k => t.includes(k))
-    if (isGym && !isCardio) return ['View strength →', '/training/strength']
+    if (isGym && !isCardio) return ["View strength →", '/training/strength']
     const dateStr = next.start_datetime || next.start_date
-    return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
+    return ["View session →", `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
 
-  const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-
   return (
-    <Card>
-      <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today's Plan</span>
+    <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
+      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Today's Recommendation</p>
 
-        <div className="flex items-start gap-3">
-          <span className="text-[32px] leading-none mt-0.5">{focus.emoji}</span>
-          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-            <span className="text-[17px] font-semibold text-white leading-snug">{focus.label}</span>
-            <span
-              className="self-start px-2.5 py-0.5 rounded-full text-[12px] font-bold text-black"
-              style={{ background: focus.actionColor }}
-            >
-              {focus.action}
-            </span>
-          </div>
+      <div className="flex items-center gap-4 mb-4">
+        <span className="text-[42px] leading-none">{focus.emoji}</span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[22px] font-bold text-white leading-tight">{focus.label}</span>
+          <span
+            className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black"
+            style={{ background: focus.actionColor }}
+          >
+            {focus.action}
+          </span>
         </div>
+      </div>
 
-        {focus.reasons.length > 0 && (
-          <div className="flex flex-col gap-1">
+      {focus.reasons.length > 0 && (
+        <div className="pt-3 border-t border-white/[0.08] mb-3">
+          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Waarom?</p>
+          <div className="flex flex-col gap-1.5">
             {focus.reasons.map((r, i) => (
-              <div key={i} className="flex items-start gap-1.5">
-                <span className="text-[13px] text-white/30 mt-px leading-none">·</span>
-                <span className="text-[13px] text-white/55 leading-snug">{r}</span>
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
+                <span className="text-[13px] text-white/65 leading-snug">{r}</span>
               </div>
             ))}
           </div>
-        )}
-
-        {focus.prediction && (
-          <span className="text-[12px] text-white/40 italic leading-snug">{focus.prediction}</span>
-        )}
-
-        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ background: rc }} />
-            <span className="text-[13px] font-semibold" style={{ color: rc }}>Readiness</span>
-            <span className="text-[13px] text-white/30">· {readinessPct}%</span>
-          </div>
-          <a href={ctaHref}
-            className="px-3 py-1.5 rounded-full text-[13px] font-semibold text-black"
-            style={{ background: 'rgb(45,212,191)' }}>
-            {ctaLabel}
-          </a>
         </div>
-      </div>
-    </Card>
+      )}
+
+      <a href={ctaHref}
+        className="flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black"
+        style={{ background: 'rgb(45,212,191)' }}>
+        {ctaLabel}
+      </a>
+    </div>
   )
 }
 
@@ -2287,53 +2268,48 @@ function buildWeekPrediction(
   return null
 }
 
-function WeekSummaryCard({ weekCompleted, weekPlanned, weekUpcomingPlanned, weekKm, weekDurationSecs, weekVolume, perf, prediction }: {
-  weekCompleted: number; weekPlanned: number; weekUpcomingPlanned: number; weekKm: number
-  weekDurationSecs: number; weekVolume: number
-  perf: ReturnType<typeof computePerformanceScore>
-  prediction: string | null
+function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, weekStrengthDone, weekCardioDone, weekStrengthPlanned, weekCardioPlanned }: {
+  weekCompleted: number; weekUpcomingPlanned: number
+  weekStrengthDone: number; weekCardioDone: number
+  weekStrengthPlanned: number; weekCardioPlanned: number
 }) {
-  const target = Math.max(weekPlanned, 4, weekCompleted)
-  const progress = target > 0 ? Math.min(1, weekCompleted / target) : 0
-  const stats = [
-    weekKm > 0 && `${weekKm.toFixed(1)} km`,
-    weekDurationSecs > 0 && formatDuration(weekDurationSecs),
-    weekVolume > 0 && `${(Math.round(weekVolume / 100) / 10).toFixed(1)}k kg`,
-  ].filter(Boolean) as string[]
-
   return (
     <Card>
       <div className="flex flex-col gap-3">
         <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">This Week</span>
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[40px] font-bold text-white leading-none">{weekCompleted}</span>
-              <span className="text-[17px] font-semibold text-white/50">completed</span>
-            </div>
-            {weekUpcomingPlanned > 0 && (
-              <span className="text-[13px] text-white/40 mt-0.5 block">{weekUpcomingPlanned} planned</span>
+
+        <div className="flex items-baseline gap-2">
+          <span className="text-[36px] font-bold text-white leading-none">{weekCompleted}</span>
+          <span className="text-[16px] text-white/50">workouts done</span>
+        </div>
+
+        {weekUpcomingPlanned > 0 && (
+          <span className="text-[13px] text-white/40">{weekUpcomingPlanned} {weekUpcomingPlanned === 1 ? 'workout' : 'workouts'} still planned</span>
+        )}
+
+        {(weekStrengthDone > 0 || weekCardioDone > 0) && (
+          <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.06]">
+            {(weekStrengthDone > 0 || weekStrengthPlanned > 0) && (
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-white/40">Strength</span>
+                <span className="text-[14px] font-semibold text-white">
+                  {weekStrengthPlanned > 0
+                    ? `${weekStrengthDone}/${weekStrengthPlanned} sessions`
+                    : `${weekStrengthDone} session${weekStrengthDone !== 1 ? 's' : ''}`}
+                </span>
+              </div>
+            )}
+            {(weekCardioDone > 0 || weekCardioPlanned > 0) && (
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-white/40">Cardio</span>
+                <span className="text-[14px] font-semibold text-white">
+                  {weekCardioPlanned > 0
+                    ? `${weekCardioDone}/${weekCardioPlanned} sessions`
+                    : `${weekCardioDone} session${weekCardioDone !== 1 ? 's' : ''}`}
+                </span>
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-1.5 pb-1">
-            <div className="w-[8px] h-[8px] rounded-full shrink-0" style={{ background: perf.color }} />
-            <span className="text-[14px] font-semibold" style={{ color: perf.color }}>
-              {perf.label}{perf.loadRatio > 1.1 ? ` · +${Math.round((perf.loadRatio - 1) * 100)}%` : ''}
-            </span>
-          </div>
-        </div>
-        <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progress * 100}%`, background: 'rgb(45,212,191)' }} />
-        </div>
-        {stats.length > 0 && (
-          <div className="flex gap-4 pt-1 border-t border-white/[0.06]">
-            {stats.map((s, i) => (
-              <span key={i} className="text-[14px] font-semibold text-white/70">{s}</span>
-            ))}
-          </div>
-        )}
-        {prediction && (
-          <p className="text-[12px] text-white/40 italic leading-relaxed">{prediction}</p>
         )}
       </div>
     </Card>
@@ -2406,6 +2382,12 @@ function RecoveryDetailCard({
         </div>
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <div className="h-full rounded-full" style={{ width: `${unified}%`, background: c }} />
+        </div>
+        <div className="flex items-center gap-2 py-1">
+          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c }} />
+          <span className="text-[14px] font-semibold" style={{ color: c }}>
+            {unified >= 70 ? 'Train normally' : unified >= 45 ? 'Avoid maximum effort' : 'Prioritise recovery today'}
+          </span>
         </div>
         {explanation ? (
           <p className="text-[12px] text-white/40 leading-relaxed pt-0.5">{explanation}</p>
@@ -2647,18 +2629,26 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const weekHevy = hevy.filter(h => h.start_time >= weekStart)
   const weekCompleted = weekActivities.length + weekHevy.length
   const weekEnd = new Date(new Date(weekStart).getTime() + 7 * 86400000).toISOString()
-  const weekPlanned = (calendarEvents ?? []).filter((e: any) => {
-    const dt = e.start_datetime || e.start_date
-    return dt >= weekStart && dt < weekEnd
-  }).length
   const nowStr = new Date().toISOString()
   const weekUpcomingPlanned = (calendarEvents ?? []).filter((e: any) => {
     const dt = e.start_datetime || e.start_date
     return dt >= nowStr && dt < weekEnd
   }).length
-  const weekKm = weekActivities.filter(isRun).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
-  const weekDurationSecs = [...weekActivities, ...weekHevy].reduce((s: number, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
-  const weekVolume = weekHevy.reduce((s, h) => s + (h.volume_kg ?? 0), 0)
+
+  const GYM_KW_W  = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox']
+  const CARD_KW_W = ['run','loop','hardloop','ride','fiet','cycl','bike','swim','zwem','interval','tempo']
+  const weekStrengthDone    = weekHevy.length
+  const weekCardioDone      = weekActivities.filter(a => !isWeightTraining(a)).length
+  const weekStrengthPlanned = (calendarEvents ?? []).filter((e: any) => {
+    const dt = e.start_datetime || e.start_date
+    const t  = (e.title ?? '').toLowerCase()
+    return dt >= weekStart && dt < weekEnd && GYM_KW_W.some(k => t.includes(k))
+  }).length
+  const weekCardioPlanned = (calendarEvents ?? []).filter((e: any) => {
+    const dt = e.start_datetime || e.start_date
+    const t  = (e.title ?? '').toLowerCase()
+    return dt >= weekStart && dt < weekEnd && CARD_KW_W.some(k => t.includes(k)) && !GYM_KW_W.some(k => t.includes(k))
+  }).length
 
   const unifiedReadinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
@@ -2673,50 +2663,26 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
   const rampRate = prev7kj > 5
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
-  const acwrDetail = computeACWRDetail(activities, hevy, now, rampRate)
-  const weekPrediction = buildWeekPrediction(acwrDetail, rampRate, unifiedReadinessPct)
-
+  const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate)
-  const topInsights = buildTopInsights(activities, hevy, (gezondheid as any) ?? null)
 
   return (
     <div className="flex flex-col gap-[18px]">
-      {/* 1. Coach Tip */}
-      <AiInsight text={buildOverviewInsight(activities, hevy, calendarEvents)} />
-
-      {/* 2. Today's Plan — focus + readiness + CTA */}
+      {/* 1. Today's Recommendation — hero */}
       <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} />
 
-      {/* 3. This Week — sessions + progress + stats */}
+      {/* 2. This Week */}
       <WeekSummaryCard
         weekCompleted={weekCompleted}
-        weekPlanned={weekPlanned}
         weekUpcomingPlanned={weekUpcomingPlanned}
-        weekKm={weekKm}
-        weekDurationSecs={weekDurationSecs}
-        weekVolume={weekVolume}
-        perf={perf}
-        prediction={weekPrediction}
+        weekStrengthDone={weekStrengthDone}
+        weekCardioDone={weekCardioDone}
+        weekStrengthPlanned={weekStrengthPlanned}
+        weekCardioPlanned={weekCardioPlanned}
       />
 
-      {/* 4. Readiness */}
+      {/* 3. Readiness */}
       <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
-
-      {/* 5. Training Load */}
-      <TrainingLoadCard
-        weekCompleted={weekCompleted}
-        weekPlanned={weekPlanned}
-        weekKm={weekKm}
-        weekDurationSecs={weekDurationSecs}
-        weekVolume={weekVolume}
-        rampRate={rampRate}
-      />
-
-      {/* 6. ACWR */}
-      <ACWRCard detail={acwrDetail} />
-
-      {/* 7. Top Insights */}
-      <TopInsightsCard insights={topInsights} />
     </div>
   )
 }
