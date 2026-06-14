@@ -2913,13 +2913,13 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
     : { duur: 'Rust', zone: '–' }
 
   const tomorrowPct = readinessPct >= 85 ? 68 : readinessPct >= 70 ? 80 : 92
-  const tomorrowLabel = tomorrowPct >= 85 ? 'Tempoloop mogelijk' : tomorrowPct >= 70 ? 'Makkelijke duurloop' : 'Rustdag'
+  const tomorrowLabel = tomorrowPct >= 85 ? 'Hardere training mogelijk' : tomorrowPct >= 70 ? 'Makkelijke duurloop' : 'Rustdag'
 
   const reasons: string[] = []
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Laatste run ${hoursSince}u geleden`)
-  if (readinessPct >= 85) reasons.push('Belastbaarheid optimaal voor hoge intensiteit')
+  if (readinessPct >= 85) reasons.push('Goed hersteld — hoge intensiteit mogelijk')
   else if (readinessPct >= 70) reasons.push('Goed hersteld — rustig tempo aanbevolen')
-  else reasons.push('Belastbaarheid laag — herstel heeft prioriteit')
+  else reasons.push('Herstel heeft prioriteit')
   if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs vorige week — niet verder ophogen`)
 
   return (
@@ -2989,7 +2989,39 @@ export function RunningSection({ activities, hevy = [] }: { activities: Activity
 
       {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
 
-      <RunningTrendCard trend={trend} />
+      <Card>
+        <div className="flex flex-col gap-3">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Deze week</span>
+          <div className="flex gap-6">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[28px] font-bold text-white leading-none">{trend.runs7}</span>
+              <span className="text-[12px] text-white/40">{trend.runs7 === 1 ? 'run' : 'runs'}</span>
+            </div>
+            {trend.vol7 > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[28px] font-bold text-teal-400 leading-none">{trend.vol7.toFixed(1)}</span>
+                <span className="text-[12px] text-white/40">km</span>
+              </div>
+            )}
+            {trend.volPct !== null && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[28px] font-bold leading-none" style={{ color: trend.volPct > 15 ? '#fb923c' : trend.volPct < -10 ? '#60a5fa' : '#4ade80' }}>
+                  {trend.volPct > 0 ? '+' : ''}{trend.volPct}%
+                </span>
+                <span className="text-[12px] text-white/40">vs vorige week</span>
+              </div>
+            )}
+          </div>
+          {trend.volPct !== null && (
+            <div className="flex items-center gap-2 pt-2 border-t border-white/[0.06]">
+              <span className="text-[12px] font-semibold text-white/30 uppercase tracking-[0.08em]">Status</span>
+              <span className="text-[13px] font-semibold" style={{ color: trend.volPct > 15 ? '#fb923c' : trend.volPct < -10 ? '#60a5fa' : '#4ade80' }}>
+                {trend.volPct > 15 ? 'Opbouwfase' : trend.volPct < -10 ? 'Afbouwfase' : 'Stabiele week'}
+              </span>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {avgCadence > 0 && (
         <Card>
