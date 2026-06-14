@@ -64,7 +64,7 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
 
   return (
     <div className="flex flex-col flex-1 overflow-y-auto px-5 pb-8 gap-4">
-      <input type="text" placeholder="Productnaam *" value={form.name} onChange={e => set('name', e.target.value)}
+      <input type="text" placeholder="Product name *" value={form.name} onChange={e => set('name', e.target.value)}
         className="h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/30 text-[16px] outline-none font-semibold"
         style={{ background: 'rgba(255,255,255,0.08)' }} />
       <input type="text" placeholder="Brand (optional)" value={form.brand} onChange={e => set('brand', e.target.value)}
@@ -92,7 +92,7 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
 
       <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}
         className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
-        {saving ? 'Opslaan…' : 'Toevoegen'}
+        {saving ? 'Saving…' : 'Add'}
       </button>
     </div>
   )

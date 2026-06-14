@@ -35,7 +35,7 @@ export async function trainingFetcher() {
 
   if (calendarError) console.error('Calendar fetch error:', calendarError)
 
-  const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit']
+  const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit', 'kracht', 'fitness', 'gewichten', 'deadlift', 'bench', 'upper', 'lower', 'legs']
 
   const filteredCalendarEvents = (calendarEvents ?? []).filter((e: any) => {
     // Compare exact time if available, otherwise just date

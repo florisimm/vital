@@ -33,6 +33,10 @@ export default function TrainingPage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const [activeTab, setActiveTab] = useState('overview')
+  // Server and first client render must match. SWR hydrates from localStorage on the
+  // client, so data-driven content (emoji, labels) would differ from SSR. Gate it on mount.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 
@@ -82,15 +86,15 @@ export default function TrainingPage() {
         ))}
       </div>
 
-      {/* Tab content */}
-      <div style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        {activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} />}
-        {activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} />}
-        {activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} />}
-        {activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} />}
-        {activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
-        {activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
-        {activeTab === 'performance' && <PerformanceSection />}
+      {/* Tab content — only after mount so SSR and first client render match */}
+      <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
+        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} />}
+        {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} />}
+        {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} />}
+        {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} />}
+        {mounted && activeTab === 'strength'    && <StrengthSection hevy={hevy} calendarEvents={calendarEvents} />}
+        {mounted && activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
+        {mounted && activeTab === 'performance' && <PerformanceSection />}
       </div>
     </PremiumScreen>
   )

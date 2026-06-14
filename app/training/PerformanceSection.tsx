@@ -2,10 +2,8 @@
 
 import useSWR from 'swr'
 import { Card } from '@/components/ui'
-import { createClient } from '@/lib/supabase'
 import {
-  computePerformanceScore, computeFTP, estimateVO2max, extractKeyLifts,
-  computeRaceProjections, startOfWeek, formatDuration,
+  extractKeyLifts, startOfWeek, formatDuration,
   type Activity, type HevyWorkout,
 } from './sections'
 import { trainingFetcher } from './fetcher'
@@ -13,33 +11,6 @@ import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 
 function isRun(a: Activity) { return a.sport_type?.toLowerCase().includes('run') ?? false }
 function isRide(a: Activity) { const t = a.sport_type?.toLowerCase() ?? ''; return t.includes('ride') || t.includes('cycl') }
-
-async function fetchStrengthSettings() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { squat: 140, bench: 100, deadlift: 180 }
-  const { data } = await supabase
-    .from('user_settings')
-    .select('strength_squat_ref,strength_bench_ref,strength_deadlift_ref')
-    .eq('user_id', user.id)
-    .single()
-  return {
-    squat:    Number(data?.strength_squat_ref    ?? 140),
-    bench:    Number(data?.strength_bench_ref    ?? 100),
-    deadlift: Number(data?.strength_deadlift_ref ?? 180),
-  }
-}
-
-function computeStrengthScore(hevy: HevyWorkout[], refs: { squat: number; bench: number; deadlift: number }): number | null {
-  const lifts = extractKeyLifts(hevy)
-  const refMap: Record<string, number> = { 'Squat': refs.squat, 'Bench Press': refs.bench, 'Deadlift': refs.deadlift }
-  let total = 0, count = 0
-  for (const lift of lifts) {
-    const ref = refMap[lift.name]
-    if (ref) { total += Math.min(lift.current1RM / ref, 1.5); count++ }
-  }
-  return count > 0 ? Math.round((total / count) * 100) : null
-}
 
 function StatCard({ label, value, unit, sub, color = 'text-white' }: {
   label: string; value: string; unit?: string; sub?: string; color?: string
@@ -60,18 +31,12 @@ function StatCard({ label, value, unit, sub, color = 'text-white' }: {
 
 export function PerformanceSection() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
-  const { data: strengthRefs = { squat: 140, bench: 100, deadlift: 180 } } = useSWR('user-settings-strength', fetchStrengthSettings, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', null, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const activities: Activity[] = data?.activities ?? []
   const hevy: HevyWorkout[] = data?.hevy ?? []
-
-  const perf = computePerformanceScore(activities, hevy)
-  const vo2max = estimateVO2max(activities)
-  const ftp = computeFTP(activities)
-  const projections = computeRaceProjections(activities)
   const lifts = extractKeyLifts(hevy)
-  const strScore = computeStrengthScore(hevy, strengthRefs)
 
+  // Readiness
   const physiologyReadiness = computePhysiologyReadiness(healthRows)
   const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
   const hoursSince = allTimes.length ? Math.max(0, (Date.now() - new Date(allTimes[0]).getTime()) / 3600000) : null
@@ -82,69 +47,82 @@ export function PerformanceSection() {
     ? Math.round(physiologyReadiness.score * 0.70 + trainingLoadPct * 0.30)
     : trainingLoadPct
 
+  // Consistency (14 days)
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const recent14 = [...activities.filter(a => a.start_date >= fourteenDaysAgo), ...hevy.filter(h => h.start_time >= fourteenDaysAgo)]
+  const recent14 = [
+    ...activities.filter(a => a.start_date >= fourteenDaysAgo),
+    ...hevy.filter(h => h.start_time >= fourteenDaysAgo),
+  ]
   const consistencyPct = Math.min(Math.round((recent14.length / 6) * 100), 100)
 
+  // This week
   const weekStart = startOfWeek()
   const weekWorkouts = [
     ...activities.filter(a => a.start_date >= weekStart),
     ...hevy.filter(h => h.start_time >= weekStart),
-  ].length
+  ]
+  const weekSecs = weekWorkouts.reduce((s, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
 
+  // Avg sessions/week (last 4 weeks)
+  const twentyEightDaysAgo = new Date(Date.now() - 28 * 86400000).toISOString()
+  const sessions28 = [
+    ...activities.filter(a => a.start_date >= twentyEightDaysAgo),
+    ...hevy.filter(h => h.start_time >= twentyEightDaysAgo),
+  ]
+  const avgPerWeek = (sessions28.length / 4).toFixed(1)
+
+  // Total training hours (last 30 days)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+  const last30 = [
+    ...activities.filter(a => a.start_date >= thirtyDaysAgo),
+    ...hevy.filter(h => h.start_time >= thirtyDaysAgo),
+  ]
+  const totalSecs30 = last30.reduce((s, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
+  const totalHours30 = (totalSecs30 / 3600).toFixed(1)
+
+  // Monthly trend
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const monthActs = activities.filter(a => a.start_date >= monthStart)
-  const monthHevy = hevy.filter(h => h.start_time >= monthStart)
-  const monthTotal = monthActs.length + monthHevy.length
-  const monthRunKm = monthActs.filter(isRun).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
-  const monthRideKm = monthActs.filter(isRide).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
-  const monthSecs = [...monthActs, ...monthHevy].reduce((s, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
 
-  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
-  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + (a.kilojoules ?? 0), 0)
-  const sessions7 = [...activities.filter(a => a.start_date >= sevenDaysAgo), ...hevy.filter(h => h.start_time >= sevenDaysAgo)].length
-  const sessions14to7 = [
-    ...activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo),
-    ...hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo),
-  ].length
-  const loadPct = kj14to7 > 0 ? Math.round((kj7 - kj14to7) / kj14to7 * 100)
-    : sessions14to7 > 0 ? Math.round((sessions7 - sessions14to7) / sessions14to7 * 100)
-    : null
-  const loadTrendColor = loadPct === null ? 'rgba(255,255,255,0.5)'
-    : loadPct > 10 ? '#4ade80' : loadPct < -10 ? '#f87171' : 'rgba(255,255,255,0.5)'
+  const thisMonthActs = activities.filter(a => a.start_date >= monthStart)
+  const thisMonthHevy = hevy.filter(h => h.start_time >= monthStart)
+  const prevMonthActs = activities.filter(a => a.start_date >= prevMonthStart && a.start_date < monthStart)
+  const prevMonthHevy = hevy.filter(h => h.start_time >= prevMonthStart && h.start_time < monthStart)
+
+  const thisMonthSessions = thisMonthActs.length + thisMonthHevy.length
+  const prevMonthSessions = prevMonthActs.length + prevMonthHevy.length
+  const thisMonthSecs = [...thisMonthActs, ...thisMonthHevy].reduce((s, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
+  const prevMonthSecs = [...prevMonthActs, ...prevMonthHevy].reduce((s, a: any) => s + (a.moving_time ?? a.duration ?? 0), 0)
+  const thisMonthRunKm = thisMonthActs.filter(isRun).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const prevMonthRunKm = prevMonthActs.filter(isRun).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const thisMonthRideKm = thisMonthActs.filter(isRide).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+  const prevMonthRideKm = prevMonthActs.filter(isRide).reduce((s, a) => s + (a.distance ?? 0), 0) / 1000
+
+  const pctChange = (curr: number, prev: number) => prev > 0 ? Math.round((curr - prev) / prev * 100) : null
+  const sessionTrend = pctChange(thisMonthSessions, prevMonthSessions)
+  const hoursTrend   = pctChange(thisMonthSecs, prevMonthSecs)
+  const runKmTrend   = pctChange(thisMonthRunKm, prevMonthRunKm)
+  const rideKmTrend  = pctChange(thisMonthRideKm, prevMonthRideKm)
+
+  const trendColor = (pct: number | null) =>
+    pct === null ? 'text-white/30' : pct > 5 ? 'text-green-400' : pct < -5 ? 'text-red-400' : 'text-white/40'
+  const trendLabel = (pct: number | null) =>
+    pct === null ? '—' : `${pct > 0 ? '+' : ''}${pct}%`
+
+  const thisMonthHours = (thisMonthSecs / 3600).toFixed(1)
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Performance Score */}
-      <Card>
-        <div className="flex items-end justify-between">
-          <div className="flex flex-col gap-1">
-            <span className="text-[13px] font-semibold text-white/50 uppercase tracking-[0.08em]">Performance Score</span>
-            <span className="text-[56px] font-bold text-white leading-none">{perf.score}</span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <div className="w-[8px] h-[8px] rounded-full" style={{ background: perf.color }} />
-              <span className="text-[17px] font-semibold text-white">{perf.label}</span>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1 pb-1">
-            <span className="text-[13px] text-white/40">This week</span>
-            <span className="text-[22px] font-bold text-white">{weekWorkouts}/4</span>
-            <span className="text-[13px] text-white/40">sessions</span>
-          </div>
-        </div>
-        <div className="mt-4 h-[6px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${perf.score}%`, background: perf.color }} />
-        </div>
-      </Card>
 
-      {/* Recovery + Consistency */}
+      {/* Readiness + Consistency */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           label="Readiness"
           value={`${recoveryPct}%`}
-          sub={physiologyReadiness.score !== null ? physiologyReadiness.label : (hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent workout')}
+          sub={physiologyReadiness.score !== null
+            ? physiologyReadiness.label
+            : hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent data'}
           color={recoveryPct >= 80 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
         />
         <StatCard
@@ -155,30 +133,36 @@ export function PerformanceSection() {
         />
       </div>
 
-      {/* Monthly Volume */}
+      {/* Avg sessions/week + total hours */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Avg / week"
+          value={avgPerWeek}
+          unit="sessions"
+          sub="Last 4 weeks"
+          color={Number(avgPerWeek) >= 4 ? 'text-teal-400' : Number(avgPerWeek) >= 2.5 ? 'text-yellow-400' : 'text-white'}
+        />
+        <StatCard
+          label="Training hours"
+          value={totalHours30}
+          unit="h"
+          sub="Last 30 days"
+          color="text-white"
+        />
+      </div>
+
+      {/* This week */}
       <Card>
         <div className="flex flex-col gap-3">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Monthly Volume</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">This week</span>
           <div className="flex gap-5 flex-wrap">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[26px] font-bold text-white leading-none">{monthTotal}</span>
-              <span className="text-[12px] text-white/40">workouts</span>
+              <span className="text-[26px] font-bold text-white leading-none">{weekWorkouts.length}</span>
+              <span className="text-[12px] text-white/40">sessions</span>
             </div>
-            {monthRunKm > 0 && (
+            {weekSecs > 0 && (
               <div className="flex flex-col gap-0.5">
-                <span className="text-[26px] font-bold text-teal-400 leading-none">{monthRunKm.toFixed(0)}</span>
-                <span className="text-[12px] text-white/40">km running</span>
-              </div>
-            )}
-            {monthRideKm > 0 && (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[26px] font-bold text-cyan-400 leading-none">{monthRideKm.toFixed(0)}</span>
-                <span className="text-[12px] text-white/40">km cycling</span>
-              </div>
-            )}
-            {monthSecs > 0 && (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[26px] font-bold text-white/70 leading-none">{formatDuration(monthSecs)}</span>
+                <span className="text-[26px] font-bold text-white/70 leading-none">{formatDuration(weekSecs)}</span>
                 <span className="text-[12px] text-white/40">total time</span>
               </div>
             )}
@@ -186,71 +170,55 @@ export function PerformanceSection() {
         </div>
       </Card>
 
-      {/* Training Load */}
+      {/* Monthly trend */}
       <Card>
-        <div className="flex flex-col gap-2">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Training Load</span>
-          <div className="flex items-end justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[26px] font-bold text-white leading-none">{sessions7}</span>
-              <span className="text-[13px] text-white/50">sessions this week</span>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Monthly trend</span>
+            <span className="text-[12px] text-white/30">vs last month</span>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[14px] text-white/60">Sessions</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[15px] font-bold text-white">{thisMonthSessions}</span>
+                <span className={`text-[13px] font-semibold ${trendColor(sessionTrend)}`}>{trendLabel(sessionTrend)}</span>
+              </div>
             </div>
-            {loadPct !== null && (
-              <span className="text-[14px] font-semibold" style={{ color: loadTrendColor }}>
-                {loadPct > 0 ? '+' : ''}{loadPct}% vs last week
-              </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[14px] text-white/60">Training hours</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[15px] font-bold text-white">{thisMonthHours}h</span>
+                <span className={`text-[13px] font-semibold ${trendColor(hoursTrend)}`}>{trendLabel(hoursTrend)}</span>
+              </div>
+            </div>
+            {thisMonthRunKm > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-white/60">Running</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-bold text-teal-400">{thisMonthRunKm.toFixed(0)} km</span>
+                  <span className={`text-[13px] font-semibold ${trendColor(runKmTrend)}`}>{trendLabel(runKmTrend)}</span>
+                </div>
+              </div>
+            )}
+            {thisMonthRideKm > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-white/60">Cycling</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-bold text-cyan-400">{thisMonthRideKm.toFixed(0)} km</span>
+                  <span className={`text-[13px] font-semibold ${trendColor(rideKmTrend)}`}>{trendLabel(rideKmTrend)}</span>
+                </div>
+              </div>
             )}
           </div>
-          {kj7 > 0 && (
-            <span className="text-[13px] text-white/40">{Math.round(kj7).toLocaleString('en-US')} kJ output this week</span>
-          )}
         </div>
       </Card>
 
-      {(vo2max || ftp) && (
-        <div className={`grid gap-3 ${vo2max && ftp ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {vo2max && (
-            <StatCard label="VO₂max est." value={`${vo2max}`} unit="ml/kg/min" sub="Daniels-Gilbert formula" color="text-teal-400" />
-          )}
-          {ftp && (
-            <StatCard label="Est. FTP" value={`${ftp}`} unit="W" sub="From kJ/time on rides" color="text-cyan-400" />
-          )}
-        </div>
-      )}
-
-      {projections && (
-        <Card>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[15px] font-semibold text-white/50">Race Projections</span>
-              <span className="text-[12px] text-teal-400">Riegel formula</span>
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { dist: '5K', time: projections['5K'] },
-                { dist: '10K', time: projections['10K'] },
-                { dist: 'Half', time: projections['Half'] },
-                { dist: 'Marathon', time: projections['Marathon'] },
-              ].map(p => (
-                <div key={p.dist} className="flex flex-col items-center gap-1">
-                  <span className="text-[15px] font-bold text-white leading-tight text-center">{p.time}</span>
-                  <span className="text-[11px] text-white/40">{p.dist}</span>
-                  <span className="text-[11px] font-medium text-teal-400">Projected</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {strScore !== null && (
-        <StatCard label="Strength Score" value={`${strScore}`} unit="/100" sub="Normalised 1RM composite" color="text-orange-400" />
-      )}
-
+      {/* Estimated 1RM */}
       {lifts.length > 0 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <span className="text-[15px] font-semibold text-white/50">Estimated 1RM</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Estimated 1RM</span>
             {lifts.map(l => (
               <div key={l.name} className="flex items-center justify-between">
                 <span className="text-[15px] text-white">{l.name}</span>
@@ -263,6 +231,7 @@ export function PerformanceSection() {
           </div>
         </Card>
       )}
+
     </div>
   )
 }
