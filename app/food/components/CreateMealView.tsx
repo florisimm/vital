@@ -105,9 +105,9 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { label: 'Kcal',  value: `${Math.round(Number(pickerProduct.kcal??0)*Number(pickerGrams)/100)}`,       color: '#fb923c' },
-                  { label: 'Eiwit', value: `${(Number(pickerProduct.protein??0)*Number(pickerGrams)/100).toFixed(1)}g`,  color: '#2dd4bf' },
-                  { label: 'Koolh', value: `${(Number(pickerProduct.carbs??0)*Number(pickerGrams)/100).toFixed(1)}g`,    color: '#facc15' },
-                  { label: 'Vet',   value: `${(Number(pickerProduct.fat??0)*Number(pickerGrams)/100).toFixed(1)}g`,      color: '#818cf8' },
+                  { label: 'Prot', value: `${(Number(pickerProduct.protein??0)*Number(pickerGrams)/100).toFixed(1)}g`,  color: '#2dd4bf' },
+                  { label: 'Carbs', value: `${(Number(pickerProduct.carbs??0)*Number(pickerGrams)/100).toFixed(1)}g`,    color: '#facc15' },
+                  { label: 'Fat',   value: `${(Number(pickerProduct.fat??0)*Number(pickerGrams)/100).toFixed(1)}g`,      color: '#818cf8' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="flex flex-col items-center gap-1 py-3 rounded-[14px]"
                     style={{ background: 'rgba(255,255,255,0.06)' }}>

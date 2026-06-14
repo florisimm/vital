@@ -94,26 +94,24 @@ function workoutDone(title: string, hevy: any[], acts: any[]): boolean {
 // ─── Coach builder ────────────────────────────────────────────────────────────
 
 function buildCoach(rows: HealthRow[], data: any) {
-  const readiness   = computePhysiologyReadiness(rows)
-  const todayRow    = rows.find(r => r.datum === localDateStr())
-  const sleepRows7  = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
-  const sleepScore  = todayRow?.slaap_minuten != null
+  const readiness     = computePhysiologyReadiness(rows)
+  const todayRow      = rows.find(r => r.datum === localDateStr())
+  const sleepRows7    = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
+  const sleepScore    = todayRow?.slaap_minuten != null
     ? computeSleepScore(todayRow)
     : sleepRows7.length >= 2
       ? Math.round(sleepRows7.reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / sleepRows7.length)
       : null
-  const hrvBaseline = computeHRVBaseline(rows)
+  const hrvBaseline   = computeHRVBaseline(rows)
 
-  const settings      = data?.settings
-  const foodLogToday  = data?.foodLogToday ?? []
+  const settings       = data?.settings
+  const foodLogToday   = data?.foodLogToday ?? []
   const calendarEvents = data?.calendarEvents ?? []
-  const todayEvent    = calendarEvents.find((e: any) => isToday(e) && isSport(e)) ?? null
+  const todayEvent     = calendarEvents.find((e: any) => isToday(e) && isSport(e)) ?? null
 
   const totalProtein  = foodLogToday.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
   const targetProtein = Number(settings?.macro_protein ?? 180)
   const proteinLeft   = Math.round(Math.max(0, targetProtein - totalProtein))
-  const steps         = data?.latestGezondheid?.stappen ?? 0
-  const stepGoal      = Number(settings?.step_goal ?? 10000)
 
   // Status + title
   let status: DayStatus = 'yellow'
@@ -127,77 +125,95 @@ function buildCoach(rows: HealthRow[], data: any) {
     status = 'yellow'; title = 'Easy Day'
   }
 
-  // Paragraph
-  let paragraph = ''
-  if (readiness.score !== null && readiness.score >= 75) {
-    paragraph = 'Recovery is strong today.'
-    if (todayEvent) {
-      const isCardio = CARDIO_KW.some(kw => todayEvent.title.toLowerCase().includes(kw))
-      paragraph += ` A ${isCardio ? 'cardio session' : 'workout'} will support recovery and build weekly volume.`
-    } else {
-      paragraph += ' Good day for a quality session.'
-    }
-    paragraph += proteinLeft > 30 ? ` Still ${proteinLeft}g short on protein.` : ' Nutrition is on track.'
-  } else if (readiness.score !== null && readiness.score >= 50) {
-    paragraph = 'Readiness is moderate today.'
-    if (sleepScore !== null && sleepScore < 60) paragraph += ' Sleep was not optimal.'
-    if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -10) {
-      paragraph += ` HRV is ${Math.abs(hrvBaseline.deviationPct)}% below baseline.`
-    }
-    paragraph += ' Keep intensity low and prioritise recovery.'
-    if (proteinLeft > 30) paragraph += ` ${proteinLeft}g of protein left to go.`
-  } else if (readiness.score !== null) {
-    paragraph = 'Readiness is low.'
-    if (sleepScore !== null && sleepScore < 55) paragraph += ' Sleep was poor.'
-    paragraph += ' Consider a rest day or light walk.'
-    if (proteinLeft > 30) paragraph += ` Prioritise ${proteinLeft}g protein for recovery.`
-  } else {
-    if (todayEvent) {
-      paragraph = `${todayEvent.title} is on the schedule today.`
-      paragraph += proteinLeft > 30
-        ? ` Get ${proteinLeft}g more protein for better performance.`
-        : ' Nutrition is on track.'
-    } else if (proteinLeft > 40) {
-      paragraph = `Protein intake is behind. Get ${proteinLeft}g more before end of day.`
-    } else {
-      paragraph = 'You are on track today. Stay consistent.'
-    }
-  }
-
-  // Interpretive bullets — no raw numbers, no duplication of Focus items
+  // 3 compact bullets replacing the paragraph
   const bullets: string[] = []
-  const hour = new Date().getHours()
-  const totalKcal    = foodLogToday.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0)
-  const targetKcal   = Number(settings?.macro_kcal ?? 2000)
-  const expectedFrac = Math.max(0, Math.min(1, (hour - 6) / 18))
 
-  if (foodLogToday.length > 0) {
-    const calPct = targetKcal > 0 ? totalKcal / targetKcal : 0
-    if (calPct > expectedFrac + 0.15)       bullets.push('Calorie intake is ahead of schedule')
-    else if (calPct >= expectedFrac - 0.12) bullets.push('Calories are on track')
-    else                                     bullets.push('Calorie intake is behind schedule')
+  // 1. Recovery level
+  if (readiness.score !== null) {
+    if (readiness.score >= 75)      bullets.push('Recovery is high')
+    else if (readiness.score >= 50) bullets.push('Recovery is moderate')
+    else                            bullets.push('Recovery is low')
+  } else if (sleepScore !== null) {
+    if (sleepScore >= 70)  bullets.push('Sleep was good')
+    else if (sleepScore >= 50) bullets.push('Sleep was moderate')
+    else                    bullets.push('Sleep was poor')
   }
 
-  if (foodLogToday.length > 0) {
-    if (proteinLeft <= 0) {
-      bullets.push('Protein goal already reached today')
+  // 2. Training context
+  if (todayEvent) {
+    const t = todayEvent.title.toLowerCase()
+    const isCardio = CARDIO_KW.some(kw => t.includes(kw))
+    bullets.push(isCardio ? 'Cardio scheduled today' : `${todayEvent.title} planned today`)
+  } else if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -10) {
+    bullets.push(`HRV ${Math.abs(hrvBaseline.deviationPct)}% below baseline`)
+  }
+
+  // 3. Protein remaining
+  if (proteinLeft > 0) {
+    bullets.push(`${proteinLeft}g protein remaining`)
+  } else if (foodLogToday.length > 0) {
+    bullets.push('Protein goal reached')
+  }
+
+  return { status, title, bullets: bullets.slice(0, 3) }
+}
+
+// ─── Recommendation builder ───────────────────────────────────────────────────
+
+function buildRecommendation(rows: HealthRow[], data: any) {
+  const readiness      = computePhysiologyReadiness(rows)
+  const calendarEvents = data?.calendarEvents ?? []
+  const todayEvent     = calendarEvents.find((e: any) => isToday(e) && isSport(e)) ?? null
+  const foodLogToday   = data?.foodLogToday ?? []
+  const settings       = data?.settings
+  const totalProtein   = foodLogToday.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
+  const targetProtein  = Number(settings?.macro_protein ?? 180)
+  const proteinLeft    = Math.round(Math.max(0, targetProtein - totalProtein))
+  const hevy           = data?.todayHevy ?? []
+  const acts           = data?.todayActivities ?? []
+
+  let icon = '🏃'
+  let title = 'Zone 2 Run'
+  let duration = '45 min'
+  let href: string | undefined
+  const why: string[] = []
+
+  if (readiness.score !== null && readiness.score < 50) {
+    icon = '😴'; title = 'Rest Day'; duration = ''
+    why.push(`Readiness at ${readiness.score}% — body needs recovery`)
+    why.push('Skip training today')
+  } else if (readiness.score !== null && readiness.score < 65) {
+    icon = '🚶'; title = 'Light Walk or Mobility'; duration = '30 min'
+    why.push(`Readiness at ${readiness.score}% — keep intensity low`)
+    if (todayEvent) why.push(`${todayEvent.title} — reduce volume by ~25%`)
+  } else if (todayEvent) {
+    const t = todayEvent.title.toLowerCase()
+    const isCardio  = CARDIO_KW.some(k => t.includes(k))
+    const isGym     = STRENGTH_KW.some(k => t.includes(k)) && !isCardio
+    const done      = workoutDone(todayEvent.title, hevy, acts)
+    if (isCardio) {
+      icon = t.includes('fietsen') || t.includes('cycling') || t.includes('ride') || t.includes('wielren') ? '🚴' : '🏃'
     } else {
-      const hoursLeft     = Math.max(1, 22 - hour)
-      const neededPerHour = proteinLeft / hoursLeft
-      if (neededPerHour <= 15)      bullets.push('A protein-rich dinner will likely hit your goal')
-      else if (neededPerHour <= 30) bullets.push('Prioritise protein at every remaining meal')
-      else                          bullets.push('Protein is the main focus today')
+      icon = '🏋️'
     }
+    title    = todayEvent.title
+    duration = done ? 'Completed ✓' : ''
+    href     = isGym
+      ? '/training/strength'
+      : `/training/session?title=${encodeURIComponent(todayEvent.title)}&time=${encodeURIComponent((todayEvent as any).start_datetime ?? '')}`
+    if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high — good day to push')
+    else if (readiness.score !== null)                      why.push('Recovery is solid')
+    why.push(`${todayEvent.title} on the schedule`)
+  } else {
+    icon = '🚴'; title = 'Zone 2 Ride'; duration = '60 min'
+    if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high')
+    why.push('No session planned — good day for cardio')
   }
 
-  if (steps > 0) {
-    const projected = Math.round(steps * (18 / Math.max(1, hour - 6)))
-    if (steps >= stepGoal)           bullets.push('Step goal already reached')
-    else if (projected >= stepGoal)  bullets.push('Step goal is achievable at current pace')
-    else                             bullets.push('Steps are your biggest focus today')
-  }
+  if (proteinLeft > 30) why.push(`${proteinLeft}g protein remaining`)
+  else if (proteinLeft <= 0 && foodLogToday.length > 0) why.push('Protein goal already reached')
 
-  return { status, title, paragraph, bullets: bullets.slice(0, 3) }
+  return { icon, title, duration, href, why: why.slice(0, 3) }
 }
 
 // ─── Focus builder ────────────────────────────────────────────────────────────
@@ -254,91 +270,6 @@ function buildFocusItems(data: any) {
   return items.sort((a, b) => Number(a.done) - Number(b.done)).slice(0, 3)
 }
 
-// ─── Risks & Opportunities builder ───────────────────────────────────────────
-
-function buildRisksOps(data: any, rows: HealthRow[]) {
-  const items: { type: 'opportunity' | 'watch' | 'risk'; text: string }[] = []
-  const settings      = data?.settings
-  const foodLog7d     = data?.foodLog7d ?? []
-  const foodLogToday  = data?.foodLogToday ?? []
-  const targetProtein = Number(settings?.macro_protein ?? 180)
-  const stepGoal      = Number(settings?.step_goal ?? 10000)
-  const steps         = data?.latestGezondheid?.stappen ?? 0
-
-  const hour = new Date().getHours()
-
-  // Protein streak (triggers from 2 consecutive days)
-  const proteinByDate: Record<string, number> = {}
-  for (const row of foodLog7d) {
-    const d = row.date as string
-    proteinByDate[d] = (proteinByDate[d] ?? 0) + Number(row.protein ?? 0)
-  }
-  const todayProtein = foodLogToday.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
-  let streak = 0
-  const check = new Date(); check.setDate(check.getDate() - 1)
-  for (let i = 0; i < 6; i++) {
-    const d = check.toISOString().split('T')[0]
-    if ((proteinByDate[d] ?? 0) >= targetProtein) { streak++; check.setDate(check.getDate() - 1) }
-    else break
-  }
-  if (streak >= 2) {
-    items.push(todayProtein >= targetProtein
-      ? { type: 'opportunity', text: `Protein goal hit ${streak + 1} days in a row` }
-      : { type: 'opportunity', text: `Hit protein today for a ${streak + 1}-day streak` }
-    )
-  }
-
-  // Weekly cardio completion
-  const calendarEvents = data?.calendarEvents ?? []
-  const todayEvent = calendarEvents.find((e: any) => isToday(e) && isSport(e)) ?? null
-  const todayIsCardio = todayEvent && CARDIO_KW.some(kw => todayEvent.title.toLowerCase().includes(kw))
-  const cardioActs = (data?.todayActivities ?? []).filter((a: any) =>
-    CARDIO_SPORT_TYPES.some(ct => (a.sport_type ?? '').toLowerCase().includes(ct))
-  )
-  if (todayIsCardio && cardioActs.length === 0) {
-    const endOfWeek = new Date(); endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()))
-    const moreCardio = calendarEvents.some((e: any) => {
-      const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
-      return d >= tom0() && d <= endOfWeek && CARDIO_KW.some(kw => e.title.toLowerCase().includes(kw))
-    })
-    if (!moreCardio) {
-      items.push({ type: 'opportunity', text: "Finish weekly cardio after tonight's session" })
-    }
-  }
-
-  // Step projection — triggers from 8am, broader threshold
-  if (steps > 0 && steps < stepGoal) {
-    const projected = Math.round(steps * (18 / Math.max(1, hour - 6)))
-    if (hour >= 8 && projected < stepGoal * 0.9) {
-      items.push({ type: 'watch', text: `At current pace you'll end at ~${projected.toLocaleString('en-US')} steps` })
-    } else if (steps >= stepGoal * 0.9) {
-      items.push({ type: 'opportunity', text: `${(stepGoal - steps).toLocaleString('en-US')} steps to daily goal` })
-    }
-  } else if (steps >= stepGoal) {
-    items.push({ type: 'opportunity', text: 'Step goal already reached today' })
-  }
-
-  // Calorie risk — over target
-  const totalKcal  = foodLogToday.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0)
-  const targetKcal = Number(settings?.macro_kcal ?? 2000)
-  if (foodLogToday.length > 0 && totalKcal > targetKcal * 1.12) {
-    items.push({ type: 'risk', text: `${Math.round(totalKcal - targetKcal)} kcal over daily goal` })
-  }
-
-  // Sleep trend (3+ days declining)
-  const sleepRows = rows.filter(r => r.slaap_minuten != null).slice(0, 4)
-  if (sleepRows.length >= 3) {
-    const scores = sleepRows.map(r => computeSleepScore(r) ?? 0)
-    if (scores[0] < scores[1] && scores[1] < scores[2] && scores[0] < 65) {
-      const days = sleepRows.length >= 4 && scores[2] < scores[3] ? 4 : 3
-      items.push({ type: 'risk', text: `Sleep quality declining for ${days} days in a row` })
-    }
-  }
-
-  const order = { opportunity: 0, watch: 1, risk: 2 }
-  return items.sort((a, b) => order[a.type] - order[b.type]).slice(0, 4)
-}
-
 // ─── UI ───────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG = {
@@ -347,25 +278,55 @@ const STATUS_CFG = {
   red:    { bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.2)', dot: '#f87171' },
 }
 
+function RecommendationCard({ rec }: { rec: ReturnType<typeof buildRecommendation> }) {
+  const inner = (
+    <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
+      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Today's Recommendation</p>
+      <div className="flex items-center gap-4 mb-4">
+        <span className="text-[42px] leading-none">{rec.icon}</span>
+        <div>
+          <p className="text-[22px] font-bold text-white leading-tight">{rec.title}</p>
+          {rec.duration && (
+            <p className="text-[14px] text-white/40 mt-0.5">{rec.duration}</p>
+          )}
+        </div>
+      </div>
+      {rec.why.length > 0 && (
+        <div className="pt-3 border-t border-white/[0.08]">
+          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2.5">Why?</p>
+          <div className="flex flex-col gap-1.5">
+            {rec.why.map((w, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
+                <span className="text-[13px] text-white/65">{w}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+  return rec.href
+    ? <a href={rec.href} className="block active:opacity-70 transition-opacity">{inner}</a>
+    : inner
+}
+
 function CoachCard({ coach }: { coach: ReturnType<typeof buildCoach> }) {
   const cfg = STATUS_CFG[coach.status]
   return (
-    <div className="p-5 rounded-[24px] border" style={{ background: cfg.bg, borderColor: cfg.border }}>
-      <div className="flex items-center gap-2.5 mb-3">
-        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: cfg.dot }} />
-        <span className="text-[18px] font-bold text-white">{coach.title}</span>
+    <div className="px-4 py-3.5 rounded-[20px] border" style={{ background: cfg.bg, borderColor: cfg.border }}>
+      <div className="flex items-center gap-2.5 mb-2.5">
+        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.dot }} />
+        <span className="text-[15px] font-bold text-white">{coach.title}</span>
       </div>
-      <p className="text-[14px] text-white/70 leading-relaxed mb-4">{coach.paragraph}</p>
-      {coach.bullets.length > 0 && (
-        <div className="flex flex-col gap-2 pt-3 border-t border-white/[0.08]">
-          {coach.bullets.map((b, i) => (
-            <div key={i} className="flex items-start gap-2.5">
-              <span className="text-white/25 text-[12px] mt-[3px] shrink-0">•</span>
-              <span className="text-[13px] font-medium text-white/70">{b}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-col gap-1.5">
+        {coach.bullets.map((b, i) => (
+          <div key={i} className="flex items-start gap-2.5">
+            <span className="text-white/25 text-[11px] mt-[3px] shrink-0">•</span>
+            <span className="text-[13px] text-white/60">{b}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -396,118 +357,50 @@ function FocusCard({ items }: { items: ReturnType<typeof buildFocusItems> }) {
   )
 }
 
-const RO_CFG = {
-  opportunity: { dot: '#2dd4bf', label: 'Opportunity' },
-  watch:       { dot: '#fb923c', label: 'Watch' },
-  risk:        { dot: '#f87171', label: 'Risk' },
-}
-
-function RisksOpsCard({ items }: { items: ReturnType<typeof buildRisksOps> }) {
-  if (items.length === 0) return null
-  return (
-    <div>
-      <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em] mb-3">Risks & Opportunities</p>
-      <div className="flex flex-col gap-2">
-        {items.map((item, i) => {
-          const cfg = RO_CFG[item.type]
-          return (
-            <div key={i} className="flex items-start gap-3 px-4 py-3 rounded-[14px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              <div className="w-2 h-2 rounded-full shrink-0 mt-[5px]" style={{ background: cfg.dot }} />
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.07em] mb-0.5" style={{ color: cfg.dot }}>{cfg.label}</p>
-                <p className="text-[13px] text-white/65 leading-snug">{item.text}</p>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function ProgressBar({ label, current, target, unit, color, note, noteColor }: {
-  label: string; current: number; target: number; unit: string; color: string
-  note?: string; noteColor?: string
-}) {
-  const pct = target > 0 ? Math.min(current / target, 1) : 0
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-[12px] font-medium text-white/30 w-[52px] shrink-0">{label}</span>
-      <div className="flex-1 h-[4px] rounded-full" style={{ background: 'rgba(255,255,255,0.07)' }}>
-        <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: color }} />
-      </div>
-      <div className="flex flex-col items-end w-[80px] shrink-0">
-        <span className="text-[11px] text-white/25 tabular-nums leading-none">
-          {Math.round(current)}<span className="opacity-70">/{target}{unit}</span>
-        </span>
-        {note && (
-          <span className="text-[10px] font-semibold leading-none mt-0.5" style={{ color: noteColor ?? 'rgba(255,255,255,0.3)' }}>
-            {note}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function ProgressCard({ data }: { data: any }) {
   const foodLog  = data?.foodLogToday ?? []
   const settings = data?.settings
   if (!settings) return null
 
-  const t = foodLog.reduce((s: any, f: any) => ({
-    kcal:    s.kcal    + Number(f.kcal    ?? 0),
-    protein: s.protein + Number(f.protein ?? 0),
-    carbs:   s.carbs   + Number(f.carbs   ?? 0),
-    fat:     s.fat     + Number(f.fat     ?? 0),
-  }), { kcal: 0, protein: 0, carbs: 0, fat: 0 })
+  const totalProtein  = foodLog.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
+  const targetProtein = Number(settings.macro_protein ?? 180)
+  const proteinLeft   = Math.round(Math.max(0, targetProtein - totalProtein))
+  const proteinDone   = proteinLeft <= 0
 
   const steps    = data?.latestGezondheid?.stappen ?? 0
   const stepGoal = Number(settings.step_goal ?? 10000)
+  const stepsLeft = Math.max(0, stepGoal - steps)
+  const stepsDone = stepsLeft <= 0
 
-  const hour         = new Date().getHours()
-  const expectedFrac = Math.max(0, Math.min(1, (hour - 6) / 18))
-
-  function macroNote(current: number, target: number): { note: string; color: string } | undefined {
-    if (target <= 0 || current === 0) return undefined
-    const pct  = current / target
-    const diff = pct - expectedFrac
-    if (pct >= 1)        return { note: 'Done',       color: '#2dd4bf' }
-    if (diff > 0.15)     return { note: 'Ahead',      color: '#2dd4bf' }
-    if (diff >= -0.1)    return { note: 'On track',   color: 'rgba(255,255,255,0.4)' }
-    if (diff >= -0.25)   return { note: 'Behind',     color: '#fb923c' }
-    return               { note: 'Way behind',        color: '#f87171' }
-  }
-
-  function stepsNote(current: number, target: number): { note: string; color: string } | undefined {
-    if (current === 0) return undefined
-    if (current >= target) return { note: 'Done',     color: '#2dd4bf' }
-    const projected = Math.round(current * (18 / Math.max(1, hour - 6)))
-    if (projected >= target)              return { note: 'On track',   color: 'rgba(255,255,255,0.4)' }
-    if (projected >= target * 0.85)      return { note: 'Almost',     color: '#fb923c' }
-    return                                { note: 'Behind',            color: '#f87171' }
-  }
-
-  const kcalN   = macroNote(t.kcal,    Number(settings.macro_kcal    ?? 2000))
-  const eiwitN  = macroNote(t.protein, Number(settings.macro_protein ?? 180))
-  const carbsN  = macroNote(t.carbs,   Number(settings.macro_carbs   ?? 250))
-  const vetN    = macroNote(t.fat,     Number(settings.macro_fat     ?? 70))
-  const stapsN  = stepsNote(steps, stepGoal)
+  if (totalProtein === 0 && steps === 0) return null
 
   return (
     <div>
       <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em] mb-3">Progress</p>
-      <a href="/food" className="block active:opacity-70 transition-opacity">
-        <div className="flex flex-col gap-4 px-4 py-4 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <ProgressBar label="Kcal"    current={t.kcal}    target={Number(settings.macro_kcal    ?? 2000)} unit=""  color="rgb(251,146,60)"  note={kcalN?.note}  noteColor={kcalN?.color} />
-          <ProgressBar label="Protein" current={t.protein} target={Number(settings.macro_protein ?? 180)}  unit="g" color="rgb(45,212,191)"  note={eiwitN?.note} noteColor={eiwitN?.color} />
-          <ProgressBar label="Carbs"   current={t.carbs}   target={Number(settings.macro_carbs   ?? 250)}  unit="g" color="rgb(163,230,53)"  note={carbsN?.note} noteColor={carbsN?.color} />
-          <ProgressBar label="Fat"     current={t.fat}     target={Number(settings.macro_fat     ?? 70)}   unit="g" color="rgb(250,204,21)"  note={vetN?.note}   noteColor={vetN?.color} />
-          {steps > 0 && (
-            <ProgressBar label="Steps"   current={steps} target={stepGoal} unit="" color="rgb(129,140,248)" note={stapsN?.note} noteColor={stapsN?.color} />
-          )}
-        </div>
-      </a>
+      <div className="flex gap-3">
+        {totalProtein >= 0 && (
+          <a href="/food" className="flex-1 block active:opacity-70 transition-opacity">
+            <div className="px-4 py-3.5 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <p className="text-[11px] text-white/30 mb-1.5">Protein</p>
+              <p className={`text-[24px] font-bold leading-none ${proteinDone ? 'text-teal-400' : 'text-white'}`}>
+                {proteinDone ? '✓' : `${proteinLeft}g`}
+              </p>
+              <p className="text-[11px] text-white/30 mt-1">{proteinDone ? 'Goal reached' : 'remaining'}</p>
+            </div>
+          </a>
+        )}
+        {steps > 0 && (
+          <a href="/health/activity" className="flex-1 block active:opacity-70 transition-opacity">
+            <div className="px-4 py-3.5 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <p className="text-[11px] text-white/30 mb-1.5">Steps</p>
+              <p className={`text-[24px] font-bold leading-none ${stepsDone ? 'text-teal-400' : 'text-white'}`}>
+                {stepsDone ? '✓' : stepsLeft.toLocaleString('en-US')}
+              </p>
+              <p className="text-[11px] text-white/30 mt-1">{stepsDone ? 'Goal reached' : 'remaining'}</p>
+            </div>
+          </a>
+        )}
+      </div>
     </div>
   )
 }
@@ -586,18 +479,18 @@ export default function TodayPage() {
     ? { ...data, latestGezondheid: { ...(data.latestGezondheid ?? {}), stappen: todayHealthRow.stappen } }
     : data
 
-  const coach    = buildCoach(rows, effectiveData)
-  const focus    = buildFocusItems(effectiveData)
-  const risksOps = buildRisksOps(effectiveData, rows)
+  const rec   = buildRecommendation(rows, effectiveData)
+  const coach = buildCoach(rows, effectiveData)
+  const focus = buildFocusItems(effectiveData)
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
       <div style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-      <CoachCard coach={coach} />
-      <FocusCard items={focus} />
-      <RisksOpsCard items={risksOps} />
-      <ProgressCard data={effectiveData} />
-      <UpcomingCard events={effectiveData?.calendarEvents ?? []} />
+        <RecommendationCard rec={rec} />
+        <CoachCard coach={coach} />
+        <FocusCard items={focus} />
+        <ProgressCard data={effectiveData} />
+        <UpcomingCard events={effectiveData?.calendarEvents ?? []} />
       </div>
     </PremiumScreen>
   )

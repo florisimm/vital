@@ -17,9 +17,9 @@ export function MealConfirmView({ template, meal, setMeal, loggingTemplate, onLo
         <div className="grid grid-cols-4 gap-2">
           {[
             { label: 'Kcal',   value: `${Math.round(template.foods.reduce((s, f) => s + f.kcal, 0))}`,       color: '#fb923c' },
-            { label: 'Eiwit',  value: `${Math.round(template.foods.reduce((s, f) => s + f.protein, 0))}g`,   color: '#2dd4bf' },
-            { label: 'Koolh.', value: `${Math.round(template.foods.reduce((s, f) => s + f.carbs, 0))}g`,     color: '#facc15' },
-            { label: 'Vet',    value: `${Math.round(template.foods.reduce((s, f) => s + f.fat, 0))}g`,       color: '#818cf8' },
+            { label: 'Protein',  value: `${Math.round(template.foods.reduce((s, f) => s + f.protein, 0))}g`,   color: '#2dd4bf' },
+            { label: 'Carbs', value: `${Math.round(template.foods.reduce((s, f) => s + f.carbs, 0))}g`,     color: '#facc15' },
+            { label: 'Fat',    value: `${Math.round(template.foods.reduce((s, f) => s + f.fat, 0))}g`,       color: '#818cf8' },
           ].map(({ label, value, color }) => (
             <div key={label} className="flex flex-col items-center gap-1 py-3 rounded-[14px]"
               style={{ background: 'rgba(255,255,255,0.06)' }}>

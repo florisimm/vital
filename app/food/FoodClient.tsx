@@ -313,10 +313,10 @@ export function FoodClient() {
               </div>
             </div>
             {([
-              { key: 'kcal'    as const, label: 'Calorieën',    unit: 'kcal', tint: 'bg-orange-400' },
-              { key: 'protein' as const, label: 'Eiwit',        unit: 'g',    tint: 'bg-teal-400'   },
-              { key: 'carbs'   as const, label: 'Koolhydraten', unit: 'g',    tint: 'bg-yellow-400' },
-              { key: 'fat'     as const, label: 'Vet',          unit: 'g',    tint: 'bg-indigo-400' },
+              { key: 'kcal'    as const, label: 'Calories',    unit: 'kcal', tint: 'bg-orange-400' },
+              { key: 'protein' as const, label: 'Protein',        unit: 'g',    tint: 'bg-teal-400'   },
+              { key: 'carbs'   as const, label: 'Carbs', unit: 'g',    tint: 'bg-yellow-400' },
+              { key: 'fat'     as const, label: 'Fat',          unit: 'g',    tint: 'bg-indigo-400' },
             ]).map(({ key, label, unit, tint }) => (
               <button key={key}
                 className="w-full text-left active:opacity-60 transition-opacity"

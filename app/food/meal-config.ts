@@ -14,10 +14,10 @@ export function formatDayLabel(dateStr: string) {
   const today = new Date().toISOString().split('T')[0]
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-  if (dateStr === today) return 'Vandaag'
-  if (dateStr === yesterday) return 'Gisteren'
-  if (dateStr === tomorrow) return 'Morgen'
-  return new Date(dateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
+  if (dateStr === today) return 'Today'
+  if (dateStr === yesterday) return 'Yesterday'
+  if (dateStr === tomorrow) return 'Tomorrow'
+  return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })
 }
 
 export const MEAL_ORDER = ['ontbijt', 'snack_ochtend', 'lunch', 'snack_middag', 'avondeten', 'snack_avond']
@@ -46,5 +46,5 @@ export const MEAL_LABELS_SHORT: Record<string, string> = {
 }
 
 export type MacroKey = 'kcal' | 'protein' | 'carbs' | 'fat'
-export const MACRO_LABEL: Record<MacroKey, string> = { kcal: 'Calorieën', protein: 'Eiwit', carbs: 'Koolhydraten', fat: 'Vet' }
+export const MACRO_LABEL: Record<MacroKey, string> = { kcal: 'Calories', protein: 'Protein', carbs: 'Carbs', fat: 'Fat' }
 export const MACRO_UNIT: Record<MacroKey, string>  = { kcal: 'kcal', protein: 'g', carbs: 'g', fat: 'g' }

@@ -65,7 +65,7 @@ export default function TrainingPage() {
   const calendarEvents = data?.calendarEvents ?? []
 
   return (
-    <PremiumScreen title="Training" subtitle="Performance signal" contentGap={18}>
+    <PremiumScreen title="Training" subtitle="Training Overview" contentGap={18}>
       {/* Category strip — buttons swap content, no navigation */}
       <div className="flex gap-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
         {TABS.map(({ label, key }) => (
@@ -85,9 +85,9 @@ export default function TrainingPage() {
       {/* Tab content */}
       <div style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
         {activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} />}
-        {activeTab === 'running'     && <RunningSection activities={activities} />}
-        {activeTab === 'cycling'     && <CyclingSection activities={activities} />}
-        {activeTab === 'swimming'    && <SwimmingSection activities={activities} />}
+        {activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} />}
+        {activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} />}
+        {activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} />}
         {activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
         {activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
         {activeTab === 'performance' && <PerformanceSection />}

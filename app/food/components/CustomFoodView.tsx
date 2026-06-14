@@ -53,12 +53,12 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
   }
 
   const fields = [
-    { key: 'kcal',     label: 'Calorieën',      unit: 'kcal', color: '#fb923c' },
-    { key: 'protein',  label: 'Eiwit',           unit: 'g',    color: '#2dd4bf' },
-    { key: 'carbs',    label: 'Koolhydraten',    unit: 'g',    color: '#facc15' },
-    { key: 'sugars',   label: 'Waarvan suikers', unit: 'g',    color: '#f472b6' },
-    { key: 'fat',      label: 'Vet',             unit: 'g',    color: '#818cf8' },
-    { key: 'caffeine', label: 'Cafeïne',         unit: 'mg',   color: '#a78bfa' },
+    { key: 'kcal',     label: 'Calories',      unit: 'kcal', color: '#fb923c' },
+    { key: 'protein',  label: 'Protein',           unit: 'g',    color: '#2dd4bf' },
+    { key: 'carbs',    label: 'Carbs',    unit: 'g',    color: '#facc15' },
+    { key: 'sugars',   label: 'Sugars', unit: 'g',    color: '#f472b6' },
+    { key: 'fat',      label: 'Fat',             unit: 'g',    color: '#818cf8' },
+    { key: 'caffeine', label: 'Caffeine',         unit: 'mg',   color: '#a78bfa' },
     { key: 'alcohol',  label: 'Alcohol',         unit: 'g',    color: '#f87171' },
   ]
 
