@@ -8,10 +8,10 @@ import { formatTime, localDateStr } from '@/lib/timeFormat'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STRENGTH_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'gewichten', 'kracht']
-const CARDIO_KW   = ['run', 'loop', 'fietsen', 'zwemmen', 'swim', 'ride', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval', 'tempoloop', 'zone']
+const STRENGTH_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'weights', 'strength']
+const CARDIO_KW   = ['run', 'long run', 'bike', 'swim', 'swim', 'ride', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo', 'zone']
 const CARDIO_SPORT_TYPES = ['run', 'ride', 'swim', 'walk', 'hike', 'virtual_run', 'virtual_ride', 'rowing', 'kayaking', 'crossfit', 'elliptical']
-const SPORT_KW = [...new Set([...STRENGTH_KW, ...CARDIO_KW, 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'toernooi', 'sport', 'sporten', 'crossfit', 'yoga', 'padel', 'hockey', 'basketbal', 'wielrennen'])]
+const SPORT_KW = [...new Set([...STRENGTH_KW, ...CARDIO_KW, 'football', 'tennis', 'volleyball', 'training', 'workout', 'tournament', 'sport', 'sports', 'crossfit', 'yoga', 'padel', 'hockey', 'basketball', 'cycling'])]
 
 type DayStatus = 'green' | 'yellow' | 'red'
 
