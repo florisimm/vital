@@ -3403,61 +3403,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 1. Consistency strip */}
-      <Card>
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistentie</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[36px] font-bold text-teal-400 leading-none">{activeDays}</span>
-              <span className="text-[15px] text-white/50">actieve dagen</span>
-            </div>
-            <span className="text-[12px] text-white/30">Afgelopen 28 dagen</span>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className="text-[13px] font-semibold text-white/60">{allItems.length} sessies totaal</span>
-            <span className="text-[12px] text-white/30">{(activeDays / 4).toFixed(1)}× per week gem.</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* 2. Filter + Recent workouts */}
-      <Card>
-        <div className="flex flex-col gap-4">
-          {/* Filter tabs */}
-          <div className="flex gap-2 flex-wrap">
-            {filters.map(f => (
-              <button key={f.key} onClick={() => setFilter(f.key)}
-                className="px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all"
-                style={{
-                  background: filter === f.key ? f.color : 'rgba(255,255,255,0.06)',
-                  color: filter === f.key ? 'white' : 'rgba(255,255,255,0.45)',
-                }}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {filtered.length === 0 ? (
-            <p className="text-white/40 text-[15px] py-4 text-center">Geen activiteiten gevonden</p>
-          ) : filtered.slice(0, 15).map((w, i) => (
-            <div key={i} className="flex items-center gap-3"
-              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none', paddingTop: i > 0 ? 12 : 0 }}>
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <WorkoutIcon type={w.type as 'run' | 'ride' | 'strength'} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-medium text-white truncate">{w.label}</p>
-                <p className="text-[12px] text-white/40">{w.relDate}</p>
-              </div>
-              <span className="text-[12px] text-white/40 shrink-0 text-right max-w-[90px] truncate">{w.detail}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* 3. Monthly pattern */}
+      {/* 1. Monthly pattern */}
       <Card>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -3468,7 +3414,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
         </div>
       </Card>
 
-      {/* 4. Calendar */}
+      {/* 2. Calendar */}
       <Card>
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -3515,6 +3461,59 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
               </div>
             ))}
           </div>
+        </div>
+      </Card>
+
+      {/* 3. Consistency strip */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistentie</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[36px] font-bold text-teal-400 leading-none">{activeDays}</span>
+              <span className="text-[15px] text-white/50">actieve dagen</span>
+            </div>
+            <span className="text-[12px] text-white/30">Afgelopen 28 dagen</span>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-[13px] font-semibold text-white/60">{allItems.length} sessies totaal</span>
+            <span className="text-[12px] text-white/30">{(activeDays / 4).toFixed(1)}× per week gem.</span>
+          </div>
+        </div>
+      </Card>
+
+      {/* 4. Filter + All workouts */}
+      <Card>
+        <div className="flex flex-col gap-4">
+          <div className="flex gap-2 flex-wrap">
+            {filters.map(f => (
+              <button key={f.key} onClick={() => setFilter(f.key)}
+                className="px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all"
+                style={{
+                  background: filter === f.key ? f.color : 'rgba(255,255,255,0.06)',
+                  color: filter === f.key ? 'white' : 'rgba(255,255,255,0.45)',
+                }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="text-white/40 text-[15px] py-4 text-center">Geen activiteiten gevonden</p>
+          ) : filtered.slice(0, 15).map((w, i) => (
+            <div key={i} className="flex items-center gap-3"
+              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none', paddingTop: i > 0 ? 12 : 0 }}>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <WorkoutIcon type={w.type as 'run' | 'ride' | 'strength'} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-medium text-white truncate">{w.label}</p>
+                <p className="text-[12px] text-white/40">{w.relDate}</p>
+              </div>
+              <span className="text-[12px] text-white/40 shrink-0 text-right max-w-[90px] truncate">{w.detail}</span>
+            </div>
+          ))}
         </div>
       </Card>
     </div>
