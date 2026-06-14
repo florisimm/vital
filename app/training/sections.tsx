@@ -3076,17 +3076,18 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   const hoursSince = lastRide ? Math.round((Date.now() - new Date(lastRide.start_date).getTime()) / 3600000) : null
 
   const details = readinessPct >= 85
-    ? { duur: '60–90 min', zone: 'Zone 3–4 (threshold)', intensiteit: 'Hoog' }
+    ? { duur: '60–90 min', intensiteit: 'Hoog', zone: 'Zone 3–4' }
     : readinessPct >= 70
-    ? { duur: '45–75 min', zone: 'Zone 2 (aeroob)', intensiteit: 'Laag–matig' }
-    : { duur: '20–40 min', zone: 'Zone 1 (herstel)', intensiteit: 'Licht' }
+    ? { duur: '45–75 min', intensiteit: 'Matig', zone: 'Zone 2' }
+    : { duur: '20–40 min', intensiteit: 'Herstel', zone: 'Zone 1' }
 
   const tomorrowPct = readinessPct >= 85 ? 72 : readinessPct >= 70 ? 82 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Drempeltraining mogelijk' : tomorrowPct >= 70 ? 'Zone 2-rit' : 'Herstelrit'
+  const tomorrowColor = tomorrowPct >= 85 ? '#4ade80' : tomorrowPct >= 70 ? '#facc15' : '#fb923c'
 
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Laatste rit ${hoursSince}u geleden`)
-  if (readinessPct >= 85) reasons.push('Belastbaarheid optimaal — drempeltraining mogelijk')
+  if (readinessPct >= 85) reasons.push('Goed hersteld — drempeltraining mogelijk')
   else if (readinessPct >= 70) reasons.push('Zone 2 bouwt aerobe basis zonder te veel stress')
   else reasons.push('Hoge intensiteit vermijden — herstel prioriteit')
 
@@ -3094,25 +3095,24 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(34,211,238,0.07)' }}>
       <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Fietsadvies</p>
 
-      <div className="flex items-baseline gap-2 mb-3">
-        <span className="text-[24px] font-bold text-white leading-none">{suggestion}</span>
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold text-black" style={{ background: c }}>
-          {details.intensiteit}
-        </span>
-      </div>
-
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Duur</span>
-          <span className="text-[15px] font-semibold text-white/80">{details.duur}</span>
+        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Vandaag</span>
+          <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
+          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.intensiteit}</span>
+          <span className="text-[11px] text-white/40">{details.zone} · {details.duur}</span>
         </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Zone</span>
-          <span className="text-[15px] font-semibold text-white/80">{details.zone}</span>
+        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Morgen</span>
+          <span className="text-[15px] font-semibold text-white/80 leading-tight">{tomorrowLabel}</span>
+          <div className="flex items-center gap-1.5 mt-auto">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: tomorrowColor }} />
+            <span className="text-[12px] text-white/40">Verwacht {tomorrowPct}%</span>
+          </div>
         </div>
       </div>
 
-      <div className="border-t border-white/[0.08] pt-3 mb-3">
+      <div className="border-t border-white/[0.08] pt-3">
         <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Waarom</p>
         <div className="flex flex-col gap-1.5">
           {reasons.map((r, i) => (
@@ -3122,11 +3122,6 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
-        <span className="text-[12px] text-white/40">Morgen verwacht</span>
-        <span className="text-[13px] font-semibold text-cyan-400">{tomorrowLabel}</span>
       </div>
     </div>
   )
