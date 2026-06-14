@@ -81,7 +81,7 @@ function FitbitSyncHandler() {
 }
 
 export default function HealthPage() {
-  const { data: rows = [] } = useSWR('health-gezondheid', fetchHealth, {
+  const { data: rows = [], isLoading } = useSWR('health-gezondheid', fetchHealth, {
     revalidateOnFocus: false, dedupingInterval: 60_000,
   })
   const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, {
@@ -210,6 +210,7 @@ export default function HealthPage() {
       </div>
 
       {/* Tab content */}
+      <div style={{ opacity: isLoading ? 0 : 1, transition: 'opacity 0.15s ease' }}>
       {activeTab === 'sleep'    && <SleepSection />}
       {activeTab === 'recovery' && <RecoverySection />}
       {activeTab === 'heart'    && <HeartSection />}
@@ -307,6 +308,7 @@ export default function HealthPage() {
         </Card>
       </>}
 
+      </div>
     </PremiumScreen>
   )
 }

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
+import { saveCache } from '@/components/SWRProvider'
 
 // Prefetches all app data into the SWR cache on first render,
 // so every tab has data ready before the user clicks it.
@@ -82,6 +83,9 @@ export function DataProvider() {
       mutate('health-gezondheid', gezondheid ?? [], false)
 
       mutate('training', { activities: activities ?? [], hevy: hevy ?? [], calendarEvents: upcomingCalendar }, false)
+
+      // Persist to localStorage immediately so iOS has data on next cold start
+      saveCache()
 
       // Sync Google Calendar in background AFTER cache is warm — when done, revalidate training
       const { data: { session } } = await supabase.auth.getSession()

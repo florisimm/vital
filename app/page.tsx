@@ -592,11 +592,13 @@ export default function TodayPage() {
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
+      <div style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
       <CoachCard coach={coach} />
       <FocusCard items={focus} />
       <RisksOpsCard items={risksOps} />
       <ProgressCard data={effectiveData} />
       <UpcomingCard events={effectiveData?.calendarEvents ?? []} />
+      </div>
     </PremiumScreen>
   )
 }

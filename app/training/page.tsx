@@ -83,13 +83,15 @@ export default function TrainingPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} />}
-      {activeTab === 'running'     && <RunningSection activities={activities} />}
-      {activeTab === 'cycling'     && <CyclingSection activities={activities} />}
-      {activeTab === 'swimming'    && <SwimmingSection activities={activities} />}
-      {activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
-      {activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
-      {activeTab === 'performance' && <PerformanceSection />}
+      <div style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
+        {activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} />}
+        {activeTab === 'running'     && <RunningSection activities={activities} />}
+        {activeTab === 'cycling'     && <CyclingSection activities={activities} />}
+        {activeTab === 'swimming'    && <SwimmingSection activities={activities} />}
+        {activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
+        {activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
+        {activeTab === 'performance' && <PerformanceSection />}
+      </div>
     </PremiumScreen>
   )
 }

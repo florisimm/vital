@@ -6,6 +6,17 @@ const TTL_MS = 24 * 60 * 60 * 1000
 
 const PERSIST_KEYS = new Set(['today', 'training', 'health-gezondheid', 'food-log', 'products'])
 
+let cacheMap: Map<string, any> | null = null
+
+export function saveCache() {
+  if (!cacheMap || typeof window === 'undefined') return
+  try {
+    const entries = [...cacheMap.entries()].filter(([k]) => PERSIST_KEYS.has(k))
+    if (entries.length === 0) return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ts: Date.now(), entries }))
+  } catch {}
+}
+
 function makeProvider() {
   if (typeof window === 'undefined') return new Map()
 
@@ -22,12 +33,16 @@ function makeProvider() {
     map = new Map()
   }
 
-  window.addEventListener('beforeunload', () => {
-    try {
-      const entries = [...map.entries()].filter(([k]) => PERSIST_KEYS.has(k))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ts: Date.now(), entries }))
-    } catch {}
+  cacheMap = map
+
+  // visibilitychange fires reliably on iOS when the app goes to background
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveCache()
   })
+  // pagehide is the mobile-friendly alternative to beforeunload
+  window.addEventListener('pagehide', () => saveCache())
+  // Keep beforeunload for desktop
+  window.addEventListener('beforeunload', () => saveCache())
 
   return map
 }
