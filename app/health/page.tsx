@@ -259,10 +259,10 @@ export default function HealthPage() {
       if (!res.ok || !data?.ok) {
         const apiError = Array.isArray(data?.errors) && data.errors.length ? String(data.errors[0]) : null
         const text = data?.error === 'not connected'
-          ? 'Fitbit is nog niet gekoppeld.'
+          ? 'Fitbit is not yet connected.'
           : apiError
-            ? `Fitbit sync fout: ${apiError}`
-          : 'Fitbit sync mislukt.'
+            ? `Fitbit sync error: ${apiError}`
+          : 'Fitbit sync failed.'
         setSyncMessage({ type: 'err', text })
         return
       }
@@ -273,8 +273,8 @@ export default function HealthPage() {
       setSyncMessage({
         type: errorCount ? 'err' : 'ok',
         text: errorCount
-          ? `Sync voltooid met ${errorCount} fout${errorCount === 1 ? '' : 'en'}: ${String(data.errors[0])}`
-          : `Fitbit bijgewerkt: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+          ? `Sync completed with ${errorCount} error${errorCount === 1 ? '' : 's'}: ${String(data.errors[0])}`
+          : `Fitbit updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
       })
     } finally {
       setSyncing(false)

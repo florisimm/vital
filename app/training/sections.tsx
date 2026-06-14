@@ -1238,13 +1238,13 @@ function LastRunCard({ run, allRuns }: { run: Activity; allRuns: Activity[] }) {
             <span className="text-[17px] font-semibold text-white leading-snug">{run.name}</span>
             <span className="text-[12px] text-white/40">{formatDate(run.start_date)}</span>
             <div className="flex gap-5 mt-1">
-              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Afstand</span></div>}
-              {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-teal-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">Tempo /km</span></div>}
-              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duur</span></div>}
+              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
+              {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-teal-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">Pace /km</span></div>}
+              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
             </div>
             {run.average_heartrate && (
               <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
-                <span className="text-[13px] text-white/40">Gem. HR</span>
+                <span className="text-[13px] text-white/40">Avg HR</span>
                 <span className="text-[13px] font-semibold text-red-400">{Math.round(run.average_heartrate)} bpm</span>
               </div>
             )}
@@ -1371,14 +1371,14 @@ function LastRideCard({ ride, allRides }: { ride: Activity; allRides: Activity[]
             <span className="text-[17px] font-semibold text-white leading-snug">{ride.name}</span>
             <span className="text-[12px] text-white/40">{formatDate(ride.start_date)}</span>
             <div className="flex gap-5 mt-1">
-              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Afstand</span></div>}
-              {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Snelheid</span></div>}
-              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duur</span></div>}
-              {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Hoogte</span></div>}
+              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
+              {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Pace</span></div>}
+              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
+              {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Elevation</span></div>}
             </div>
             {ride.average_heartrate && (
               <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
-                <span className="text-[13px] text-white/40">Gem. HR</span>
+                <span className="text-[13px] text-white/40">Avg HR</span>
                 <span className="text-[13px] font-semibold text-red-400">{Math.round(ride.average_heartrate)} bpm</span>
               </div>
             )}
@@ -1563,7 +1563,7 @@ function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkou
               {(workout.duration ?? 0) > 0 && (
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[20px] font-bold text-white leading-none">{formatDuration(workout.duration!)}</span>
-                  <span className="text-[11px] text-white/40">Duur</span>
+                  <span className="text-[11px] text-white/40">Duration</span>
                 </div>
               )}
               {(workout.volume_kg ?? 0) > 0 && (
@@ -3661,7 +3661,7 @@ export function SwimmingSection({ activities, hevy = [] }: { activities: Activit
   const readinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
-  const swimmingSuggestion = readinessPct >= 85 ? 'Sprintset' : readinessPct >= 70 ? 'Duurzwemmen' : 'Herstellend zwemmen'
+  const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swim' : 'Recovery swim'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
 
   const trend = computeSwimmingWeeklyTrend(activities)

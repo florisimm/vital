@@ -92,7 +92,7 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
 
       <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}
         className="h-[52px] rounded-[16px] bg-white text-black font-semibold text-[16px] disabled:opacity-30">
-        {saving ? 'Opslaan…' : 'Toevoegen'}
+        {saving ? 'Saving…' : 'Add'}
       </button>
     </div>
   )

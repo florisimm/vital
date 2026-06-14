@@ -119,21 +119,21 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
   let explanation = ''
   if (top.name === 'hrv') {
     if (hrvDevPct !== null && hrvDevPct < -10)
-      explanation = `Readiness wordt vooral verlaagd door een lagere HRV dan normaal (${hrvDevPct}% onder jouw baseline).`
+      explanation = `Readiness is primarily reduced by lower HRV than normal (${hrvDevPct}% below your baseline).`
     else if (hrvDevPct !== null && hrvDevPct > 10)
-      explanation = `HRV ligt boven je gebruikelijke niveau (+${hrvDevPct}%) — goed teken voor herstel.`
+      explanation = `HRV is above your usual level (+${hrvDevPct}%) — good sign for recovery.`
   } else if (top.name === 'rhr') {
     if (rhrDevPct !== null && rhrDevPct > 8)
-      explanation = `Rusthartslag is hoger dan normaal (+${rhrDevPct}%) — wijst op verminderd herstel.`
+      explanation = `Resting heart rate is higher than normal (+${rhrDevPct}%) — indicates reduced recovery.`
     else if (rhrDevPct !== null && rhrDevPct < -8)
-      explanation = `Rusthartslag ligt lager dan normaal — goed teken voor herstel.`
+      explanation = `Resting heart rate is lower than normal — good sign for recovery.`
   } else if (top.name === 'sleep') {
     if (sleepIsFallback)
-      explanation = 'Geen slaapdata van vannacht — readiness is gebaseerd op je gemiddelde van de afgelopen dagen.'
+      explanation = 'No sleep data from last night — readiness is based on your average from recent days.'
     else if (top.v < 0.55)
-      explanation = 'Slaapkwaliteit draagt het meest bij aan een lagere readiness vandaag.'
+      explanation = 'Sleep quality is the main factor in your lower readiness today.'
     else if (top.v > 0.80)
-      explanation = 'Slaapkwaliteit ligt boven je gebruikelijke niveau.'
+      explanation = 'Sleep quality is above your usual level.'
   }
 
   const label = score >= 80 ? 'Peak'

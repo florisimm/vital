@@ -374,7 +374,7 @@ export function FoodClient() {
           onClick={() => { setPreselectedMeal(getMealForHour()); setShowAddSheet(true) }}
           className="fixed bottom-[108px] right-5 z-40 h-[44px] px-4 rounded-full flex items-center gap-2 border border-white/20 shadow-xl"
           style={{ background: 'rgba(255,255,255,0.12)' }}
-          aria-label="Voeding toevoegen"
+          aria-label="Add food"
         >
           <Plus size={17} className="text-white" strokeWidth={2.3} />
           <span className="text-[14px] font-semibold text-white">{currentMealLabel}</span>
@@ -384,7 +384,7 @@ export function FoodClient() {
           onClick={() => { setPreselectedMeal(getMealForHour()); setShowAddSheet(true) }}
           className="fixed bottom-[108px] right-5 z-40 w-[56px] h-[56px] rounded-full flex items-center justify-center border border-white/20 shadow-xl"
           style={{ background: 'rgba(255,255,255,0.12)' }}
-          aria-label="Voeding toevoegen"
+          aria-label="Add food"
         >
           <Plus size={24} className="text-white" strokeWidth={2.2} />
         </button>
