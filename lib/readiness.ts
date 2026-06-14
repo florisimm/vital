@@ -1,6 +1,8 @@
 // Shared physiology / readiness utilities — single source of truth used by
 // Health and Training tabs so both show the same numbers.
 
+import { localDateStr } from './timeFormat'
+
 export type HealthRow = {
   datum: string
   stappen?: number | null
@@ -48,14 +50,25 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
 } {
   const noData = { score: null, label: '–', color: 'rgba(255,255,255,0.3)', explanation: '' }
 
-  // Sleep (0–1)
-  const sleepRow = rows.find(r => r.slaap_minuten != null) ?? null
-  const sleepScore = sleepRow ? computeSleepScore(sleepRow) : null
+  // "Last night" metrics are stored under today's (wake-up) datum. If today has
+  // no data (Fitbit not worn), each component is null and readiness degrades —
+  // we never fall back to a stale earlier night.
+  const todayStr = localDateStr()
+  const todayRow = rows.find(r => r.datum === todayStr) ?? null
+
+  // Sleep (0–1) — use last night if available, otherwise 7-day average as fallback
+  const sleepRows = rows.filter(r => r.slaap_minuten != null)
+  const sleepScore = todayRow?.slaap_minuten != null
+    ? computeSleepScore(todayRow)
+    : sleepRows.length >= 2
+      ? Math.round(sleepRows.slice(0, 7).reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / Math.min(sleepRows.length, 7))
+      : null
   const sleepComponent = sleepScore != null ? sleepScore / 100 : null
+  const sleepIsFallback = todayRow?.slaap_minuten == null && sleepScore != null
 
   // HRV — baseline-relative when ≥4 historical readings, absolute fallback
   const hrvRows = rows.filter(r => r.hrv_rmssd != null)
-  const todayHRV = hrvRows[0]?.hrv_rmssd ?? null
+  const todayHRV = todayRow?.hrv_rmssd ?? null
   let hrvComponent: number | null = null
   let hrvDevPct: number | null = null
   if (todayHRV != null) {
@@ -72,7 +85,7 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
 
   // RHR — baseline-relative when ≥4 historical readings, absolute fallback
   const rhrRows = rows.filter(r => r.hartslag_rust != null)
-  const todayRHR = rhrRows[0]?.hartslag_rust ?? null
+  const todayRHR = todayRow?.hartslag_rust ?? null
   let rhrComponent: number | null = null
   let rhrDevPct: number | null = null
   if (todayRHR != null) {
@@ -115,7 +128,9 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
     else if (rhrDevPct !== null && rhrDevPct < -8)
       explanation = `Rusthartslag ligt lager dan normaal — goed teken voor herstel.`
   } else if (top.name === 'sleep') {
-    if (top.v < 0.55)
+    if (sleepIsFallback)
+      explanation = 'Geen slaapdata van vannacht — readiness is gebaseerd op je gemiddelde van de afgelopen dagen.'
+    else if (top.v < 0.55)
       explanation = 'Slaapkwaliteit draagt het meest bij aan een lagere readiness vandaag.'
     else if (top.v > 0.80)
       explanation = 'Slaapkwaliteit ligt boven je gebruikelijke niveau.'

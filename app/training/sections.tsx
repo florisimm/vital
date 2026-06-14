@@ -1108,7 +1108,7 @@ export function AiInsight({ text }: { text: string }) {
           <span className="text-orange-400 text-[14px]">✦</span>
           <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Coach Tip</span>
         </div>
-        <p className="text-[17px] text-white/85 leading-relaxed">{text}</p>
+        <p className="text-[17px] text-white/85 leading-relaxed" suppressHydrationWarning>{text}</p>
       </div>
     </Card>
   )

@@ -7,6 +7,7 @@ import { Card, SectionHeader, MetricTile } from '@/components/ui'
 import { healthFetcher } from './fetcher'
 import { fetchWeeklyNutrition } from '@/app/food/fetchers'
 import { computePhysiologyReadiness, computeHRVBaseline, computeIllnessFlag } from '@/lib/readiness'
+import { localDateStr } from '@/lib/timeFormat'
 
 export type GezondheidsRow = {
   datum: string
@@ -54,6 +55,16 @@ function fmtTime(min: number | null) {
 function avg(vals: (number | null)[]): number | null {
   const clean = vals.filter((v): v is number => v !== null)
   return clean.length ? Math.round(clean.reduce((a, b) => a + b, 0) / clean.length) : null
+}
+
+// Average for sleep times that cross midnight. Values < 8h (480 min) are
+// treated as next-day (e.g. 00:15 → 24h15m = 1455 min) before averaging.
+function avgSleepTime(vals: (number | null)[]): number | null {
+  const clean = vals.filter((v): v is number => v !== null)
+  if (!clean.length) return null
+  const normalized = clean.map(v => v < 480 ? v + 1440 : v)
+  const mean = normalized.reduce((a, b) => a + b, 0) / normalized.length
+  return Math.round(mean % 1440)
 }
 
 // Large metric card with vs-30d comparison
@@ -254,8 +265,9 @@ export function computeSleepScore(r: GezondheidsRow): number | null {
   return Math.round((weighted / totalWeight) * 100)
 }
 
-function nightLabel(datum: string, idx: number): string {
-  if (idx === 0) return 'Last night'
+// Sleep is stored under the wake-up date, so "last night" = today's datum.
+function nightLabel(datum: string): string {
+  if (datum === localDateStr()) return 'Last night'
   const d = new Date(datum + 'T00:00:00')
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 }
@@ -264,31 +276,47 @@ export function SleepSection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
 
   const sleepRows = rows.filter(r => r.slaap_minuten != null)
-  const [selectedIdx, setSelectedIdx] = useState(0)
-  const idx = Math.min(selectedIdx, Math.max(0, sleepRows.length - 1))
-  const selected = sleepRows[idx]
+  const nights = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - i)
+    const datum = localDateStr(d)
+    return { datum, row: rows.find(r => r.datum === datum) ?? null }
+  })
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const idx = selectedIdx !== null
+    ? Math.min(selectedIdx, nights.length - 1)
+    : Math.max(0, nights.findIndex(n => n.row?.slaap_minuten != null))
+  const selectedRow = nights[idx]?.row ?? null
 
-  const totalMin    = selected?.slaap_minuten ?? null
-  const score       = selected ? computeSleepScore(selected) : null
-  const deep        = selected?.slaap_diep ?? null
-  const light       = selected?.slaap_licht ?? null
-  const rem         = selected?.slaap_rem ?? null
-  const wake        = selected?.wakker_minuten ?? null
-  const spo2        = selected?.spo2 ?? null
-  const resp        = selected?.ademhalingsfrequentie ?? null
-  const bedtimeMin  = selected?.slaap_start_min ?? null
-  const wakeTimeMin = selected?.slaap_einde_min ?? null
+  const totalMin    = selectedRow?.slaap_minuten ?? null
+  const score       = selectedRow ? computeSleepScore(selectedRow) : null
+  const deep        = selectedRow?.slaap_diep ?? null
+  const light       = selectedRow?.slaap_licht ?? null
+  const rem         = selectedRow?.slaap_rem ?? null
+  const wake        = selectedRow?.wakker_minuten ?? null
+  const spo2        = selectedRow?.spo2 ?? null
+  const resp        = selectedRow?.ademhalingsfrequentie ?? null
+  const bedtimeMin  = selectedRow?.slaap_start_min ?? null
+  const wakeTimeMin = selectedRow?.slaap_einde_min ?? null
 
   const last30 = sleepRows.slice(0, 30)
   const last7  = sleepRows.slice(0, 7)
 
-  const avg30Score = avg(last30.map(computeSleepScore))
-  const avg30Min   = avg(last30.map(r => r.slaap_minuten))
-  const avg7Score  = avg(last7.map(computeSleepScore))
-  const avg7Min    = avg(last7.map(r => r.slaap_minuten))
+  const avg30Score    = avg(last30.map(computeSleepScore))
+  const avg30Min      = avg(last30.map(r => r.slaap_minuten))
+  const avg7Score     = avg(last7.map(computeSleepScore))
+  const avg7Min       = avg(last7.map(r => r.slaap_minuten))
+  const avg7Bedtime   = avgSleepTime(last7.map(r => r.slaap_start_min))
+  const avg7WakeTime  = avgSleepTime(last7.map(r => r.slaap_einde_min))
 
-  const scoreDiff    = score !== null && avg30Score !== null ? score - avg30Score : null
-  const durationDiff = totalMin !== null && avg30Min !== null ? totalMin - avg30Min : null
+  // When selected night has no data, fill cards with 7-day averages
+  const usingAvg     = !selectedRow?.slaap_minuten && avg7Score !== null
+  const dispScore    = score    ?? (usingAvg ? avg7Score    : null)
+  const dispTotalMin = totalMin ?? (usingAvg ? avg7Min      : null)
+  const dispBedtime  = bedtimeMin  ?? (usingAvg ? avg7Bedtime  : null)
+  const dispWakeTime = wakeTimeMin ?? (usingAvg ? avg7WakeTime : null)
+
+  const scoreDiff    = !usingAvg && score !== null && avg30Score !== null ? score - avg30Score : null
+  const durationDiff = !usingAvg && totalMin !== null && avg30Min !== null ? totalMin - avg30Min : null
 
   const asleepTotal  = (totalMin ?? ((deep ?? 0) + (rem ?? 0) + (light ?? 0))) || 1
   const stagesTotal  = (asleepTotal + (wake ?? 0)) || 1
@@ -332,7 +360,7 @@ export function SleepSection() {
   const noData = !totalMin
 
   const insightText = noData
-    ? 'Sync Fitbit to see your sleep quality data.'
+    ? (selectedRow === null ? 'No Fitbit data for this night — Fitbit was not worn.' : 'Sync Fitbit to see your sleep quality data.')
     : (() => {
         const lines: string[] = []
         if (deepPct !== null && deepPct < 20) {
@@ -374,28 +402,36 @@ export function SleepSection() {
     <div className="flex flex-col gap-5">
 
       {/* Night selector — tap to view other nights */}
-      {sleepRows.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-          {sleepRows.slice(0, 14).map((r, i) => {
-            const s = computeSleepScore(r)
-            const active = i === idx
-            return (
-              <button
-                key={r.datum}
-                onClick={() => setSelectedIdx(i)}
-                className="shrink-0 rounded-[14px] px-3.5 py-2 flex flex-col items-start gap-0.5 transition-all"
-                style={{
-                  background: active ? 'rgba(129,140,248,0.18)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${active ? 'rgba(129,140,248,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                }}
-              >
-                <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: active ? '#a5b4fc' : 'rgba(255,255,255,0.5)' }}>
-                  {nightLabel(r.datum, i)}
-                </span>
-                <span className="text-[15px] font-bold text-white">{s ?? '–'}</span>
-              </button>
-            )
-          })}
+      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {nights.map((night, i) => {
+          const s = night.row ? computeSleepScore(night.row) : null
+          const active = i === idx
+          return (
+            <button
+              key={night.datum}
+              onClick={() => setSelectedIdx(i)}
+              className="shrink-0 rounded-[14px] px-3.5 py-2 flex flex-col items-start gap-0.5 transition-all"
+              style={{
+                background: active ? 'rgba(129,140,248,0.18)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${active ? 'rgba(129,140,248,0.5)' : 'rgba(255,255,255,0.08)'}`,
+              }}
+            >
+              <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: active ? '#a5b4fc' : 'rgba(255,255,255,0.5)' }}>
+                {nightLabel(night.datum)}
+              </span>
+              <span className="text-[15px] font-bold" style={{ color: s === null ? 'rgba(255,255,255,0.2)' : 'white' }}>
+                {s ?? '–'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Average warning */}
+      {usingAvg && (
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-[12px]" style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.25)' }}>
+          <span className="text-orange-400 text-[13px]">⚑</span>
+          <span className="text-[12px] font-medium text-orange-300">Geen Fitbit-data — onderstaande waarden zijn je 7-daags gemiddelde</span>
         </div>
       )}
 
@@ -403,28 +439,28 @@ export function SleepSection() {
       <div className="grid grid-cols-2 gap-3">
         <HeroCard
           label="Sleep Score"
-          value={score !== null ? String(score) : '–'}
+          value={dispScore !== null ? String(dispScore) : '–'}
           diff={scoreDiff}
           formatDiff={d => `${Math.abs(Math.round(d))} pts`}
           tint="#818cf8"
         />
         <HeroCard
           label="Duration"
-          value={totalMin ? `${Math.floor(totalMin / 60)}h ${totalMin % 60}m` : '–'}
+          value={dispTotalMin ? `${Math.floor(dispTotalMin / 60)}h ${dispTotalMin % 60}m` : '–'}
           diff={durationDiff}
           formatDiff={d => fmtMin(Math.round(Math.abs(d)))}
           tint="#60a5fa"
         />
         <HeroCard
           label="Bedtime"
-          value={fmtTime(bedtimeMin)}
+          value={fmtTime(dispBedtime)}
           diff={null}
           formatDiff={() => ''}
           tint="rgba(255,255,255,0.75)"
         />
         <HeroCard
           label="Wake time"
-          value={fmtTime(wakeTimeMin)}
+          value={fmtTime(dispWakeTime)}
           diff={null}
           formatDiff={() => ''}
           tint="rgba(255,255,255,0.75)"
@@ -468,7 +504,7 @@ export function SleepSection() {
             <StageLegend label="Deep"  color="#818cf8"                 duration={fmtMin(deep)}  pct={deepPct}  />
             <StageLegend label="REM"   color="#c084fc"                 duration={fmtMin(rem)}   pct={remPct}   />
             <StageLegend label="Light" color="#60a5fa"                 duration={fmtMin(light)} pct={lightPct} />
-            <StageLegend label={selected?.wakker_count != null ? `Awake · woke ${selected.wakker_count}×` : 'Awake'} color="rgba(255,255,255,0.30)"  duration={fmtMin(wake)}  pct={wakePct}  />
+            <StageLegend label={selectedRow?.wakker_count != null ? `Awake · woke ${selectedRow.wakker_count}×` : 'Awake'} color="rgba(255,255,255,0.30)"  duration={fmtMin(wake)}  pct={wakePct}  />
           </div>
         </div>
       </Card>
@@ -546,9 +582,10 @@ export function SleepSection() {
 export function RecoverySection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
 
-  const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
-  const latestWithHR    = rows.find(r => r.hartslag_rust  != null) ?? null
-  const latestWithHRV   = rows.find(r => r.hrv_rmssd      != null) ?? null
+  const todayRow        = rows.find(r => r.datum === localDateStr()) ?? null
+  const latestWithSleep = todayRow?.slaap_minuten != null ? todayRow : null
+  const latestWithHR    = todayRow?.hartslag_rust != null ? todayRow : null
+  const latestWithHRV   = todayRow?.hrv_rmssd     != null ? todayRow : null
 
   const hrv        = latestWithHRV?.hrv_rmssd ?? null
   const restingHR  = latestWithHR?.hartslag_rust ?? null

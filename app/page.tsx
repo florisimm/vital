@@ -4,7 +4,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { computePhysiologyReadiness, computeHRVBaseline, computeSleepScore, type HealthRow } from '@/lib/readiness'
-import { formatTime } from '@/lib/timeFormat'
+import { formatTime, localDateStr } from '@/lib/timeFormat'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -23,10 +23,10 @@ async function fetchTodayData() {
   if (!user) throw new Error('Not authenticated')
 
   const now   = new Date()
-  const today = now.toISOString().split('T')[0]
+  const today = localDateStr(now)
   const todayIso = `${today}T00:00:00`
   const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0]
+  const sevenDaysAgoStr = localDateStr(sevenDaysAgo)
 
   const [
     { data: latestGezondheid },
@@ -37,7 +37,7 @@ async function fetchTodayData() {
     { data: todayHevy },
     { data: todayActivities },
   ] = await Promise.all([
-    supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).eq('datum', today).maybeSingle(),
     supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
     supabase.from('food_log').select('date,protein').eq('user_id', user.id).gte('date', sevenDaysAgoStr).order('date', { ascending: false }),
     supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal').eq('user_id', user.id).maybeSingle(),
@@ -95,8 +95,13 @@ function workoutDone(title: string, hevy: any[], acts: any[]): boolean {
 
 function buildCoach(rows: HealthRow[], data: any) {
   const readiness   = computePhysiologyReadiness(rows)
-  const latestSleep = rows.find(r => r.slaap_minuten != null)
-  const sleepScore  = latestSleep ? computeSleepScore(latestSleep) : null
+  const todayRow    = rows.find(r => r.datum === localDateStr())
+  const sleepRows7  = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
+  const sleepScore  = todayRow?.slaap_minuten != null
+    ? computeSleepScore(todayRow)
+    : sleepRows7.length >= 2
+      ? Math.round(sleepRows7.reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / sleepRows7.length)
+      : null
   const hrvBaseline = computeHRVBaseline(rows)
 
   const settings      = data?.settings
@@ -575,7 +580,7 @@ export default function TodayPage() {
 
   // Prefer steps from the health-gezondheid cache (kept fresh by DataProvider auto-sync)
   // over the today-fetch result, which may have run before today's Fitbit sync completed.
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = localDateStr()
   const todayHealthRow = rows.find(r => r.datum === todayStr)
   const effectiveData = data && todayHealthRow?.stappen != null
     ? { ...data, latestGezondheid: { ...(data.latestGezondheid ?? {}), stappen: todayHealthRow.stappen } }
