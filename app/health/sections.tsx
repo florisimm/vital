@@ -591,6 +591,8 @@ export function RecoverySection() {
   const restingHR  = latestWithHR?.hartslag_rust ?? null
   const sleepScore = latestWithSleep ? (latestWithSleep.slaap_score ?? computeSleepScore(latestWithSleep)) : null
   const sleepMin   = latestWithSleep?.slaap_minuten ?? null
+  const sleepDeep  = latestWithSleep?.slaap_diep ?? null
+  const wakeMin    = latestWithSleep?.slaap_einde_min ?? null
 
   const readiness   = computePhysiologyReadiness(rows)
   const illnessFlag = computeIllnessFlag(rows)
@@ -613,12 +615,85 @@ export function RecoverySection() {
   ]
 
   const todayFocus = (() => {
-    if (illnessFlag) return { emoji: '🛑', title: 'Skip training today', sub: illnessFlag.reason }
-    if (!readiness.score) return { emoji: '📊', title: 'Connect Fitbit', sub: 'Sync health data to see personalised focus advice' }
-    if (readiness.score >= 80) return { emoji: '💪', title: 'Push hard today', sub: readiness.explanation || 'Recovery is peak — ideal day for intense training' }
-    if (readiness.score >= 65) return { emoji: '🏃', title: 'Train at moderate intensity', sub: readiness.explanation || 'Good recovery — keep efforts below max today' }
-    if (readiness.score >= 50) return { emoji: '🚶', title: 'Keep it light', sub: readiness.explanation || 'Below-normal recovery — easy movement only' }
-    return { emoji: '😴', title: 'Rest & recover', sub: readiness.explanation || 'Low readiness — prioritise sleep and nutrition today' }
+    if (illnessFlag) return {
+      emoji: '🛑',
+      title: 'Rest completely today',
+      sub: `${illnessFlag.reason} — prioritise sleep, fluids and no alcohol tonight`,
+    }
+    if (!readiness.score) return {
+      emoji: '📊',
+      title: 'Connect Fitbit',
+      sub: 'Sync health data to see personalised daily focus advice',
+    }
+
+    // Sleep short → suggest earlier bedtime based on typical wake time
+    if (sleepMin !== null && sleepMin < 420) {
+      const hoursSlept = Math.floor(sleepMin / 60)
+      const minsSlept  = sleepMin % 60
+      const bedtimeSuggestion = wakeMin !== null
+        ? (() => {
+            const bed = ((wakeMin - 8 * 60) + 1440) % 1440
+            return `${String(Math.floor(bed / 60)).padStart(2, '0')}:${String(bed % 60).padStart(2, '0')}`
+          })()
+        : null
+      return {
+        emoji: '🛏️',
+        title: `In bed by ${bedtimeSuggestion ?? '22:30'} tonight`,
+        sub: `You got ${hoursSlept}h ${minsSlept}m last night — 30 min more sleep meaningfully improves HRV and recovery.`,
+      }
+    }
+
+    // Deep sleep low → behaviours that improve deep sleep
+    if (sleepDeep !== null && sleepMin !== null && sleepDeep / sleepMin < 0.15) {
+      return {
+        emoji: '🌙',
+        title: 'No alcohol or screens after 21:00',
+        sub: `Deep sleep was ${Math.round(sleepDeep / sleepMin * 100)}% last night (target 20%). Alcohol and blue light suppress slow-wave sleep.`,
+      }
+    }
+
+    // Sleep score low but duration OK → general sleep quality tip
+    if (sleepScore !== null && sleepScore < 60) {
+      return {
+        emoji: '🌡️',
+        title: 'Cool bedroom tonight (16–18 °C)',
+        sub: `Sleep quality score was ${sleepScore} — body temperature needs to drop to reach deep sleep. Keep the bedroom cool.`,
+      }
+    }
+
+    // HRV well below baseline → breathwork
+    if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -15) {
+      return {
+        emoji: '🌬️',
+        title: '5 min box breathing',
+        sub: `HRV is ${Math.abs(hrvBaseline.deviationPct)}% below your baseline. Inhale 4s → hold 4s → exhale 4s → hold 4s. Repeat 5×.`,
+      }
+    }
+
+    // RHR elevated → hydration
+    if (restingHR !== null && restingHR > hrThreshold) {
+      return {
+        emoji: '💧',
+        title: 'Drink 2–3L water today',
+        sub: `Resting heart rate is ${restingHR} bpm — ${restingHR - hrThreshold} bpm above your normal. Dehydration is a common cause of elevated RHR.`,
+      }
+    }
+
+    // Good readiness → proactive tip for tonight
+    if (readiness.score >= 75) {
+      return {
+        emoji: '☀️',
+        title: '10 min sunlight this morning',
+        sub: 'Recovery is strong. Morning light anchors your circadian rhythm and naturally improves deep sleep tonight.',
+      }
+    }
+
+    // Moderate readiness → nutrition
+    return {
+      emoji: '🥗',
+      title: '30–40g protein with dinner',
+      sub: 'Recovery nutrition: protein in the evening supports muscle repair during sleep. Greek yoghurt, eggs or chicken work well.',
+    }
   })()
 
   return (
