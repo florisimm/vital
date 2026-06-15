@@ -2979,6 +2979,7 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   const supabase = useMemo(() => createClient(), [])
   const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
   const [selected, setSelected] = useState<string | null>(null)
+  const [dismissed, setDismissed] = useState(false)
 
   // Most recent workout from today or yesterday
   const latestWorkout = useMemo(() => {
@@ -3001,12 +3002,12 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
       const { data } = await supabase
         .from('session_ratings').select('rating')
         .eq('user_id', user.id).eq('date', latestWorkout!.day).maybeSingle()
-      if (data?.rating) setSelected(data.rating)
+      if (data?.rating) setDismissed(true)
     }
     load()
   }, [latestWorkout?.day]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!latestWorkout) return null
+  if (!latestWorkout || dismissed) return null
 
   const save = async (rating: string) => {
     setSelected(rating)
@@ -3016,6 +3017,7 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
       { user_id: user.id, date: latestWorkout.day, rating, coach_advice: coachAdvice },
       { onConflict: 'user_id,date' }
     )
+    setTimeout(() => setDismissed(true), 600)
   }
 
   const whenLabel = latestWorkout.day === yesterdayStr ? "yesterday's" : "today's"
