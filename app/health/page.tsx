@@ -174,7 +174,7 @@ export default function HealthPage() {
   const weight     = latest?.gewicht ? Number(latest.gewicht).toFixed(1) : null
   const restingHR  = latestWithHR?.hartslag_rust ?? null
   const hrv        = latestWithHRV?.hrv_rmssd ?? null
-  const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
+  const sleepScore = latestWithSleep ? (latestWithSleep.slaap_score ?? computeSleepScore(latestWithSleep)) : null
 
   const weightRows   = rows.filter(r => r.gewicht != null)
   const latestWeight = weightRows[0] ? Number(weightRows[0].gewicht) : null
@@ -206,27 +206,51 @@ export default function HealthPage() {
     if (noData)
       return { emoji: '📱', title: 'Connect Fitbit', bullets: ['Personalised recommendations available after connecting'], cta: null }
 
-    const pct = readinessPct
+    const pct      = readinessPct
+    const sleepMin = latestWithSleep?.slaap_minuten ?? null
+    const sleepDeep = latestWithSleep?.slaap_diep ?? null
+    const wakeMin  = latestWithSleep?.slaap_einde_min ?? null
 
-    // Critical: multiple signals very low
+    // Very low readiness → complete rest
     if (pct !== null && pct < 35)
-      return { emoji: '😴', title: 'Rest Day', bullets: [
-        'Skip training — sleep, eat well and do nothing more',
-        `Recovery ${pct}% — multiple markers are low`,
-        tomEvt ? `${tomEvt.title} planned tomorrow — recover well` : 'Prioritise sleep and nutrition today',
+      return { emoji: '😴', title: 'Rest day', bullets: [
+        'No training today — focus on sleep, fluids and nutrition',
+        `Recovery ${pct}% — multiple health markers are low`,
+        'Early bedtime tonight: aim for 8+ hours',
       ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
 
-    // Suppressed HRV or elevated HR + poor sleep — using YOUR personal baselines
-    if ((hrv !== null && hrv < hrvBadCutoff) || (restingHR !== null && restingHR > rhrBadCutoff && sleepScore !== null && sleepScore < 50))
-      return { emoji: '🛌', title: 'Recover Today', bullets: [
-        'Do 15–20 min light stretching or a slow walk — nothing more',
+    // Suppressed HRV or elevated RHR → breathwork & lifestyle
+    if ((hrv !== null && hrv < hrvBadCutoff) || (restingHR !== null && restingHR > rhrBadCutoff))
+      return { emoji: '🌬️', title: 'Recovery focus today', bullets: [
+        '5 min box breathing: inhale 4s · hold 4s · exhale 4s · repeat',
         hrv !== null && hrv < hrvBadCutoff
-          ? `HRV at ${Math.round(Number(hrv))} ms — below your usual range${personalProfile.hrvBadThreshold ? ` (~${personalProfile.hrvBaseline} ms)` : ''}`
-          : `Resting HR elevated at ${restingHR} bpm${personalProfile.rhrBaseline ? ` (your baseline ~${personalProfile.rhrBaseline})` : ''}`,
-        tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Aim for 8+ hours of sleep tonight',
+          ? `HRV ${Math.round(Number(hrv))} ms — below your usual range${personalProfile.hrvBaseline ? ` (baseline ~${personalProfile.hrvBaseline} ms)` : ''}`
+          : `Resting HR ${restingHR} bpm — slightly elevated`,
+        'No alcohol tonight — it suppresses HRV and deep sleep',
       ], cta: { label: 'See HRV trend →', tab: 'heart' as const, href: null } }
 
-    // Calendar event today — most actionable
+    // Sleep short → suggest earlier bedtime
+    if (sleepMin !== null && sleepMin < 420) {
+      const hh = Math.floor(sleepMin / 60), mm = sleepMin % 60
+      const bedSuggestion = wakeMin !== null
+        ? (() => { const b = ((wakeMin - 8 * 60) + 1440) % 1440; return `${String(Math.floor(b / 60)).padStart(2,'0')}:${String(b % 60).padStart(2,'0')}` })()
+        : '22:30'
+      return { emoji: '🛏️', title: `In bed by ${bedSuggestion} tonight`, bullets: [
+        `You got ${hh}h ${mm}m last night — 30 min more sleep improves HRV and recovery`,
+        'No screens from 30 min before bedtime',
+        tomEvt ? `${tomEvt.title} planned tomorrow — good sleep helps performance` : 'Consistent bedtime anchors your circadian rhythm',
+      ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
+    }
+
+    // Deep sleep low → habits that protect slow-wave sleep
+    if (sleepDeep !== null && sleepMin !== null && sleepDeep / sleepMin < 0.15)
+      return { emoji: '🌙', title: 'Protect deep sleep tonight', bullets: [
+        'No alcohol or screens after 21:00',
+        `Deep sleep was ${Math.round(sleepDeep / sleepMin * 100)}% last night — target is 20%+`,
+        'Keep your bedroom below 18 °C for better slow-wave sleep',
+      ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
+
+    // Calendar event today — keep link but health-focused bullets
     if (todayEvt) {
       const evtTitle = todayEvt.title as string
       const evtEmoji = _evtEmoji(evtTitle)
@@ -234,42 +258,37 @@ export default function HealthPage() {
       const evtHref  = _evtHref(todayEvt)
       if (pct !== null && pct >= 70)
         return { emoji: evtEmoji, title: evtTitle, bullets: [
-          `Go all-in${evtTime} — body is ready for full effort`,
-          `Recovery ${pct}% supports high intensity`,
-          'Warm up well and stay hydrated',
-        ], cta: { label: `Open session →`, tab: null, href: evtHref } }
-      if (pct !== null && pct >= 45)
-        return { emoji: evtEmoji, title: evtTitle, bullets: [
-          `Train at moderate effort${evtTime} — avoid maximum output`,
-          `Recovery ${pct}% — some fatigue present`,
-          'Cut short if your body signals fatigue',
-        ], cta: { label: `Open session →`, tab: null, href: evtHref } }
+          `Recovery ${pct}% — body is in good shape${evtTime}`,
+          'Stay well hydrated before, during and after',
+          'Prioritise sleep and protein tonight to lock in recovery',
+        ], cta: { label: 'Open session →', tab: null, href: evtHref } }
       return { emoji: evtEmoji, title: evtTitle, bullets: [
-        `Consider a lighter version of the session${evtTime} or postpone`,
-        `Recovery only ${pct ?? '?'}% — body is not ready for full effort`,
-        'Rest may serve you better today',
-      ], cta: { label: `View session →`, tab: null, href: evtHref } }
+        `Recovery ${pct ?? '?'}% — listen to your body today${evtTime}`,
+        'Hydrate well and eat a proper meal beforehand',
+        'If you feel off, cut short — recovery comes first',
+      ], cta: { label: 'Open session →', tab: null, href: evtHref } }
     }
 
-    // No event — readiness-based generic recommendation
-    if (pct !== null && pct >= 75)
-      return { emoji: '🏋️', title: 'Quality Training', bullets: [
-        'Do a demanding session today — strength, intervals or tempo run',
-        sleepScore !== null ? `Recovery ${pct}%, sleep ${sleepScore}% — signals are strong` : `Recovery ${pct}% — body is ready`,
-        tomEvt ? `${tomEvt.title} planned tomorrow — manage intensity` : 'Good day for a demanding workout',
-      ], cta: { label: 'Plan your session →', tab: null, href: '/training' } }
+    // Good readiness, no event → proactive wellness habit
+    if (pct !== null && pct >= 70)
+      return { emoji: '☀️', title: '10 min sunlight this morning', bullets: [
+        'Recovery is strong — great day to build healthy habits',
+        'Morning light sets your circadian rhythm and improves tonight\'s sleep',
+        'Aim for 30–40g protein with dinner to support overnight recovery',
+      ], cta: { label: 'See recovery →', tab: 'recovery' as const, href: null } }
 
-    if (pct !== null && pct >= 55)
-      return { emoji: '🚴', title: 'Zone 2 Ride', bullets: [
-        'Ride or run 30–45 min at easy conversational pace (Zone 2)',
-        `Recovery ${pct}% — moderate day, avoid going hard`,
-        tomEvt ? `${tomEvt.title} planned tomorrow — save legs` : 'Good nutrition will support full recovery',
-      ], cta: { label: 'View training →', tab: null, href: '/training' } }
+    // Moderate readiness → hydration & nutrition
+    if (pct !== null && pct >= 50)
+      return { emoji: '💧', title: 'Hydration & nutrition today', bullets: [
+        'Drink 2–3L water throughout the day',
+        `Recovery ${pct}% — support it with whole foods and rest`,
+        tomEvt ? `${tomEvt.title} tomorrow — fuel and sleep well tonight` : 'Aim for an earlier bedtime tonight',
+      ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
 
-    return { emoji: '🚶', title: 'Light Movement', bullets: [
-      '20–30 min walk or 10 min mobility — keep it easy',
+    return { emoji: '😴', title: 'Rest & recover', bullets: [
+      'Keep today easy — focus on sleep and nutrition',
       pct !== null ? `Recovery ${pct}% — body needs rest today` : 'Recovery markers suggest an easy day',
-      tomEvt ? `${tomEvt.title} planned tomorrow — recover well today` : 'Prioritise rest and good nutrition',
+      tomEvt ? `${tomEvt.title} planned tomorrow — recover well` : 'Early bedtime: aim for 8+ hours tonight',
     ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
   })()
 
@@ -361,7 +380,7 @@ export default function HealthPage() {
               <div className="flex items-center gap-2 pt-0.5">
                 <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: readinessColor }} />
                 <span className="text-[14px] font-semibold" style={{ color: readinessColor }}>
-                  {readinessPct >= 70 ? 'Ready for training' : readinessPct >= 45 ? 'Light training only' : 'Rest recommended'}
+                  {readinessPct >= 70 ? 'Strong recovery' : readinessPct >= 45 ? 'Moderate recovery' : 'Rest recommended'}
                 </span>
               </div>
             </>) : (
