@@ -3,11 +3,11 @@
 import { Suspense, useEffect, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
+import { Activity, RefreshCw, ChevronRight } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
-import { computeRecoveryScore, computePhysiologyReadiness } from '@/lib/readiness'
+import { computePhysiologyReadiness } from '@/lib/readiness'
 import {
   computeSleepScore,
   SleepSection,
@@ -17,6 +17,8 @@ import {
   ActivitySection,
   type GezondheidsRow,
 } from './sections'
+
+type SyncMessage = { type: 'ok' | 'err'; text: string }
 
 async function fetchHealth() {
   const supabase = createClient()
@@ -86,10 +88,8 @@ export default function HealthPage() {
     revalidateOnFocus: false, dedupingInterval: 300_000,
   })
   const [activeTab, setActiveTab] = useState('overview')
-  // Server and first client render must match. SWR hydrates from localStorage on the
-  // client, so isLoading state would differ from SSR. Gate tab content on mount.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<SyncMessage | null>(null)
 
   const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 
@@ -98,6 +98,51 @@ export default function HealthPage() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }
 
+  // Calendar events from the shared 'today' SWR cache (populated by DataProvider)
+  const { data: todayCache } = useSWR<any>('today', null)
+  const calEvents = todayCache?.calendarEvents ?? []
+
+  const _todayStr = new Date().toISOString().slice(0, 10)
+  const _tomStr   = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const _nowStr   = new Date().toISOString()
+
+  const SPORT_KW_H = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox',
+    'run','loop','ride','fietsen','zwemmen','swim','cycling','hardlopen','wielren','interval','tempo','training','workout','sport']
+  const GYM_KW_H   = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox']
+
+  function _isSport(e: any) { return SPORT_KW_H.some(k => (e.title ?? '').toLowerCase().includes(k)) }
+
+  const todayEvt = calEvents
+    .filter((e: any) => { const dt = e.start_datetime || e.start_date; return dt.slice(0,10) === _todayStr && dt >= _nowStr && _isSport(e) })
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0] ?? null
+
+  const tomEvt = calEvents
+    .filter((e: any) => { const dt = e.start_datetime || e.start_date; return dt.slice(0,10) === _tomStr && _isSport(e) })
+    .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0] ?? null
+
+  function _evtEmoji(title: string) {
+    const t = title.toLowerCase()
+    if (['push','bench','chest'].some(k => t.includes(k)))       return '💪'
+    if (['pull','row','chin','lat'].some(k => t.includes(k)))    return '💪'
+    if (['legs','squat','deadlift'].some(k => t.includes(k)))    return '🏋️'
+    if (['run','loop','hardloop'].some(k => t.includes(k)))      return '🏃'
+    if (['ride','fiet','cycl','wielren'].some(k => t.includes(k))) return '🚴'
+    if (['swim','zwem'].some(k => t.includes(k)))                return '🏊'
+    return '🏋️'
+  }
+
+  function _evtHref(e: any) {
+    const t = (e.title ?? '').toLowerCase()
+    if (GYM_KW_H.some(k => t.includes(k))) return '/training/strength'
+    const dt = e.start_datetime || e.start_date
+    return `/training/session?title=${encodeURIComponent(e.title ?? '')}&time=${encodeURIComponent(dt)}`
+  }
+
+  function _evtTime(e: any) {
+    if (!e.start_datetime) return ''
+    const d = new Date(e.start_datetime)
+    return ` · ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
+  }
 
   const latest          = rows[0]
   const latestWithSleep = rows.find(r => r.slaap_minuten != null) ?? null
@@ -124,13 +169,117 @@ export default function HealthPage() {
     : null
   const stepsDetail = avgSteps ? `avg ${avgSteps.toLocaleString('nl-NL')} / day` : '–'
 
-  const recoveryScore = computeRecoveryScore(rows)
-  const readiness = computePhysiologyReadiness(rows)
-  const recoveryScorepct = recoveryScore.score
-  const recoveryColor = recoveryScorepct !== null
-    ? (recoveryScorepct >= 85 ? '#4ade80' : recoveryScorepct >= 70 ? '#2dd4bf' : recoveryScorepct >= 50 ? '#fb923c' : '#f87171')
+  const physiologyReadiness = computePhysiologyReadiness(rows)
+  const readinessPct = physiologyReadiness.score
+  const readinessColor = readinessPct !== null
+    ? (readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171')
     : 'rgba(255,255,255,0.3)'
 
+  const recommendationData = (() => {
+    const noData = sleepScore === null && hrv === null && restingHR === null
+    if (noData)
+      return { emoji: '📱', title: 'Connect Fitbit', bullets: ['Personalised recommendations available after connecting'], cta: null }
+
+    const pct = readinessPct
+
+    // Critical: multiple signals very low
+    if (pct !== null && pct < 35)
+      return { emoji: '😴', title: 'Rest Day', bullets: [
+        'Multiple recovery markers are low',
+        'Light walk only — avoid structured training',
+        tomEvt ? `${tomEvt.title} planned tomorrow — recover well` : 'Prioritise sleep and nutrition today',
+      ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
+
+    // Suppressed HRV or elevated HR + poor sleep
+    if ((hrv !== null && hrv < 25) || (restingHR !== null && restingHR > 72 && sleepScore !== null && sleepScore < 50))
+      return { emoji: '🛌', title: 'Recover Today', bullets: [
+        hrv !== null && hrv < 25
+          ? `HRV at ${Math.round(Number(hrv))} ms — below recovery threshold`
+          : `Resting HR elevated at ${restingHR} bpm`,
+        'Avoid high intensity today',
+        tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Prioritise sleep tonight',
+      ], cta: { label: 'See HRV trend →', tab: 'heart' as const, href: null } }
+
+    // Calendar event today — most actionable
+    if (todayEvt) {
+      const evtTitle = todayEvt.title as string
+      const evtEmoji = _evtEmoji(evtTitle)
+      const evtTime  = _evtTime(todayEvt)
+      const evtHref  = _evtHref(todayEvt)
+      if (pct !== null && pct >= 70)
+        return { emoji: evtEmoji, title: evtTitle, bullets: [
+          `Recovery ${pct}% — physiology supports full effort${evtTime}`,
+          'Good day to push intensity',
+          'Warm up well and stay hydrated',
+        ], cta: { label: `Open session →`, tab: null, href: evtHref } }
+      if (pct !== null && pct >= 45)
+        return { emoji: evtEmoji, title: evtTitle, bullets: [
+          `Recovery ${pct}% — train but avoid maximum effort${evtTime}`,
+          'Moderate intensity is appropriate',
+          'Cut short if your body signals fatigue',
+        ], cta: { label: `Open session →`, tab: null, href: evtHref } }
+      return { emoji: evtEmoji, title: evtTitle, bullets: [
+        `Recovery only ${pct ?? '?'}% — consider a lighter session${evtTime}`,
+        'Modify to easy effort or postpone',
+        'Rest may serve you better today',
+      ], cta: { label: `View session →`, tab: null, href: evtHref } }
+    }
+
+    // No event — readiness-based generic recommendation
+    if (pct !== null && pct >= 75)
+      return { emoji: '🏋️', title: 'Quality Training', bullets: [
+        `Recovery ${pct}% — body is ready for a hard session`,
+        sleepScore !== null ? `Sleep score ${sleepScore}% supports high output` : 'Physiological signals look strong',
+        tomEvt ? `${tomEvt.title} planned tomorrow — consider intensity` : 'Good day for a demanding workout',
+      ], cta: { label: 'Plan your session →', tab: null, href: '/training' } }
+
+    if (pct !== null && pct >= 55)
+      return { emoji: '🚴', title: 'Zone 2 Ride', bullets: [
+        `Recovery ${pct}% — moderate training day`,
+        'Zone 2 builds aerobic base with low fatigue cost',
+        tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Good nutrition will support full recovery',
+      ], cta: { label: 'View training →', tab: null, href: '/training' } }
+
+    return { emoji: '🚶', title: 'Light Movement', bullets: [
+      pct !== null ? `Recovery ${pct}% — keep intensity low` : 'Recovery markers suggest an easy day',
+      sleepScore !== null && sleepScore < 55 ? `Sleep score ${sleepScore}% — target 8 hours tonight` : 'Prioritise rest and nutrition',
+      tomEvt ? `${tomEvt.title} planned tomorrow — recover well today` : 'Light walk or stretching recommended',
+    ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
+  })()
+
+  const recCta = recommendationData.cta
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      setSyncMessage(null)
+      const res = await fetch('/api/fitbit/sync', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.ok) {
+        const apiError = Array.isArray(data?.errors) && data.errors.length ? String(data.errors[0]) : null
+        const text = data?.error === 'not connected'
+          ? 'Fitbit is not yet connected.'
+          : apiError
+            ? `Fitbit sync error: ${apiError}`
+          : 'Fitbit sync failed.'
+        setSyncMessage({ type: 'err', text })
+        return
+      }
+
+      await refreshHealthCache()
+
+      const errorCount = Array.isArray(data.errors) ? data.errors.length : 0
+      setSyncMessage({
+        type: errorCount ? 'err' : 'ok',
+        text: errorCount
+          ? `Sync completed with ${errorCount} error${errorCount === 1 ? '' : 's'}: ${String(data.errors[0])}`
+          : `Fitbit updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+      })
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <PremiumScreen title="Health" subtitle="Recovery foundation" contentGap={18}>
@@ -155,42 +304,42 @@ export default function HealthPage() {
         ))}
       </div>
 
-      {/* Tab content — only after mount so SSR and first client render match */}
-      <div style={{ opacity: mounted && !isLoading ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-      {mounted && activeTab === 'sleep'    && <SleepSection />}
-      {mounted && activeTab === 'recovery' && <RecoverySection />}
-      {mounted && activeTab === 'heart'    && <HeartSection />}
-      {mounted && activeTab === 'weight'   && <WeightSection rows={rows} />}
-      {mounted && activeTab === 'activity' && <ActivitySection rows={rows} />}
+      {/* Tab content */}
+      <div style={{ opacity: isLoading ? 0 : 1, transition: 'opacity 0.15s ease' }}>
+      {activeTab === 'sleep'    && <SleepSection />}
+      {activeTab === 'recovery' && <RecoverySection />}
+      {activeTab === 'heart'    && <HeartSection />}
+      {activeTab === 'weight'   && <WeightSection rows={rows} />}
+      {activeTab === 'activity' && <ActivitySection rows={rows} />}
 
-      {mounted && activeTab === 'overview' && <>
+      {activeTab === 'overview' && <>
 
         {/* Recovery Score hero */}
         <Card>
           <div className="flex flex-col gap-3">
             <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Recovery Score</span>
-            {recoveryScorepct !== null ? (<>
+            {readinessPct !== null ? (<>
               <div className="flex items-end justify-between">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-[56px] font-bold text-white leading-none">{recoveryScorepct}</span>
+                  <span className="text-[56px] font-bold text-white leading-none">{readinessPct}</span>
                   <span className="text-[24px] font-semibold text-white/50">%</span>
                 </div>
                 <div className="flex items-center gap-1.5 pb-1">
-                  <div className="w-[8px] h-[8px] rounded-full" style={{ background: recoveryColor }} />
-                  <span className="text-[17px] font-semibold" style={{ color: recoveryColor }}>{recoveryScore.label}</span>
+                  <div className="w-[8px] h-[8px] rounded-full" style={{ background: readinessColor }} />
+                  <span className="text-[17px] font-semibold" style={{ color: readinessColor }}>{physiologyReadiness.label}</span>
                 </div>
               </div>
               <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <div className="h-full rounded-full" style={{ width: `${recoveryScorepct}%`, background: recoveryColor }} />
+                <div className="h-full rounded-full" style={{ width: `${readinessPct}%`, background: readinessColor }} />
               </div>
               <div className="flex items-center gap-2 pt-0.5">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: recoveryColor }} />
-                <span className="text-[14px] font-semibold" style={{ color: recoveryColor }}>
-                  {recoveryScorepct >= 85 ? 'Fully recovered' : recoveryScorepct >= 70 ? 'Good recovery' : recoveryScorepct >= 50 ? 'Moderate recovery' : 'Low recovery'}
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: readinessColor }} />
+                <span className="text-[14px] font-semibold" style={{ color: readinessColor }}>
+                  {readinessPct >= 70 ? 'Ready for training' : readinessPct >= 45 ? 'Light training only' : 'Rest recommended'}
                 </span>
               </div>
             </>) : (
-              <p className="text-[15px] text-white/40">Connect Fitbit to see recovery data.</p>
+              <p className="text-[15px] text-white/40">Connect Fitbit to see readiness data.</p>
             )}
           </div>
         </Card>
@@ -219,6 +368,50 @@ export default function HealthPage() {
           ))}
         </div>
 
+        {/* Today's Recommendation — hero card */}
+        <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)', marginTop: 10 }}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Today's Recommendation</p>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-1.5 text-[12px] text-white/30 hover:text-teal-400 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing…' : 'Sync'}
+            </button>
+          </div>
+          <div className="flex items-center gap-4 mb-4">
+            <span className="text-[42px] leading-none">{recommendationData.emoji}</span>
+            <span className="text-[22px] font-bold text-white leading-tight">{recommendationData.title}</span>
+          </div>
+          <div className="flex flex-col gap-1.5 pt-3 border-t border-white/[0.08]">
+            {recommendationData.bullets.map((b, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
+                <span className="text-[13px] text-white/65">{b}</span>
+              </div>
+            ))}
+          </div>
+          {syncMessage && (
+            <p className={`text-[13px] font-medium mt-3 ${syncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
+              {syncMessage.text}
+            </p>
+          )}
+          {recCta && (
+            <div className="mt-4">
+              {recCta.href ? (
+                <a href={recCta.href} className="flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black" style={{ background: 'rgb(45,212,191)' }}>
+                  {recCta.label}
+                </a>
+              ) : (
+                <button onClick={() => switchTab(recCta.tab!)} className="flex items-center justify-center w-full py-2 rounded-[14px] text-[13px] font-semibold text-black" style={{ background: 'rgb(45,212,191)' }}>
+                  {recCta.label}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </>}
 
       </div>

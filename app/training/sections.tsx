@@ -6,16 +6,21 @@ import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, Chevron
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
-import {
-  computeTrainingLoadScore,
-  isRun, isRide, isSwim, isWeightTraining, isCycling,
-  effectiveLoad, hevyLoad, sessionLoadBreakdown, isAccessorySession, sessionLoadFactor, setIntensityFactor,
-  COMPOUND_KEYWORDS, ISOLATION_KEYWORDS, RECOVERY_TITLE_KEYWORDS, ACCESSORY_TITLE_KEYWORDS,
-  type Activity, type HevyWorkout,
-} from '@/lib/training-load'
 
-// ─── Re-export types for convenience ────────────────────────────────────────────
-export type { Activity, HevyWorkout } from '@/lib/training-load'
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type Activity = {
+  id: number; name: string; sport_type: string; start_date: string
+  distance: number | null; moving_time: number | null; elapsed_time: number | null
+  total_elevation_gain: number | null; average_speed: number | null
+  average_heartrate: number | null; average_cadence: number | null; kilojoules: number | null
+}
+
+export type HevyWorkout = {
+  id: string; title: string; start_time: string; end_time: string | null
+  duration: number | null; volume_kg: number | null; sets: number | null
+  exercises: Array<{ title: string; sets: Array<{ weight_kg: number; reps: number }> }> | null
+}
 
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
@@ -70,7 +75,147 @@ function epley1RM(weight_kg: number, reps: number): number {
   return reps === 1 ? weight_kg : weight_kg * (1 + reps / 30)
 }
 
-// Load helpers are now in lib/training-load.ts (exported and imported above)
+function isRide(a: Activity) {
+  const t = a.sport_type?.toLowerCase() ?? ''
+  return t.includes('ride') || t.includes('cycl')
+}
+
+function isRun(a: Activity) {
+  return a.sport_type?.toLowerCase().includes('run')
+}
+
+function isSwim(a: Activity) {
+  return a.sport_type?.toLowerCase().includes('swim')
+}
+
+function isWeightTraining(a: Activity) {
+  return a.sport_type?.toLowerCase() === 'weighttraining'
+}
+
+function isCycling(a: Activity) {
+  return a.sport_type?.toLowerCase().includes('ride')
+}
+
+// Consistent load unit (minutes) with zone-2 dampening.
+// Avoids mixing real kilojoules (available on recent Strava syncs) with the
+// moving_time fallback on older records, which would inflate acute:chronic ratios.
+function cardioZoneMultiplier(hr: number): number {
+  if (hr < 130) return 0.25  // Zone 1: recovery
+  if (hr < 150) return 0.50  // Zone 2: aerobic base
+  if (hr < 165) return 0.75  // Zone 3: aerobic threshold
+  if (hr < 175) return 1.00  // Zone 4: lactate threshold
+  return 1.25                 // Zone 5: VO2max / race effort
+}
+
+function effectiveLoad(a: Activity): number {
+  const mins = (a.moving_time ?? 0) / 60
+  if (mins === 0) return 0
+  if (a.average_heartrate) return mins * cardioZoneMultiplier(a.average_heartrate)
+  if (isRun(a) && a.average_speed) {
+    const mps = a.average_speed
+    return mins * (mps > 4.0 ? 1.00 : mps > 3.2 ? 0.75 : 0.50)
+  }
+  if (isRide(a) && a.average_speed) {
+    const kmh = a.average_speed * 3.6
+    return mins * (kmh > 30 ? 1.00 : kmh > 22 ? 0.75 : 0.50)
+  }
+  return mins * 0.75
+}
+
+const COMPOUND_KEYWORDS = [
+  'squat', 'deadlift', 'rdl', 'bench', 'incline', 'overhead press', 'ohp',
+  'shoulder press', 'military press', 'row', 'pull-up', 'pullup', 'pull up',
+  'chin-up', 'chinup', 'chin up', 'lunge', 'hip thrust',
+]
+const ISOLATION_KEYWORDS = [
+  'curl', 'tricep', 'lateral raise', 'rear delt', 'face pull',
+  'calf', 'leg extension', 'leg curl', 'fly', 'flye', 'shrug', 'kickback',
+]
+const RECOVERY_TITLE_KEYWORDS = [
+  'stretch', 'mobility', 'foam', 'recover', 'recovery',
+  'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
+]
+const ACCESSORY_TITLE_KEYWORDS = ['abs', 'core', 'yoga']
+
+// Per-set intensity factor using Epley %1RM estimate combined with rep-range modifier.
+// Normalised so that 8 reps at typical working weight ≈ 1.0.
+function setIntensityFactor(sets: Array<{ weight_kg: number; reps: number }>): number {
+  const valid = (sets ?? []).filter(s => s.reps > 0)
+  if (!valid.length) return 1.0
+  const avg = valid.reduce((sum, s) => {
+    if (s.weight_kg <= 0) return sum + (s.reps <= 10 ? 0.85 : 0.65)  // bodyweight
+    const pct1rm = s.reps <= 1 ? 1.0 : 30 / (30 + s.reps)
+    const repMod = s.reps <= 3 ? 1.35 : s.reps <= 6 ? 1.15 : s.reps <= 12 ? 1.0 : 0.7
+    return sum + Math.min(1.5, pct1rm * repMod)
+  }, 0) / valid.length
+  return Math.max(0.4, avg)
+}
+
+// Returns a 0.10–1.0 load factor for a Hevy workout based on exercise composition.
+// With exercise data: compound × 1.0 + isolation × 0.6 + other × 0.25 (weighted by set counts).
+// Without exercise data: title-based — recovery → 0.10, accessory → 0.25, primary → 1.0.
+function sessionLoadFactor(h: HevyWorkout): number {
+  if (h.exercises && h.exercises.length > 0) {
+    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
+    if (totalSets > 0) {
+      let compEff = 0, isoEff = 0, otherEff = 0
+      for (const ex of h.exercises) {
+        const t = (ex.title ?? '').toLowerCase()
+        const n = ex.sets?.length ?? 0
+        const intensity = setIntensityFactor(ex.sets ?? [])
+        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
+        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
+        else                                                    otherEff += n * 0.25 * intensity
+      }
+      return (compEff + isoEff + otherEff) / totalSets
+    }
+  }
+  const t = (h.title ?? '').toLowerCase()
+  if (RECOVERY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.10
+  if (ACCESSORY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.25
+  return 1.0
+}
+
+// Splits hevyLoad(h) into compound / isolation / accessory components (sum = hevyLoad(h)).
+function sessionLoadBreakdown(h: HevyWorkout): { compound: number; isolation: number; accessory: number } {
+  const mins = (h.duration ?? 3600) / 60
+  if (h.exercises && h.exercises.length > 0) {
+    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
+    if (totalSets > 0) {
+      let compEff = 0, isoEff = 0, otherEff = 0
+      for (const ex of h.exercises) {
+        const t = (ex.title ?? '').toLowerCase()
+        const n = ex.sets?.length ?? 0
+        const intensity = setIntensityFactor(ex.sets ?? [])
+        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
+        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
+        else                                                    otherEff += n * 0.25 * intensity
+      }
+      const totalEff = compEff + isoEff + otherEff
+      if (totalEff === 0) return { compound: 0, isolation: 0, accessory: mins * 0.25 }
+      const load = hevyLoad(h)
+      return {
+        compound:  (compEff / totalEff) * load,
+        isolation: (isoEff / totalEff) * load,
+        accessory: (otherEff / totalEff) * load,
+      }
+    }
+  }
+  const load = hevyLoad(h)
+  return sessionLoadFactor(h) > 0.30
+    ? { compound: load, isolation: 0, accessory: 0 }
+    : { compound: 0,    isolation: 0, accessory: load }
+}
+
+// A session is treated as accessory/recovery (excluded from primary-load detection and ramp rate)
+// when its load factor is ≤ 0.30 — i.e. recovery (0.10) or accessory (0.25) sessions.
+function isAccessorySession(h: HevyWorkout): boolean {
+  return sessionLoadFactor(h) <= 0.30
+}
+
+function hevyLoad(h: HevyWorkout): number {
+  return (h.duration ?? 3600) / 60 * sessionLoadFactor(h)
+}
 
 function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
   const t7  = new Date(now - 7  * 86400000).toISOString()
@@ -225,8 +370,6 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
     },
   }
 }
-
-// computeTrainingLoadScore is now imported from lib/training-load.ts
 
 function computeRunningReadiness(activities: Activity[]) {
   const runs = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
@@ -1015,7 +1158,7 @@ function MuscleRecoveryBar({ label, recovery }: { label: string; recovery: numbe
 
 function RunningReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
   const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
-  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready for training' : 'Slightly fatigued'
+  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready to train' : 'Slightly fatigued'
   return (
     <Card>
       <div className="flex flex-col gap-3">
@@ -1089,7 +1232,7 @@ function LastRunCard({ run, allRuns }: { run: Activity; allRuns: Activity[] }) {
         <Card>
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last run </span>
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last run</span>
               <span className="text-[12px] text-white/30">View all →</span>
             </div>
             <span className="text-[17px] font-semibold text-white leading-snug">{run.name}</span>
@@ -1124,18 +1267,18 @@ function RunningTrendCard({ trend }: { trend: ReturnType<typeof computeRunning7D
             <span className="text-[22px] font-bold text-white leading-none">{trend.vol7 > 0 ? `${trend.vol7.toFixed(1)}` : '–'}</span>
             <span className="text-[11px] text-white/40">km</span>
             {trend.volPct !== null && (
-              <span className="text-[12px] font-semibold" style={{ color: volColor }}>{volSign}{trend.volPct}% vs last week</span>
+              <span className="text-[12px] font-semibold" style={{ color: volColor }}>{volSign}{trend.volPct}% vs vorige week</span>
             )}
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-teal-400 leading-none">{trend.avgPace7 ?? '–'}</span>
             <span className="text-[11px] text-white/40">gem. /km</span>
-            {trend.paceDir && <span className="text-[12px] text-white/40">{trend.paceDir} vs last week</span>}
+            {trend.paceDir && <span className="text-[12px] text-white/40">{trend.paceDir} vs vorige week</span>}
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-white leading-none">{trend.runs7}</span>
             <span className="text-[11px] text-white/40">runs</span>
-            {trend.runs14to7 > 0 && <span className="text-[12px] text-white/40">vs {trend.runs14to7} last week</span>}
+            {trend.runs14to7 > 0 && <span className="text-[12px] text-white/40">vs {trend.runs14to7} vorige week</span>}
           </div>
         </div>
       </div>
@@ -1145,7 +1288,7 @@ function RunningTrendCard({ trend }: { trend: ReturnType<typeof computeRunning7D
 
 function CyclingReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
   const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
-  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready for training' : 'Slightly fatigued'
+  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready to train' : 'Slightly fatigued'
   return (
     <Card>
       <div className="flex flex-col gap-3">
@@ -1222,16 +1365,16 @@ function LastRideCard({ ride, allRides }: { ride: Activity; allRides: Activity[]
         <Card>
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last ride </span>
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last ride</span>
               <span className="text-[12px] text-white/30">View all →</span>
             </div>
             <span className="text-[17px] font-semibold text-white leading-snug">{ride.name}</span>
             <span className="text-[12px] text-white/40">{formatDate(ride.start_date)}</span>
             <div className="flex gap-5 mt-1">
               {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
-              {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Speed</span></div>}
+              {speed && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-cyan-400 leading-none">{speed}</span><span className="text-[11px] text-white/40">Pace</span></div>}
               {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
-              {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Hoogte</span></div>}
+              {elev && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-orange-400 leading-none">{elev}</span><span className="text-[11px] text-white/40">Elevation</span></div>}
             </div>
             {ride.average_heartrate && (
               <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
@@ -1257,7 +1400,7 @@ function CyclingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeCyc
           <div className="flex flex-col gap-0.5">
             <span className="text-[20px] font-bold text-white leading-none">{trend.km7 > 0 ? `${trend.km7.toFixed(0)}` : '–'}</span>
             <span className="text-[11px] text-white/40">km</span>
-            {trend.kmPct !== null && <span className="text-[11px] font-semibold" style={{ color: kmColor }}>{kmSign}{trend.kmPct}% vs last week</span>}
+            {trend.kmPct !== null && <span className="text-[11px] font-semibold" style={{ color: kmColor }}>{kmSign}{trend.kmPct}% vs vorige week</span>}
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[20px] font-bold text-white leading-none">{trend.dur7 > 0 ? formatDuration(trend.dur7) : '–'}</span>
@@ -1396,7 +1539,7 @@ function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkou
               style={{ background: 'rgba(255,255,255,0.10)' }}>
               Back
             </button>
-            <span className="text-[17px] font-semibold text-white">Workouts</span>
+            <span className="text-[17px] font-semibold text-white">Trainingen</span>
             <div className="w-[70px]" />
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
@@ -1411,7 +1554,7 @@ function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkou
         <Card>
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Laatste training</span>
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last training</span>
               <span className="text-[12px] text-white/30">View all →</span>
             </div>
             <span className="text-[17px] font-semibold text-white leading-snug">{workout.title}</span>
@@ -1705,8 +1848,8 @@ function computeTodaysFocus(
 
   function classify(title: string): Intensity {
     const t = title.toLowerCase()
-    if (['zone 2','zone2','herstel','recovery','rustig'].some(k => t.includes(k))) return 'zone2'
-    if (['easy','duurloop','lsd'].some(k => t.includes(k)))                         return 'easy'
+    if (['zone 2','zone2','recovery','easy'].some(k => t.includes(k))) return 'zone2'
+    if (['easy','long run','lsd'].some(k => t.includes(k)))                         return 'easy'
     if (t.includes('hyrox') || t.includes('wedstrijd') || t.includes('race'))       return 'very_hard'
     if (['interval','tempo','threshold'].some(k => t.includes(k)))                  return 'hard'
     if (['push','pull','legs','squat','gym','kracht','strength','bench','deadlift'].some(k => t.includes(k))) return 'hard'
@@ -1789,8 +1932,8 @@ function computeTodaysFocus(
 
   function buildReasons(intensity: Intensity): string[] {
     const r: string[] = []
-    if (highLoad)     r.push(`Training load +${Math.abs(loadPct)}% hoger dan last week`)
-    else if (medLoad) r.push(`Training load +${Math.abs(loadPct)}% hoger dan last week`)
+    if (highLoad)     r.push(`Trainingsbelasting +${Math.abs(loadPct)}% hoger dan vorige week`)
+    else if (medLoad) r.push(`Trainingsbelasting +${Math.abs(loadPct)}% hoger dan vorige week`)
     if (recoveryPct < 70) {
       if (lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48) {
         r.push(`Last workout ${lastWorkoutHoursAgo}h ago`)
@@ -1898,41 +2041,41 @@ function computeTodaysFocus(
     emoji: '🏋️', label: 'Leg day recommended', ...ACT.proceed,
     reasons: [
       'Legs recovered and ready to train',
-      weekStrength < 2 ? 'Low strength training this week' : 'Good balance for the week',
+      weekStrength < 2 ? 'Low strength volume this week' : 'Good balance for the week',
     ],
   }
 
   // Zone 2 cardio — aerobic base building
   if (cardioReady && weekRuns + weekRides < 3 && !legsReady) return {
-    emoji: '🏃', label: 'Rustige duurtraining aanbevolen', ...ACT.proceed,
+    emoji: '🏃', label: 'Easy endurance run recommended', ...ACT.proceed,
     reasons: [
-      `Readiness ${recoveryPct}% — good time for endurance training`,
-      'Weinig cardio deze week',
+      `Capacity ${recoveryPct}% — good time for endurance training`,
+      'Low cardio volume this week',
     ],
   }
 
   // Push day
   if (pushReady && strengthBalance) return {
-    emoji: '💪', label: 'Push-dag aanbevolen', ...ACT.proceed,
+    emoji: '💪', label: 'Push day recommended', ...ACT.proceed,
     reasons: [
       'Chest and shoulders recovered',
-      pullReady ? 'Push/pull alternation for optimal recovery' : 'Good time for pushing exercises',
+      pullReady ? 'Push/pull alternation for optimal recovery' : 'Good time for pressing',
     ],
   }
 
   // Pull day
   if (pullReady && strengthBalance) return {
-    emoji: '💪', label: 'Pull-dag aanbevolen', ...ACT.proceed,
+    emoji: '💪', label: 'Pull day recommended', ...ACT.proceed,
     reasons: [
       'Back recovered — rows and pull-ups recommended',
-      armsReady ? 'Arms also recovered — combine with bicep work' : 'Focus on compound back exercises',
+      armsReady ? 'Arms also recovered — combine with bicep work' : 'Focus on compound back movements',
     ],
   }
 
   // Zone 2 cardio fallback
   if (cardioReady) return {
-    emoji: '🚴', label: 'Rustige duurtraining aanbevolen', ...ACT.proceed,
-    reasons: [`Readiness ${recoveryPct}% — endurance run or recovery ride recommended`],
+    emoji: '🚴', label: 'Easy endurance ride recommended', ...ACT.proceed,
+    reasons: [`Capacity ${recoveryPct}% — endurance or recovery ride recommended`],
   }
 
   // Default: light training or rest
@@ -1943,7 +2086,7 @@ function computeTodaysFocus(
 
   return {
     emoji: '😴', label: 'Rest day recommended', ...ACT.skip,
-    reasons: [`Readiness ${recoveryPct}% — full recovery recommended`],
+    reasons: [`Capacity ${recoveryPct}% — full recovery recommended`],
   }
 }
 
@@ -2051,8 +2194,8 @@ function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub
   )
 }
 
-const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'gewichten', 'kracht']
-const CARDIO_KW = ['run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'cycling', 'hardlopen', 'wielren', 'duurloop', 'interval', 'tempo']
+const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'weights', 'strength']
+const CARDIO_KW = ['run', 'long run', 'ride', 'bike', 'swim', 'swim', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo']
 
 function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
   focus: TodaysFocus
@@ -2065,13 +2208,13 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
     .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
 
   const [ctaLabel, ctaHref] = (() => {
-    if (!next) return ["Bekijk training →", '/training']
+    if (!next) return ["View training →", '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
     const isCardio = CARDIO_KW.some(k => t.includes(k))
     if (isGym && !isCardio) return ["View strength →", '/training/strength']
     const dateStr = next.start_datetime || next.start_date
-    return ["Bekijk sessie →", `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
+    return ["View session →", `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
 
   return (
@@ -2148,7 +2291,7 @@ function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, weekStrengthDone,
       : { text: 'Aan het opbouwen', color: 'text-white/50' }
     if (weekCompleted >= totalPlanned) return { text: 'Op schema', color: 'text-teal-400' }
     if (weekCompleted >= totalPlanned - 1) return { text: 'Bijna op schema', color: 'text-yellow-400' }
-    return { text: `${totalPlanned - weekCompleted} training${totalPlanned - weekCompleted !== 1 ? 'en' : ''} achter`, color: 'text-orange-400' }
+    return { text: `${totalPlanned - weekCompleted} training${totalPlanned - weekCompleted !== 1 ? 's' : ''} behind`, color: 'text-orange-400' }
   })()
 
   return (
@@ -2161,11 +2304,11 @@ function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, weekStrengthDone,
 
         <div className="flex items-baseline gap-2">
           <span className="text-[36px] font-bold text-white leading-none">{weekCompleted}</span>
-          <span className="text-[16px] text-white/50">trainingen voltooid</span>
+          <span className="text-[16px] text-white/50">trainings completed</span>
         </div>
 
         {weekUpcomingPlanned > 0 && (
-          <span className="text-[13px] text-white/40">{weekUpcomingPlanned} {weekUpcomingPlanned === 1 ? 'training' : 'trainingen'} nog gepland</span>
+          <span className="text-[13px] text-white/40">{weekUpcomingPlanned} {weekUpcomingPlanned === 1 ? 'training' : 'trainings'} still planned</span>
         )}
 
         {(weekStrengthDone > 0 || weekCardioDone > 0) && (
@@ -2239,7 +2382,7 @@ function RecoveryDetailCard({
   physiology,
 }: {
   recovery: { pct: number; label: string; factors: string[] }
-  physiology: { score: number | null; label: string; color: string; explanation: { positive: string[]; negative: string[]; primary_driver: string } }
+  physiology: { score: number | null; label: string; color: string; explanation: string }
 }) {
   const unified = physiology.score !== null
     ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
@@ -2249,14 +2392,14 @@ function RecoveryDetailCard({
 
   // Show fatigue explanation when training load is the dominant drag
   const fatigueIsDominant = recovery.pct < 55 && (physiology.score === null || recovery.pct < physiology.score - 20)
-  const explanationBullets = fatigueIsDominant
-    ? ['High training fatigue from recent days', 'Recovery needed before hard efforts']
-    : [...physiology.explanation.positive, ...physiology.explanation.negative]
+  const explanation = fatigueIsDominant
+    ? 'Readiness is primarily limited by high training fatigue from recent days.'
+    : physiology.explanation
 
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Readiness</span>
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Belastbaarheid</span>
         <div className="flex items-end justify-between">
           <span className="text-[40px] font-bold text-white leading-none">{unified}%</span>
           <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{label}</span>
@@ -2267,20 +2410,12 @@ function RecoveryDetailCard({
         <div className="flex items-center gap-2 py-1">
           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c }} />
           <span className="text-[14px] font-semibold" style={{ color: c }}>
-            {unified >= 70 ? 'Train normally' : unified >= 45 ? 'Avoid max effort' : 'Priority: recovery today'}
+            {unified >= 70 ? 'Normal training' : unified >= 45 ? 'Avoid max effort' : 'Priority: recovery today'}
           </span>
         </div>
-        {explanationBullets.length > 0 && (
-          <div className="flex flex-col gap-1.5 pt-2">
-            {explanationBullets.map((b, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="text-[12px] text-white/40 mt-[2px]">•</span>
-                <span className="text-[12px] text-white/50">{b}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {physiology.score !== null && explanationBullets.length === 0 && (
+        {explanation ? (
+          <p className="text-[12px] text-white/40 leading-relaxed pt-0.5">{explanation}</p>
+        ) : physiology.score !== null && (
           <span className="text-[12px] text-white/35 pt-0.5">
             Physiology {physiology.score}% · Training load {recovery.pct}%
           </span>
@@ -2327,7 +2462,7 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
             ))}
           </div>
         ) : (
-          <span className="text-[14px] text-white/30">Nog geen trainingen deze week</span>
+          <span className="text-[14px] text-white/30">No trainings this week yet</span>
         )}
 
         {rampRate !== null && (
@@ -2774,8 +2909,8 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   const details = readinessPct >= 85
     ? { duur: '40–60 min', zone: 'Zone 3–4 (tempo)' }
     : readinessPct >= 70
-    ? { duur: '30–50 min', zone: 'Zone 2 (aeroob)' }
-    : { duur: 'Rust', zone: '–' }
+    ? { duur: '30–50 min', zone: 'Zone 2 (aerobic)' }
+    : { duur: 'Rest', zone: '–' }
 
   const tomorrowPct = readinessPct >= 85 ? 68 : readinessPct >= 70 ? 80 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Harder training possible' : tomorrowPct >= 70 ? 'Easy run' : 'Rest day'
@@ -2785,7 +2920,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   if (readinessPct >= 85) reasons.push('Well recovered — high intensity possible')
   else if (readinessPct >= 70) reasons.push('Well recovered — easy pace recommended')
   else reasons.push('Herstel heeft prioriteit')
-  if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs last week — niet verder ophogen`)
+  if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs vorige week — niet verder ophogen`)
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
@@ -2803,7 +2938,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
           <span className="text-[15px] font-semibold text-white/80 leading-tight">{tomorrowLabel}</span>
           <div className="flex items-center gap-1.5 mt-auto">
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: tomorrowPct >= 80 ? '#4ade80' : tomorrowPct >= 65 ? '#facc15' : '#fb923c' }} />
-            <span className="text-[12px] text-white/40">Verwacht {tomorrowPct}%</span>
+            <span className="text-[12px] text-white/40">Expected {tomorrowPct}%</span>
           </div>
         </div>
       </div>
@@ -2873,7 +3008,7 @@ export function RunningSection({ activities, hevy = [] }: { activities: Activity
                 <span className="text-[28px] font-bold leading-none" style={{ color: trend.volPct > 15 ? '#fb923c' : trend.volPct < -10 ? '#60a5fa' : '#4ade80' }}>
                   {trend.volPct > 0 ? '+' : ''}{trend.volPct}%
                 </span>
-                <span className="text-[12px] text-white/40">vs last week</span>
+                <span className="text-[12px] text-white/40">vs vorige week</span>
               </div>
             )}
           </div>
@@ -2941,10 +3076,10 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   const hoursSince = lastRide ? Math.round((Date.now() - new Date(lastRide.start_date).getTime()) / 3600000) : null
 
   const details = readinessPct >= 85
-    ? { duur: '60–90 min', intensiteit: 'Hoog', zone: 'Zone 3–4' }
+    ? { duur: '60–90 min', intensiteit: 'High', zone: 'Zone 3–4' }
     : readinessPct >= 70
-    ? { duur: '45–75 min', intensiteit: 'Matig', zone: 'Zone 2' }
-    : { duur: '20–40 min', intensiteit: 'Herstel', zone: 'Zone 1' }
+    ? { duur: '45–75 min', intensiteit: 'Moderate', zone: 'Zone 2' }
+    : { duur: '20–40 min', intensiteit: 'Recovery', zone: 'Zone 1' }
 
   const tomorrowPct = readinessPct >= 85 ? 72 : readinessPct >= 70 ? 82 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Threshold training possible' : tomorrowPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
@@ -2953,12 +3088,12 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Last ride ${hoursSince}h ago`)
   if (readinessPct >= 85) reasons.push('Well recovered — threshold training possible')
-  else if (readinessPct >= 70) reasons.push('Zone 2 builds aerobic base without excess stress')
+  else if (readinessPct >= 70) reasons.push('Zone 2 builds aerobic base without stress')
   else reasons.push('Avoid high intensity — recovery priority')
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(34,211,238,0.07)' }}>
-      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Fietsadvies</p>
+      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Cycling advice</p>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -2972,7 +3107,7 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
           <span className="text-[15px] font-semibold text-white/80 leading-tight">{tomorrowLabel}</span>
           <div className="flex items-center gap-1.5 mt-auto">
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: tomorrowColor }} />
-            <span className="text-[12px] text-white/40">Verwacht {tomorrowPct}%</span>
+            <span className="text-[12px] text-white/40">Expected {tomorrowPct}%</span>
           </div>
         </div>
       </div>
@@ -2999,7 +3134,7 @@ export function CyclingSection({ activities, hevy = [] }: { activities: Activity
   const readinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
-  const cyclingSuggestion = readinessPct >= 85 ? 'Drempeltraining' : readinessPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
+  const cyclingSuggestion = readinessPct >= 85 ? 'Threshold training' : readinessPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
 
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRide = allRides[0] ?? null
@@ -3017,12 +3152,12 @@ export function CyclingSection({ activities, hevy = [] }: { activities: Activity
       {ftp && (
         <Card>
           <div className="flex flex-col gap-2">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Estimated FTP</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Geschatte FTP</span>
             <div className="flex items-baseline gap-1">
               <span className="text-[40px] font-bold text-purple-400 leading-none">{ftp}</span>
               <span className="text-[17px] font-semibold text-white/50">W</span>
             </div>
-            <span className="text-[13px] text-white/40">Estimate based on kJ/time on rides longer than 45 min</span>
+            <span className="text-[13px] text-white/40">Schatting o.b.v. kJ/tijd op ritten langer dan 45 min</span>
           </div>
         </Card>
       )}
@@ -3032,7 +3167,7 @@ export function CyclingSection({ activities, hevy = [] }: { activities: Activity
 
 // ─── Strength ─────────────────────────────────────────────────────────────────
 
-function SplitRecommendationCard({ hevy, calendarEvents }: { hevy: HevyWorkout[]; calendarEvents: any[] }) {
+function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
   const muscleAdvice = computeMuscleGroupAdvice(hevy)
   const get = (label: string) => muscleAdvice.find(g => g.label === label)
 
@@ -3040,154 +3175,45 @@ function SplitRecommendationCard({ hevy, calendarEvents }: { hevy: HevyWorkout[]
   const pullScore = Math.round(((get('Back')?.recovery ?? 100) + (get('Arms')?.recovery ?? 100)) / 2)
   const legsScore = get('Legs')?.recovery ?? 100
 
-  const PUSH_KW = ['bench', 'chest', 'fly', 'dip', 'push', 'shoulder', 'lateral raise', 'overhead press', 'ohp', 'arnold', 'front raise']
-  const PULL_KW = ['row', 'pull-up', 'pullup', 'lat', 'chin', 'cable row', 'curl', 'bicep', 'hammer curl', 'face pull']
-  const LEGS_KW = ['squat', 'leg press', 'lunge', 'rdl', 'deadlift', 'hip thrust', 'calf', 'leg curl', 'leg extension']
-
-  function daysSince(keywords: string[]): number | null {
-    const sorted = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))
-    for (const w of sorted) {
-      if (!w.exercises) continue
-      if (w.exercises.some(ex => keywords.some(k => (ex.title ?? '').toLowerCase().includes(k))))
-        return Math.round((Date.now() - new Date(w.start_time).getTime()) / 86400000)
-    }
-    return null
-  }
-
-  const daysSincePush = daysSince(PUSH_KW)
-  const daysSincePull = daysSince(PULL_KW)
-  const daysSinceLegs = daysSince(LEGS_KW)
-
-  // Calendar: detect today/tomorrow gym events
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
-  const PUSH_CAL = ['push', 'borst', 'chest', 'bench', 'shoulder', 'schouder', 'tricep', 'duw']
-  const PULL_CAL = ['pull', 'rug', 'back', 'row', 'deadlift', 'bicep', 'arm', 'trek']
-  const LEGS_CAL = ['legs', 'leg', 'squat', 'benen', 'quad', 'hamstring', 'lunge']
-
-  function gymEventOn(dateStr: string): { title: string; split: string | null } | null {
-    const ev = (calendarEvents ?? []).find((e: any) => (e.start_datetime || e.start_date).slice(0, 10) === dateStr)
-    if (!ev) return null
-    const t = (ev.title ?? '').toLowerCase()
-    const split = PUSH_CAL.some(k => t.includes(k)) ? 'Push'
-      : PULL_CAL.some(k => t.includes(k)) ? 'Pull'
-      : LEGS_CAL.some(k => t.includes(k)) ? 'Legs'
-      : null
-    return { title: ev.title, split }
-  }
-
-  const calToday = gymEventOn(todayStr)
-  const calTomorrow = gymEventOn(tomorrowStr)
-
   const splits = [
-    { key: 'Push', score: pushScore, groups: ['Chest', 'Shoulders'], daysSince: daysSincePush },
-    { key: 'Pull', score: pullScore, groups: ['Back', 'Arms'], daysSince: daysSincePull },
-    { key: 'Legs', score: legsScore, groups: ['Legs'], daysSince: daysSinceLegs },
+    { key: 'Push', score: pushScore, groups: 'Chest + Shoulders', color: '#60a5fa', emoji: '💪' },
+    { key: 'Pull', score: pullScore, groups: 'Back + Arms', color: '#2dd4bf', emoji: '🏋️' },
+    { key: 'Legs', score: legsScore, groups: 'Quads + Glutes', color: '#4ade80', emoji: '🦵' },
   ].sort((a, b) => b.score - a.score)
 
-  // If any calendar events exist, the calendar is the authoritative source for today/tomorrow
-  const hasCalendar = (calendarEvents ?? []).length > 0
+  const best = splits[0]
+  const isRest = best.score < 60
 
-  // Vandaag: calendar event → show it; calendar exists but nothing today → "Geen training"; no calendar → recovery-based
-  const calTodaySplit = calToday?.split ? splits.find(s => s.key === calToday.split) : null
-  const recoveryBest = splits[0]
-  const isRest = recoveryBest.score < 60
-
-  // The split used for Why bullets (either from calendar event or recovery)
-  const contextSplit = calTodaySplit ?? (calTomorrow?.split ? splits.find(s => s.key === calTomorrow.split) : null) ?? recoveryBest
-
-  const tomorrowHasEvent = !!calTomorrow
-  const tomorrowLabel = calTomorrow?.split ?? calTomorrow?.title ?? null
-
-  const daysLabel = (d: number | null) => d === null ? null : d === 0 ? 'vandaag' : d === 1 ? 'gisteren' : `${d} dagen geleden`
-
-  const reasons: string[] = []
-  // When today has no training but tomorrow does, frame bullets as readiness for tomorrow
-  const forTomorrow = hasCalendar && !calToday && calTomorrow
-  const splitKey = contextSplit.key
-
-  if (forTomorrow) reasons.push(`${calTomorrow!.title} scheduled tomorrow`)
-
-  // "100% recovered" reads clinical — describe the muscle in words instead
-  const recPhrase = (pct: number) =>
-    pct >= 100 ? 'fully recovered' : pct >= 80 ? `well recovered (${pct}%)` : `${pct}% recovered`
-
-  if (splitKey === 'Push') {
-    const chest = get('Chest'), sh = get('Shoulders')
-    const dl = daysLabel(daysSincePush)
-    if (dl) reasons.push(`Last Push workout ${dl}`)   // de eigenlijke reden: lang genoeg geleden
-    if (chest) reasons.push(`Chest ${recPhrase(chest.recovery)}`)
-    if (sh) reasons.push(`Shoulders ${recPhrase(sh.recovery)}`)
-  } else if (splitKey === 'Pull') {
-    const back = get('Back'), arms = get('Arms')
-    const dl = daysLabel(daysSincePull)
-    if (dl) reasons.push(`Last Pull workout ${dl}`)
-    if (back) reasons.push(`Back ${recPhrase(back.recovery)}`)
-    if (arms) reasons.push(`Arms ${recPhrase(arms.recovery)}`)
-  } else if (splitKey === 'Legs') {
-    const legs = get('Legs')
-    const dl = daysLabel(daysSinceLegs)
-    if (dl) reasons.push(`Last Leg workout ${dl}`)
-    if (legs) reasons.push(`Legs ${recPhrase(legs.recovery)}`)
-  } else if (!hasCalendar && isRest) {
-    const fatigued = muscleAdvice.filter(g => g.recovery < 60).map(g => g.label)
-    if (fatigued.length > 0) reasons.push(`${fatigued.join(', ')} still recovering`)
-    reasons.push('A rest day improves training quality')
-  }
+  const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
+  const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(251,146,60,0.07)' }}>
       <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Recommended split</p>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
-          {calToday ? (
-            <>
-              <span className="text-[22px] font-bold text-white leading-tight">{calTodaySplit?.key ?? calToday.title}</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#2dd4bf' }} />
-                <span className="text-[12px] text-white/40">From calendar</span>
-              </div>
-            </>
-          ) : hasCalendar ? (
-            <>
-              <span className="text-[20px] font-semibold text-white/30 leading-tight">Geen training</span>
-              <span className="text-[12px] text-white/25">Niet gepland vandaag</span>
-            </>
-          ) : (
-            <>
-              <span className="text-[22px] font-bold text-white leading-tight">{isRest ? 'Rest day' : recoveryBest.key}</span>
-              <span className="text-[12px] text-white/40">{isRest ? 'Muscle recovery priority' : recoveryBest.groups.join(' + ')}</span>
-            </>
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Tomorrow</span>
-          {tomorrowHasEvent ? (
-            <>
-              <span className="text-[15px] font-semibold text-white/80 leading-tight">{tomorrowLabel}</span>
-              <div className="flex items-center gap-1.5 mt-auto">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#2dd4bf' }} />
-                <span className="text-[12px] text-white/40">From calendar</span>
-              </div>
-            </>
-          ) : (
-            <span className="text-[14px] text-white/30 leading-tight mt-1">Nothing scheduled</span>
-          )}
+      <div className="flex items-center gap-3 mb-5">
+        <span className="text-[42px] leading-none">{isRest ? '😴' : best.emoji}</span>
+        <div>
+          <span className="text-[24px] font-bold text-white">{isRest ? 'Rest day' : `${best.key} day`}</span>
+          <p className="text-[13px] text-white/50 mt-0.5">
+            {isRest ? 'Muscle recovery priority' : `${best.groups} recovered`}
+          </p>
         </div>
       </div>
 
-      <div className="border-t border-white/[0.08] pt-3">
-        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why</p>
-        <div className="flex flex-col gap-1.5">
-          {reasons.map((r, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="text-orange-400/60 text-[12px] mt-[2px] shrink-0">•</span>
-              <span className="text-[13px] text-white/65 leading-snug">{r}</span>
-            </div>
-          ))}
-        </div>
+      <div className="grid grid-cols-3 gap-2">
+        {splits.map(s => (
+          <div key={s.key}
+            className="flex flex-col gap-1.5 p-3 rounded-[12px]"
+            style={{
+              background: s.key === best.key && !isRest ? `${s.color}18` : 'rgba(255,255,255,0.04)',
+              border: s.key === best.key && !isRest ? `1px solid ${s.color}40` : '1px solid transparent',
+            }}>
+            <span className="text-[14px] font-bold text-white">{s.key}</span>
+            <span className="text-[11px] font-semibold" style={{ color: sc(s.score) }}>{sl(s.score)}</span>
+            <span className="text-[10px] text-white/30">{s.score}%</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -3211,21 +3237,44 @@ function matchMuscle(name: string): string | null {
   return null
 }
 
-export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorkout[]; calendarEvents?: any[] }) {
+export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
+  const muscleAdvice = computeMuscleGroupAdvice(hevy)
   const keyLifts     = extractKeyLifts(hevy)
   const lastWorkout  = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))[0] ?? null
   const setBreakdown = computeWeeklySetBreakdown(hevy)
 
+  const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
+  const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
+
   return (
     <div className="flex flex-col gap-6">
-      <SplitRecommendationCard hevy={hevy} calendarEvents={calendarEvents} />
+      <SplitRecommendationCard hevy={hevy} />
+
+      {muscleAdvice.length > 0 && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Muscle groups</span>
+            {muscleAdvice.map(g => (
+              <div key={g.label} className="flex items-center gap-3">
+                <span className="text-[14px] text-white w-[80px] shrink-0">{g.label}</span>
+                <div className="flex-1 h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${g.recovery}%`, background: sc(g.recovery) }} />
+                </div>
+                <span className="text-[12px] font-semibold w-[52px] text-right shrink-0" style={{ color: sc(g.recovery) }}>
+                  {sl(g.recovery)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {lastWorkout && <LastStrengthWorkoutCard workout={lastWorkout} allWorkouts={hevy} />}
 
       {keyLifts.length > 0 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Geschat 1RM</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Estimated 1RM</span>
             {keyLifts.map(l => (
               <div key={l.name} className="flex items-center gap-3">
                 <div className="flex-1">
@@ -3386,7 +3435,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="text-orange-400 text-[14px]">✦</span>
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Pattern</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Patroon</span>
           </div>
           <p className="text-[16px] text-white/85 leading-relaxed">{insight}</p>
         </div>
@@ -3446,10 +3495,10 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistency</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistentie</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[36px] font-bold text-teal-400 leading-none">{activeDays}</span>
-              <span className="text-[15px] text-white/50">active days</span>
+              <span className="text-[15px] text-white/50">actieve dagen</span>
             </div>
             <span className="text-[12px] text-white/30">Afgelopen 28 dagen</span>
           </div>
@@ -3516,7 +3565,7 @@ function relativeDay(iso: string): string {
 
 function SwimmingReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
   const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
-  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready for training' : 'Slightly fatigued'
+  const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready to train' : 'Slightly fatigued'
   return (
     <Card>
       <div className="flex flex-col gap-3">
@@ -3612,7 +3661,7 @@ export function SwimmingSection({ activities, hevy = [] }: { activities: Activit
   const readinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
-  const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swimming' : 'Recovery swimming'
+  const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swim' : 'Recovery swim'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
 
   const trend = computeSwimmingWeeklyTrend(activities)
