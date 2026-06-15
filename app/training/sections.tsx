@@ -3093,7 +3093,7 @@ function SplitRecommendationCard({ hevy, calendarEvents }: { hevy: HevyWorkout[]
   const recoveryBest = splits[0]
   const isRest = recoveryBest.score < 60
 
-  // The split used for Waarom bullets (either from calendar event or recovery)
+  // The split used for Why bullets (either from calendar event or recovery)
   const contextSplit = calTodaySplit ?? (calTomorrow?.split ? splits.find(s => s.key === calTomorrow.split) : null) ?? recoveryBest
 
   const tomorrowHasEvent = !!calTomorrow
@@ -3386,7 +3386,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="text-orange-400 text-[14px]">✦</span>
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Patroon</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Pattern</span>
           </div>
           <p className="text-[16px] text-white/85 leading-relaxed">{insight}</p>
         </div>
@@ -3446,10 +3446,10 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistentie</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistency</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[36px] font-bold text-teal-400 leading-none">{activeDays}</span>
-              <span className="text-[15px] text-white/50">actieve dagen</span>
+              <span className="text-[15px] text-white/50">active days</span>
             </div>
             <span className="text-[12px] text-white/30">Afgelopen 28 dagen</span>
           </div>
