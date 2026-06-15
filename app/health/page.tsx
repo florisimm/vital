@@ -185,19 +185,19 @@ export default function HealthPage() {
     // Critical: multiple signals very low
     if (pct !== null && pct < 35)
       return { emoji: '😴', title: 'Rest Day', bullets: [
-        'Multiple recovery markers are low',
-        'Light walk only — avoid structured training',
+        'Skip training — sleep, eat well and do nothing more',
+        `Recovery ${pct}% — multiple markers are low`,
         tomEvt ? `${tomEvt.title} planned tomorrow — recover well` : 'Prioritise sleep and nutrition today',
       ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
 
     // Suppressed HRV or elevated HR + poor sleep
     if ((hrv !== null && hrv < 25) || (restingHR !== null && restingHR > 72 && sleepScore !== null && sleepScore < 50))
       return { emoji: '🛌', title: 'Recover Today', bullets: [
+        'Do 15–20 min light stretching or a slow walk — nothing more',
         hrv !== null && hrv < 25
           ? `HRV at ${Math.round(Number(hrv))} ms — below recovery threshold`
           : `Resting HR elevated at ${restingHR} bpm`,
-        'Avoid high intensity today',
-        tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Prioritise sleep tonight',
+        tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Aim for 8+ hours of sleep tonight',
       ], cta: { label: 'See HRV trend →', tab: 'heart' as const, href: null } }
 
     // Calendar event today — most actionable
@@ -208,19 +208,19 @@ export default function HealthPage() {
       const evtHref  = _evtHref(todayEvt)
       if (pct !== null && pct >= 70)
         return { emoji: evtEmoji, title: evtTitle, bullets: [
-          `Recovery ${pct}% — physiology supports full effort${evtTime}`,
-          'Good day to push intensity',
+          `Go all-in${evtTime} — body is ready for full effort`,
+          `Recovery ${pct}% supports high intensity`,
           'Warm up well and stay hydrated',
         ], cta: { label: `Open session →`, tab: null, href: evtHref } }
       if (pct !== null && pct >= 45)
         return { emoji: evtEmoji, title: evtTitle, bullets: [
-          `Recovery ${pct}% — train but avoid maximum effort${evtTime}`,
-          'Moderate intensity is appropriate',
+          `Train at moderate effort${evtTime} — avoid maximum output`,
+          `Recovery ${pct}% — some fatigue present`,
           'Cut short if your body signals fatigue',
         ], cta: { label: `Open session →`, tab: null, href: evtHref } }
       return { emoji: evtEmoji, title: evtTitle, bullets: [
-        `Recovery only ${pct ?? '?'}% — consider a lighter session${evtTime}`,
-        'Modify to easy effort or postpone',
+        `Consider a lighter version of the session${evtTime} or postpone`,
+        `Recovery only ${pct ?? '?'}% — body is not ready for full effort`,
         'Rest may serve you better today',
       ], cta: { label: `View session →`, tab: null, href: evtHref } }
     }
@@ -228,22 +228,22 @@ export default function HealthPage() {
     // No event — readiness-based generic recommendation
     if (pct !== null && pct >= 75)
       return { emoji: '🏋️', title: 'Quality Training', bullets: [
-        `Recovery ${pct}% — body is ready for a hard session`,
-        sleepScore !== null ? `Sleep score ${sleepScore}% supports high output` : 'Physiological signals look strong',
-        tomEvt ? `${tomEvt.title} planned tomorrow — consider intensity` : 'Good day for a demanding workout',
+        'Do a demanding session today — strength, intervals or tempo run',
+        sleepScore !== null ? `Recovery ${pct}%, sleep ${sleepScore}% — signals are strong` : `Recovery ${pct}% — body is ready`,
+        tomEvt ? `${tomEvt.title} planned tomorrow — manage intensity` : 'Good day for a demanding workout',
       ], cta: { label: 'Plan your session →', tab: null, href: '/training' } }
 
     if (pct !== null && pct >= 55)
       return { emoji: '🚴', title: 'Zone 2 Ride', bullets: [
-        `Recovery ${pct}% — moderate training day`,
-        'Zone 2 builds aerobic base with low fatigue cost',
-        tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Good nutrition will support full recovery',
+        'Ride or run 30–45 min at easy conversational pace (Zone 2)',
+        `Recovery ${pct}% — moderate day, avoid going hard`,
+        tomEvt ? `${tomEvt.title} planned tomorrow — save legs` : 'Good nutrition will support full recovery',
       ], cta: { label: 'View training →', tab: null, href: '/training' } }
 
     return { emoji: '🚶', title: 'Light Movement', bullets: [
-      pct !== null ? `Recovery ${pct}% — keep intensity low` : 'Recovery markers suggest an easy day',
-      sleepScore !== null && sleepScore < 55 ? `Sleep score ${sleepScore}% — target 8 hours tonight` : 'Prioritise rest and nutrition',
-      tomEvt ? `${tomEvt.title} planned tomorrow — recover well today` : 'Light walk or stretching recommended',
+      '20–30 min walk or 10 min mobility — keep it easy',
+      pct !== null ? `Recovery ${pct}% — body needs rest today` : 'Recovery markers suggest an easy day',
+      tomEvt ? `${tomEvt.title} planned tomorrow — recover well today` : 'Prioritise rest and good nutrition',
     ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
   })()
 
