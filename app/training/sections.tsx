@@ -2781,6 +2781,194 @@ function LearnedAboutYouCard({ profile }: { profile: PersonalProfile }) {
   )
 }
 
+function sportInfoFromTitle(title: string): { sport: string | null; emoji: string } {
+  const t = (title ?? '').toLowerCase()
+  if (['push', 'pull', 'legs', 'squat', 'gym', 'kracht', 'strength', 'bench', 'deadlift', 'hyrox', 'fitness', 'gewichten', 'upper', 'lower'].some(k => t.includes(k)))
+    return { sport: 'gym', emoji: '🏋️' }
+  if (['run', 'loop', 'hardloop', 'interval', 'tempo', 'duurloop'].some(k => t.includes(k)))
+    return { sport: 'running', emoji: '🏃' }
+  if (['ride', 'fiet', 'cycl', 'bike', 'wielren'].some(k => t.includes(k)))
+    return { sport: 'cycling', emoji: '🚴' }
+  if (['swim', 'zwem'].some(k => t.includes(k)))
+    return { sport: 'swimming', emoji: '🏊' }
+  return { sport: null, emoji: '🗓️' }
+}
+
+function isEventCompleted(eventDate: string, sport: string | null, activities: Activity[], hevy: HevyWorkout[]): boolean {
+  if (!sport) return false
+  const neighbours = [eventDate,
+    new Date(new Date(eventDate).getTime() - 86400000).toISOString().slice(0, 10),
+    new Date(new Date(eventDate).getTime() + 86400000).toISOString().slice(0, 10),
+  ]
+  if (sport === 'gym') return hevy.some(h => neighbours.includes(h.start_time.slice(0, 10)))
+  return activities.some(a => {
+    if (!neighbours.includes(a.start_date.slice(0, 10))) return false
+    const t = (a.sport_type ?? '').toLowerCase()
+    if (sport === 'running') return t.includes('run')
+    if (sport === 'cycling') return t.includes('ride') || t.includes('cycl')
+    if (sport === 'swimming') return t.includes('swim')
+    return false
+  })
+}
+
+function PlannedEventsCard({
+  calendarEvents, pastCalendarEvents, activities, hevy, readinessPct, recoveryDetail,
+}: {
+  calendarEvents: any[]; pastCalendarEvents: any[]; activities: Activity[]; hevy: HevyWorkout[]
+  readinessPct: number; recoveryDetail: { pct: number; label: string; factors: string[] }
+}) {
+  const todayStr     = new Date().toISOString().slice(0, 10)
+  const tomorrowStr  = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const twoDaysStr   = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)
+
+  const allEvents = [...pastCalendarEvents, ...calendarEvents]
+  const planEvents = allEvents
+    .filter(e => {
+      const d = (e.start_datetime || e.start_date || '').slice(0, 10)
+      return d >= todayStr && d <= twoDaysStr
+    })
+    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+
+  const dayLabel = (d: string) =>
+    d === todayStr ? 'Vandaag' : d === tomorrowStr ? 'Morgen'
+    : new Date(d + 'T12:00:00').toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
+
+  const grouped: { label: string; events: any[] }[] = []
+  for (const e of planEvents) {
+    const d = (e.start_datetime || e.start_date || '').slice(0, 10)
+    const lbl = dayLabel(d)
+    const grp = grouped.find(g => g.label === lbl)
+    if (grp) grp.events.push(e)
+    else grouped.push({ label: lbl, events: [e] })
+  }
+
+  const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
+  const rl = readinessPct >= 70 ? 'Goed' : readinessPct >= 45 ? 'Matig' : 'Laag'
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Gepland</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} />
+            <span className="text-[12px] font-semibold" style={{ color: rc }}>
+              Readiness {readinessPct}% · {rl}
+            </span>
+          </div>
+        </div>
+
+        {grouped.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {grouped.map(({ label, events }) => (
+              <div key={label} className="flex flex-col gap-2">
+                <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">{label}</span>
+                {events.map((e: any, i: number) => {
+                  const d = (e.start_datetime || e.start_date || '').slice(0, 10)
+                  const { sport, emoji } = sportInfoFromTitle(e.title ?? '')
+                  const done = isEventCompleted(d, sport, activities, hevy)
+                  const time = e.start_datetime
+                    ? new Date(e.start_datetime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+                    : null
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                        style={{
+                          background: done ? 'rgba(45,212,191,0.18)' : 'rgba(255,255,255,0.07)',
+                          border: done ? '1.5px solid rgba(45,212,191,0.5)' : '1.5px solid rgba(255,255,255,0.12)',
+                        }}
+                      >
+                        {done && <span className="text-teal-400 text-[12px] font-bold leading-none">✓</span>}
+                      </div>
+                      <span className="text-[17px] leading-none shrink-0">{emoji}</span>
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <span className="text-[15px] font-semibold text-white leading-snug truncate">{e.title}</span>
+                        {time && <span className="text-[12px] text-white/40">{time}</span>}
+                      </div>
+                      {done && (
+                        <span className="text-[12px] font-semibold text-teal-400 shrink-0">Gedaan</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[15px] text-white/30">Geen training gepland voor vandaag of morgen</span>
+        )}
+
+        {recoveryDetail.factors.length > 0 && (
+          <div className="pt-2 border-t border-white/[0.06]">
+            <span className="text-[12px] text-white/35 leading-relaxed">
+              {recoveryDetail.factors.slice(0, 2).join(' · ')}
+            </span>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function WorkoutRatingCard() {
+  const supabase = useMemo(() => createClient(), [])
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [selected, setSelected] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('session_ratings').select('rating').eq('user_id', user.id).eq('date', todayStr).maybeSingle()
+      if (data?.rating) setSelected(data.rating)
+    }
+    load()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = async (rating: string) => {
+    setSelected(rating)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('session_ratings').upsert(
+      { user_id: user.id, date: todayStr, rating },
+      { onConflict: 'user_id,date' }
+    )
+  }
+
+  const options = [
+    { key: 'licht', label: 'Licht', emoji: '😌' },
+    { key: 'middel', label: 'Middel', emoji: '💪' },
+    { key: 'zwaar', label: 'Zwaar', emoji: '🔥' },
+  ]
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Hoe voelde de training vandaag?</span>
+        <div className="flex gap-2">
+          {options.map(o => (
+            <button
+              key={o.key}
+              onClick={() => save(o.key)}
+              className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-[14px] text-[13px] font-semibold transition-all active:scale-95"
+              style={selected === o.key
+                ? { background: 'rgb(45,212,191)', color: 'black' }
+                : { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              <span className="text-[20px] leading-none">{o.emoji}</span>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {selected && (
+          <span className="text-[11px] text-white/30">Opgeslagen · wordt gebruikt voor gepersonaliseerd advies</span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {} }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]
@@ -2910,8 +3098,15 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
 
   return (
     <div className="flex flex-col gap-[18px]">
-      {/* 1. Today's Recommendation — hero */}
-      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} />
+      {/* 1. Gepland + gedaan + readiness */}
+      <PlannedEventsCard
+        calendarEvents={calendarEvents}
+        pastCalendarEvents={pastCalendarEvents}
+        activities={activities}
+        hevy={hevy}
+        readinessPct={unifiedReadinessPct}
+        recoveryDetail={recoveryDetail}
+      />
 
       {/* 2. This Week */}
       <WeekSummaryCard
@@ -2920,10 +3115,13 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
         sportRows={sportRows}
       />
 
-      {/* 3. Readiness */}
+      {/* 3. Hoe voelde de training */}
+      <WorkoutRatingCard />
+
+      {/* 4. Readiness detail */}
       <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
 
-      {/* 4. What Kern learned about you */}
+      {/* 5. What Kern learned about you */}
       <LearnedAboutYouCard profile={personalProfile} />
     </div>
   )
