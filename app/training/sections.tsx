@@ -1746,6 +1746,8 @@ type TodaysFocus = {
   reasons: string[]
 }
 
+type CardioTarget = { sport: 'running' | 'cycling' | 'swimming'; label: string; emoji: string; target: number; done: number }
+
 function computeTodaysFocus(
   activities: Activity[],
   hevy: HevyWorkout[],
@@ -1754,6 +1756,7 @@ function computeTodaysFocus(
   perf: { score: number; label: string; color: string; loadRatio: number },
   acwrDetail: ACWRDetail,
   rampRate: number | null,
+  cardioTargets: CardioTarget[] = [],
 ): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
@@ -1983,28 +1986,38 @@ function computeTodaysFocus(
     const doneWasCardio = todayDoneRun || todayDoneRide || todayDoneSwim
     const rs = riskScore()
 
+    // Which cardio sports from the user's profile are still below their weekly
+    // target? Only suggest those — never a sport they didn't plan for.
+    const cardioStillToDo = cardioTargets.filter(c => c.target > 0 && c.done < c.target)
+
     // After the planned (usually strength) session: is there still room for an
     // easy aerobic session today, or is it better to just rest?
     const canAddCardio = !doneWasCardio
+      && cardioStillToDo.length > 0
       && recoveryPct >= 60
       && rs <= 3
       && weightedACWRRisk() < 0.35
       && !upcomingHard
 
     if (canAddCardio) {
+      const top = cardioStillToDo[0]
+      const others = cardioStillToDo.slice(1).map(c => c.label.toLowerCase())
+      const orList = others.length > 0 ? ` (or ${others.join('/')})` : ''
       return {
-        emoji: '🚴',
-        label: `${done.title} done — room for easy cardio`,
+        emoji: top.emoji,
+        label: `${done.title} done — room for easy ${top.label.toLowerCase()}`,
         action: 'Optional Zone 2',
         actionColor: '#2dd4bf',
         reasons: [
-          'You recovered well — an easy run, ride or swim is fine if you want more',
-          'Keep it Zone 2 (conversational pace) — low fatigue cost',
+          `You set ${top.target}× ${top.label.toLowerCase()} this week — ${top.done}/${top.target} so far`,
+          `An easy ${top.label.toLowerCase()}${orList} fits — keep it Zone 2, low fatigue cost`,
           tomorrowNext ? `${tomorrowNext.title} planned tomorrow — keep it light` : 'Or simply rest — both are good choices',
         ],
       }
     }
 
+    // No cardio room — either you hit your targets, recovery is low, or load is high
+    const allCardioTargetsMet = cardioTargets.some(c => c.target > 0) && cardioStillToDo.length === 0
     return {
       emoji: '✅',
       label: `${done.title} done`,
@@ -2012,7 +2025,9 @@ function computeTodaysFocus(
       action: 'Rest & recover',
       actionColor: '#4ade80',
       reasons: [
-        doneWasCardio ? 'Cardio done — let your body absorb it' : 'Enough training for today — no extra cardio needed',
+        doneWasCardio ? 'Cardio done — let your body absorb it'
+          : allCardioTargetsMet ? "You've hit your weekly training targets — rest is earned"
+          : 'Enough training for today — no extra cardio needed',
         recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition` : `Recovery ${recoveryPct}% — looking good`,
         tomorrowNext ? `${tomorrowNext.title} planned tomorrow — recover well` : 'Hydrate and get quality sleep tonight',
       ],
@@ -2276,9 +2291,14 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
     .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
 
   const [ctaLabel, ctaHref] = (() => {
-    // When today's session is done and there's room for optional cardio, point at it
-    if (focus.label.toLowerCase().includes('cardio') || focus.action.includes('Zone 2'))
-      return ["Plan easy cardio →", '/training/running']
+    // When today's session is done and there's room for optional cardio, point at
+    // the specific sport the user planned (from their profile targets)
+    if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
+      const l = focus.label.toLowerCase()
+      if (l.includes('cycling')) return ["Plan an easy ride →", '/training/cycling']
+      if (l.includes('swimming')) return ["Plan an easy swim →", '/training/swimming']
+      return ["Plan an easy run →", '/training/running']
+    }
     if (!next) return ["View training →", '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
@@ -2792,6 +2812,14 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
     { icon: '🏊', label: 'Swimming', done: weekSwimming, target: trainingFrequencies.swimming ?? 0 },
   ]
 
+  // Cardio sports the user planned in their profile + weekly progress —
+  // drives the post-session "room for cardio" suggestion
+  const cardioTargets = [
+    { sport: 'running'  as const, label: 'Running',  emoji: '🏃', target: trainingFrequencies.running  ?? 0, done: weekRunning },
+    { sport: 'cycling'  as const, label: 'Cycling',  emoji: '🚴', target: trainingFrequencies.cycling  ?? 0, done: weekCycling },
+    { sport: 'swimming' as const, label: 'Swimming', emoji: '🏊', target: trainingFrequencies.swimming ?? 0, done: weekSwimming },
+  ]
+
   const rawReadinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
@@ -2818,7 +2846,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
   const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
-  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate)
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets)
 
   // Detect overrides: did user train today when advice would have been rest?
   useEffect(() => {
