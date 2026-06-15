@@ -87,6 +87,101 @@ function buildRecs(
   return recs.slice(0, 5)
 }
 
+// ─── tryDirectAnswer ─────────────────────────────────────────────────────────
+// Returns an instant answer string for simple factual questions, or null when
+// the question needs coaching judgment (→ send to Claude).
+
+function tryDirectAnswer(
+  msg: string,
+  healthRows: HealthRow[],
+  activities: Activity[],
+  hevy: HevyWorkout[],
+  foodData: any,
+): string | null {
+  const m         = msg.toLowerCase()
+  const today     = new Date().toISOString().slice(0, 10)
+  const todayH    = healthRows.find(r => r.datum === today)
+  const sleepRows = healthRows.filter(r => r.slaap_minuten != null)
+  const logs      = Array.isArray(foodData) ? foodData : (foodData?.food_log ?? foodData?.foodLog ?? [])
+  const tgProt    = Number(foodData?.targets?.protein ?? 0)
+  const tgKcal    = Number(foodData?.targets?.kcal ?? 0)
+  const totProt   = Math.round(logs.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0))
+  const totKcal   = Math.round(logs.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0))
+
+  // Protein
+  if (/protein|eiwit/.test(m) && /target|goal|doel|how much|hoeveel|today|vandaag|daily/.test(m)) {
+    if (!tgProt) return 'No protein target set yet — add one in your profile.'
+    const rem = Math.round(tgProt - totProt)
+    return rem > 0
+      ? `Protein target: ${Math.round(tgProt)}g/day. Logged today: ${totProt}g — ${rem}g remaining.`
+      : `Protein goal reached: ${totProt}g logged (target: ${Math.round(tgProt)}g). ✓`
+  }
+
+  // Calories
+  if (/calori|kcal/.test(m) && /target|goal|doel|how much|hoeveel|today|vandaag|daily/.test(m)) {
+    if (!tgKcal) return `Logged today: ${totKcal} kcal. No calorie target set.`
+    const rem = tgKcal - totKcal
+    return rem > 0
+      ? `Calorie target: ${tgKcal} kcal. Logged today: ${totKcal} kcal — ${rem} kcal remaining.`
+      : `Calorie target reached: ${totKcal} kcal logged (target: ${tgKcal} kcal). ✓`
+  }
+
+  // Sleep last night — fact only, not "how should I sleep" advice
+  if (/how.*(did i sleep|was my sleep|heb ik geslapen)|sleep (last night|score|gisteravond)|slaap (gisteravond|score)/.test(m)) {
+    const last = sleepRows[0]
+    if (!last) return 'No sleep data yet — sync your Fitbit.'
+    const dur   = last.slaap_minuten ? fmtMin(last.slaap_minuten) : '–'
+    const score = last.slaap_score != null ? `, score ${last.slaap_score}/100` : ''
+    const deep  = last.slaap_diep != null && last.slaap_minuten
+      ? `, deep ${Math.round(last.slaap_diep / last.slaap_minuten * 100)}%` : ''
+    return `Last night (${last.datum}): ${dur}${score}${deep}.`
+  }
+
+  // Readiness / recovery score — number only
+  if (/what.*(is my|is de).*(readiness|recovery|herstel)|readiness score|recovery score|herstelwaarde/.test(m)) {
+    const r = computePhysiologyReadiness(healthRows)
+    if (r.score == null) return 'No readiness data yet — connect Fitbit.'
+    return `Readiness today: ${r.score}/100 (${r.label}).${r.explanation ? ` ${r.explanation}` : ''}`
+  }
+
+  // HRV — number only
+  if (/what.*(is my|is de).*\bhrv\b|\bhrv\b.*(today|vandaag|now|nu)/.test(m)) {
+    if (!todayH?.hrv_rmssd) return 'No HRV data for today yet.'
+    const base = computeHRVBaseline(healthRows)
+    const dev  = base.deviationPct != null ? ` (${base.deviationPct > 0 ? '+' : ''}${base.deviationPct}% vs baseline)` : ''
+    return `HRV today: ${todayH.hrv_rmssd} ms${base.baseline != null ? ` / baseline ${base.baseline} ms` : ''}${dev}.`
+  }
+
+  // Resting heart rate — number only
+  if (/resting.heart|rusthartslag|resting hr/.test(m) && /what|how|hoeveel|wat/.test(m)) {
+    if (!todayH?.hartslag_rust) return 'No resting heart rate for today yet.'
+    const base = computeSimpleBaselines(healthRows)
+    const dev  = base.rhr != null ? ` (30-day baseline: ${base.rhr} bpm)` : ''
+    return `Resting HR today: ${todayH.hartslag_rust} bpm${dev}.`
+  }
+
+  // Steps
+  if (/\b(steps|stappen)\b/.test(m) && /today|vandaag|how many|hoeveel/.test(m)) {
+    if (!todayH?.stappen) return 'No step data for today yet.'
+    return `Steps today: ${todayH.stappen.toLocaleString()}.`
+  }
+
+  // Recent sessions — listing, not advice
+  if (/what.*(did i (train|do|workout)|sessions?)|recent.*(sessions?|trainings?)|laatste.*training|welke.*training.*week/.test(m)) {
+    const t7 = new Date(Date.now() - 7 * 86400000).toISOString()
+    const acts7 = activities.filter(a => a.start_date >= t7)
+    const hevy7 = hevy.filter(h => h.start_time >= t7)
+    if (!acts7.length && !hevy7.length) return 'No sessions in the last 7 days.'
+    const lines: string[] = [
+      ...acts7.map(a => `${a.start_date?.slice(0, 10)} — ${a.sport_type} "${a.name}" ${Math.round((a.moving_time ?? 0) / 60)} min${a.distance ? `, ${(a.distance / 1000).toFixed(1)} km` : ''}`),
+      ...hevy7.map(h => `${h.start_time?.slice(0, 10)} — Strength: ${h.title} ${fmtMin((h.duration ?? 0) / 60)}`),
+    ].sort().reverse()
+    return `Sessions last 7 days:\n${lines.join('\n')}`
+  }
+
+  return null
+}
+
 // ─── buildPrompt ──────────────────────────────────────────────────────────────
 
 function buildPrompt(
@@ -223,6 +318,7 @@ ${userMessage}`
 export default function CoachPage() {
   const [message, setMessage] = useState('')
   const [prompt, setPrompt]   = useState<string | null>(null)
+  const [answer, setAnswer]   = useState<string | null>(null)
   const [copied, setCopied]   = useState(false)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -240,8 +336,15 @@ export default function CoachPage() {
 
   function handleSend() {
     if (!message.trim()) return
-    const full = buildPrompt(message, goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
-    setPrompt(full)
+    const direct = tryDirectAnswer(message, healthRows, activities, hevy, foodForRecs)
+    if (direct) {
+      setAnswer(direct)
+      setPrompt(null)
+    } else {
+      const full = buildPrompt(message, goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
+      setPrompt(full)
+      setAnswer(null)
+    }
     setMessage('')
   }
 
@@ -267,6 +370,21 @@ export default function CoachPage() {
       ) : (
         <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <p className="text-[15px] text-white/40">Connect Fitbit and log training to see personalised recommendations.</p>
+        </div>
+      )}
+
+      {/* Direct answer */}
+      {answer && (
+        <div className="rounded-[18px] border border-white/[0.1] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
+            <span className="text-[12px] font-semibold text-teal-400/80 uppercase tracking-[0.10em]">Direct answer</span>
+            <button onClick={() => setAnswer(null)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <X size={14} className="text-white/50" />
+            </button>
+          </div>
+          <pre className="px-4 py-4 text-[14px] text-white/80 leading-relaxed overflow-x-auto whitespace-pre-wrap font-sans">
+            {answer}
+          </pre>
         </div>
       )}
 
