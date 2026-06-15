@@ -485,7 +485,7 @@ export default function TodayPage() {
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
-      <div style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
+      <div className="flex flex-col gap-6" style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
         <RecommendationCard rec={rec} />
         <CoachCard coach={coach} />
         <FocusCard items={focus} />
