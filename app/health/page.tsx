@@ -94,6 +94,26 @@ export default function HealthPage() {
 
   const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 
+  // Auto-sync Fitbit/Google Health on mount so the latest data is pulled in
+  // without tapping "Sync". Throttled to once every 15 min to avoid hammering
+  // the API on every navigation.
+  useEffect(() => {
+    const THROTTLE_MS = 15 * 60 * 1000
+    let last = 0
+    try { last = Number(localStorage.getItem('fitbit-last-sync') ?? 0) } catch { /* ignore */ }
+    if (Date.now() - last < THROTTLE_MS) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/fitbit/sync', { method: 'POST' })
+        if (!res.ok) return
+        try { localStorage.setItem('fitbit-last-sync', String(Date.now())) } catch { /* ignore */ }
+        if (!cancelled) await refreshHealthCache()
+      } catch { /* offline or not connected — ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   function switchTab(key: string) {
     setActiveTab(key)
     window.scrollTo({ top: 0, behavior: 'instant' })
