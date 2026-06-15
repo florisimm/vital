@@ -37,7 +37,7 @@ export function PerformanceSection() {
   const lifts = extractKeyLifts(hevy)
 
   // Readiness (unified score with training load integration)
-  const physiologyReadiness = computePhysiologyReadiness(healthRows, activities, hevy)
+  const physiologyReadiness = computePhysiologyReadiness(healthRows)
   const recoveryPct = physiologyReadiness.score
 
   // Consistency (14 days)
