@@ -3018,18 +3018,18 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
     )
   }
 
-  const whenLabel = latestWorkout.day === yesterdayStr ? 'gisteren' : 'vandaag'
+  const whenLabel = latestWorkout.day === yesterdayStr ? "yesterday's" : "today's"
   const options = [
-    { key: 'licht', label: 'Licht', emoji: '😌' },
-    { key: 'middel', label: 'Middel', emoji: '💪' },
-    { key: 'zwaar', label: 'Zwaar', emoji: '🔥' },
+    { key: 'great', label: 'Went great', emoji: '🙌' },
+    { key: 'good', label: 'Pretty good', emoji: '👍' },
+    { key: 'tough', label: 'Tough one', emoji: '😅' },
   ]
 
   return (
     <Card>
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Hoe voelde het {whenLabel}?</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">How did {whenLabel} session go?</span>
           <span className="text-[15px] font-semibold text-white">{latestWorkout.name}</span>
         </div>
         <div className="flex gap-2">

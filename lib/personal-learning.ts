@@ -182,48 +182,7 @@ export function computePersonalProfile(
     }
   }
 
-  // ── 4. Skipped sports ─────────────────────────────────────────────────────
   const skippedSports: PersonalProfile['skippedSports'] = []
-  if (pastCalendarEvents.length > 0) {
-    const doneByDaySport = new Map<string, Set<string>>()
-    const mark = (day: string, sport: string) => {
-      if (!doneByDaySport.has(day)) doneByDaySport.set(day, new Set())
-      doneByDaySport.get(day)!.add(sport)
-    }
-    for (const a of activities) mark(a.start_date.slice(0, 10), sportOfActivity(a))
-    for (const h of hevy) mark(h.start_time.slice(0, 10), 'gym')
-
-    const tally: Record<string, { planned: number; done: number }> = {}
-    for (const e of pastCalendarEvents) {
-      const sport = sportOfEvent(e.title ?? '')
-      if (!sport) continue
-      const day = (e.start_datetime || e.start_date || '').slice(0, 10)
-      if (!day) continue
-      tally[sport] ??= { planned: 0, done: 0 }
-      tally[sport].planned++
-      // matched if that sport was done within ±1 day
-      const neighbours = [day,
-        new Date(new Date(day).getTime() - 86400000).toISOString().slice(0, 10),
-        new Date(new Date(day).getTime() + 86400000).toISOString().slice(0, 10)]
-      const matched = neighbours.some(d => doneByDaySport.get(d)?.has(sport))
-      if (matched) tally[sport].done++
-    }
-    for (const [sport, t] of Object.entries(tally)) {
-      if (t.planned >= 3) {
-        const skipRate = 1 - t.done / t.planned
-        skippedSports.push({ sport, planned: t.planned, done: t.done, skipRate })
-      }
-    }
-    skippedSports.sort((a, b) => b.skipRate - a.skipRate)
-    const worst = skippedSports[0]
-    if (worst && worst.skipRate >= 0.4) {
-      insights.push({
-        icon: '📉',
-        title: `You often skip ${SPORT_LABELS[worst.sport] ?? worst.sport}`,
-        detail: `Only ${worst.done}/${worst.planned} planned ${SPORT_LABELS[worst.sport] ?? worst.sport} sessions happened. Want fewer planned, or a different time of day?`,
-      })
-    }
-  }
 
   // ── 5. Weekly session ceiling (load tolerance proxy) ──────────────────────
   let weeklySessionCeiling: number | null = null
