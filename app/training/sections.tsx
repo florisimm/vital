@@ -3092,9 +3092,11 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   useEffect(() => {
     if (!latestWorkout) { setChecking(false); return }
     // Check localStorage first — instant, no flicker
-    if (typeof window !== 'undefined' && localStorage.getItem(`rated-${latestWorkout.day}`)) {
-      setDismissed(true); setChecking(false); return
-    }
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem(`rated-${latestWorkout.day}`)) {
+        setDismissed(true); setChecking(false); return
+      }
+    } catch { /* storage unavailable — fall through to DB check */ }
     // Also check DB (covers other devices)
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -3103,7 +3105,7 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
         .from('session_ratings').select('rating')
         .eq('user_id', user.id).eq('date', latestWorkout!.day).maybeSingle()
       if (data?.rating) {
-        localStorage.setItem(`rated-${latestWorkout!.day}`, data.rating)
+        try { localStorage.setItem(`rated-${latestWorkout!.day}`, data.rating) } catch { /* ignore */ }
         setDismissed(true)
       }
       setChecking(false)
@@ -3115,9 +3117,9 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
 
   const save = async (rating: string) => {
     setSelected(rating)
-    // Persist to localStorage immediately — card won't come back even if DB fails
-    localStorage.setItem(`rated-${latestWorkout.day}`, rating)
+    // Dismiss immediately so the card never lingers, regardless of storage/DB
     setTimeout(() => setDismissed(true), 600)
+    try { localStorage.setItem(`rated-${latestWorkout.day}`, rating) } catch { /* ignore */ }
     // Best-effort DB save for learning engine
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -3156,7 +3158,7 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
           ))}
         </div>
         {selected && (
-          <span className="text-[11px] text-white/30">Opgeslagen · wordt gebruikt voor gepersonaliseerd advies</span>
+          <span className="text-[11px] text-white/30">Saved · used to personalise your advice</span>
         )}
       </div>
     </Card>
