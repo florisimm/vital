@@ -1916,7 +1916,7 @@ function computeTodaysFocus(
     emoji: '💪', label: 'Push-dag aanbevolen', ...ACT.proceed,
     reasons: [
       'Chest and shoulders recovered',
-      pullReady ? 'Push/pull-afwisseling voor optimaal herstel' : 'Goed moment voor drukwerk',
+      pullReady ? 'Push/pull alternation for optimal recovery' : 'Good time for pushing exercises',
     ],
   }
 
@@ -1925,7 +1925,7 @@ function computeTodaysFocus(
     emoji: '💪', label: 'Pull-dag aanbevolen', ...ACT.proceed,
     reasons: [
       'Back recovered — rows and pull-ups recommended',
-      armsReady ? 'Armen ook hersteld — combineer met bicepwerk' : 'Focus op samengestelde rugoefeningen',
+      armsReady ? 'Arms also recovered — combine with bicep work' : 'Focus on compound back exercises',
     ],
   }
 
@@ -2069,7 +2069,7 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
     const isCardio = CARDIO_KW.some(k => t.includes(k))
-    if (isGym && !isCardio) return ["Bekijk kracht →", '/training/strength']
+    if (isGym && !isCardio) return ["View strength →", '/training/strength']
     const dateStr = next.start_datetime || next.start_date
     return ["Bekijk sessie →", `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
@@ -2782,8 +2782,8 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
 
   const reasons: string[] = []
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Last run ${hoursSince}h ago`)
-  if (readinessPct >= 85) reasons.push('Goed hersteld — hoge intensiteit mogelijk')
-  else if (readinessPct >= 70) reasons.push('Goed hersteld — rustig tempo aanbevolen')
+  if (readinessPct >= 85) reasons.push('Well recovered — high intensity possible')
+  else if (readinessPct >= 70) reasons.push('Well recovered — easy pace recommended')
   else reasons.push('Herstel heeft prioriteit')
   if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs last week — niet verder ophogen`)
 
@@ -2952,9 +2952,9 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
 
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Last ride ${hoursSince}h ago`)
-  if (readinessPct >= 85) reasons.push('Goed hersteld — drempeltraining mogelijk')
-  else if (readinessPct >= 70) reasons.push('Zone 2 bouwt aerobe basis zonder te veel stress')
-  else reasons.push('Hoge intensiteit vermijden — herstel prioriteit')
+  if (readinessPct >= 85) reasons.push('Well recovered — threshold training possible')
+  else if (readinessPct >= 70) reasons.push('Zone 2 builds aerobic base without excess stress')
+  else reasons.push('Avoid high intensity — recovery priority')
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(34,211,238,0.07)' }}>
@@ -3108,7 +3108,7 @@ function SplitRecommendationCard({ hevy, calendarEvents }: { hevy: HevyWorkout[]
 
   if (forTomorrow) reasons.push(`${calTomorrow!.title} scheduled tomorrow`)
 
-  // "100% hersteld" leest klinisch — geef de spier in woorden weer
+  // "100% recovered" reads clinical — describe the muscle in words instead
   const recPhrase = (pct: number) =>
     pct >= 100 ? 'fully recovered' : pct >= 80 ? `well recovered (${pct}%)` : `${pct}% recovered`
 
@@ -3131,7 +3131,7 @@ function SplitRecommendationCard({ hevy, calendarEvents }: { hevy: HevyWorkout[]
     if (legs) reasons.push(`Legs ${recPhrase(legs.recovery)}`)
   } else if (!hasCalendar && isRest) {
     const fatigued = muscleAdvice.filter(g => g.recovery < 60).map(g => g.label)
-    if (fatigued.length > 0) reasons.push(`${fatigued.join(', ')} nog aan het herstellen`)
+    if (fatigued.length > 0) reasons.push(`${fatigued.join(', ')} still recovering`)
     reasons.push('A rest day improves training quality')
   }
 
@@ -3612,7 +3612,7 @@ export function SwimmingSection({ activities, hevy = [] }: { activities: Activit
   const readinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
-  const swimmingSuggestion = readinessPct >= 85 ? 'Sprintset' : readinessPct >= 70 ? 'Durationzwemmen' : 'Herstellend zwemmen'
+  const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swimming' : 'Recovery swimming'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
 
   const trend = computeSwimmingWeeklyTrend(activities)

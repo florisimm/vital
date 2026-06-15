@@ -112,11 +112,9 @@ export function PerformanceSection() {
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           label="Readiness"
-          value={`${recoveryPct}%`}
-          sub={physiologyReadiness.score !== null
-            ? physiologyReadiness.label
-            : hoursSince !== null ? `Last workout ${Math.round(hoursSince)}h ago` : 'No recent data'}
-          color={recoveryPct >= 80 ? 'text-teal-400' : recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
+          value={`${recoveryPct ?? '–'}%`}
+          sub={physiologyReadiness.label}
+          color={recoveryPct && recoveryPct >= 80 ? 'text-teal-400' : recoveryPct && recoveryPct >= 65 ? 'text-yellow-400' : 'text-orange-400'}
         />
         <StatCard
           label="Consistency"
