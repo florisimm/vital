@@ -2068,10 +2068,11 @@ function computeTodaysFocus(
         }
       }
       return {
-        emoji: '🚶', label: 'Train light',
+        emoji: '🚶', label: 'Keep it light',
         ...ACT.easier,
         reasons: [
-          `${nextPlanned.title} planned ${npDayLbl}`,
+          'Easy 20–30 min only — Zone 2 cardio or mobility, nothing hard',
+          `${nextPlanned.title} planned ${npDayLbl} — save your energy for it`,
           ...(medLoad ? [`Training load +${Math.abs(loadPct)}% higher than last week`] : []),
         ].slice(0, 3) as string[],
       }
@@ -2098,11 +2099,12 @@ function computeTodaysFocus(
   if (recoveryPct < 55 || rs >= 5) return {
     emoji: '🚶', label: 'Active recovery', ...ACT.recover,
     reasons: [
+      '20–30 min walk, easy spin or stretching — get blood flowing, no strain',
       lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 36
-        ? `Last workout ${lastWorkoutHoursAgo}h ago`
+        ? `Last workout ${lastWorkoutHoursAgo}h ago — still recovering`
         : 'Recovery lower than usual',
       ...(highLoad ? [`Training load +${Math.abs(loadPct)}% higher than last week`] : []),
-    ],
+    ].slice(0, 3),
   }
 
   // Muscle group advice
@@ -2162,13 +2164,20 @@ function computeTodaysFocus(
 
   // Default: light training or rest
   if (recoveryPct >= 70) return {
-    emoji: '🏃', label: 'Light training', ...ACT.easier,
-    reasons: ['No muscle groups fully recovered', 'Light intensity recommended'],
+    emoji: '🏃', label: 'Easy session', ...ACT.easier,
+    reasons: [
+      '20–30 min easy — Zone 2 cardio or a light full-body circuit',
+      'Keep it conversational (effort you could hold while chatting)',
+      'No muscle group is fully fresh for a hard session today',
+    ],
   }
 
   return {
     emoji: '😴', label: 'Rest day recommended', ...ACT.skip,
-    reasons: [`Capacity ${recoveryPct}% — full recovery recommended`],
+    reasons: [
+      'Take the day off — light walk at most',
+      `Recovery ${recoveryPct}% — your body needs full recovery`,
+    ],
   }
 }
 
