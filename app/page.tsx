@@ -28,6 +28,8 @@ async function fetchTodayData() {
   const todayIso = `${today}T00:00:00`
   const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   const sevenDaysAgoStr = localDateStr(sevenDaysAgo)
+  const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
+  const weekStartStr = localDateStr(weekStart)
 
   const [
     { data: latestGezondheid },
@@ -37,6 +39,8 @@ async function fetchTodayData() {
     { data: calendarEvents },
     { data: todayHevy },
     { data: todayActivities },
+    { data: weekHevy },
+    { data: weekActivities },
   ] = await Promise.all([
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).eq('datum', today).maybeSingle(),
     supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
@@ -45,6 +49,8 @@ async function fetchTodayData() {
     supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
     supabase.from('hevy_workouts').select('id,title,start_time').eq('user_id', user.id).gte('start_time', todayIso),
     supabase.from('strava_activities').select('id,name,sport_type,start_date').eq('user_id', user.id).gte('start_date', today),
+    supabase.from('hevy_workouts').select('id,title,start_time,sport_type').eq('user_id', user.id).gte('start_time', weekStartStr),
+    supabase.from('strava_activities').select('id,name,sport_type,start_date').eq('user_id', user.id).gte('start_date', weekStartStr),
   ])
 
   return {
@@ -55,6 +61,8 @@ async function fetchTodayData() {
     calendarEvents: calendarEvents ?? [],
     todayHevy:      todayHevy      ?? [],
     todayActivities: todayActivities ?? [],
+    allHevy:        weekHevy       ?? [],
+    allActivities:  weekActivities ?? [],
   }
 }
 
@@ -159,6 +167,30 @@ function buildCoach(rows: HealthRow[], data: any) {
   return { status, title, bullets: bullets.slice(0, 3) }
 }
 
+// ─── Weekly goals helper ──────────────────────────────────────────────────────
+
+function getWeeklyProgress(activities: any[], hevy: any[]) {
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
+  const weekStartIso = weekStart.toISOString().split('T')[0]
+
+  const weekActivities = activities.filter(a => (a.start_date ?? '').slice(0, 10) >= weekStartIso)
+  const weekHevy = hevy.filter(h => (h.start_time ?? '').slice(0, 10) >= weekStartIso)
+
+  const running = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('run')).length
+  const cycling = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('cycl')).length
+  const strength = weekHevy.length
+
+  // Default weekly targets (can be customized per user later)
+  const targets = { running: 3, cycling: 2, strength: 2 }
+  const isBehind = running < targets.running || cycling < targets.cycling || strength < targets.strength
+  const details = []
+  if (running < targets.running) details.push(`${targets.running - running} more run${targets.running - running !== 1 ? 's' : ''}`)
+  if (cycling < targets.cycling) details.push(`${targets.cycling - cycling} more ride${targets.cycling - cycling !== 1 ? 's' : ''}`)
+  if (strength < targets.strength) details.push(`${targets.strength - strength} more lift${targets.strength - strength !== 1 ? 's' : ''}`)
+
+  return { isBehind, details, running, cycling, strength }
+}
+
 // ─── Recommendation builder ───────────────────────────────────────────────────
 
 function buildRecommendation(rows: HealthRow[], data: any) {
@@ -172,6 +204,11 @@ function buildRecommendation(rows: HealthRow[], data: any) {
   const proteinLeft    = Math.round(Math.max(0, targetProtein - totalProtein))
   const hevy           = data?.todayHevy ?? []
   const acts           = data?.todayActivities ?? []
+  const allActivities  = data?.allActivities ?? []
+  const allHevy        = data?.allHevy ?? []
+
+  // Check weekly goal progress
+  const weeklyProgress = getWeeklyProgress(allActivities, allHevy)
 
   let icon = '🏃'
   let title = 'Zone 2 Run'
@@ -180,12 +217,25 @@ function buildRecommendation(rows: HealthRow[], data: any) {
   const why: string[] = []
 
   if (readiness.score !== null && readiness.score < 50) {
+    // Very low readiness: rest recommended, but acknowledge weekly goals
     icon = '😴'; title = 'Rest Day'; duration = ''
     why.push(`Readiness at ${readiness.score}% — body needs recovery`)
-    why.push('Skip training today')
+    if (weeklyProgress.isBehind) {
+      why.push(`Catch up tomorrow (${weeklyProgress.details.join(', ')})`)
+    } else {
+      why.push('Skip training today')
+    }
   } else if (readiness.score !== null && readiness.score < 65) {
-    icon = '🚶'; title = 'Light Walk or Mobility'; duration = '30 min'
-    why.push(`Readiness at ${readiness.score}% — keep intensity low`)
+    // Low readiness: light activity recommended
+    // But if user is behind on weekly goals, make it a light workout instead of rest
+    if (weeklyProgress.isBehind) {
+      icon = '🚶'; title = 'Light Workout'; duration = '30 min'
+      why.push(`Readiness at ${readiness.score}% — light activity only`)
+      why.push(`Behind weekly goals: ${weeklyProgress.details.slice(0, 2).join(', ')}`)
+    } else {
+      icon = '🚶'; title = 'Light Walk or Mobility'; duration = '30 min'
+      why.push(`Readiness at ${readiness.score}% — keep intensity low`)
+    }
     if (todayEvent) why.push(`${todayEvent.title} — reduce volume by ~25%`)
   } else if (todayEvent) {
     const t = todayEvent.title.toLowerCase()
