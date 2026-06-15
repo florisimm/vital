@@ -3218,17 +3218,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
       {/* 1. Vandaag — specific Dutch recommendation with readiness */}
       <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} />
 
-      {/* 2. Gepland + gedaan */}
-      <PlannedEventsCard
-        calendarEvents={calendarEvents}
-        pastCalendarEvents={pastCalendarEvents}
-        activities={activities}
-        hevy={hevy}
-        readinessPct={unifiedReadinessPct}
-        recoveryDetail={recoveryDetail}
-      />
-
-      {/* 3. Rate recent workout — only visible after a session */}
+      {/* 2. Rate recent workout — only visible after a session */}
       <WorkoutRatingCard activities={activities} hevy={hevy} coachAdvice={todaysFocus.label} />
 
       {/* 4. This Week */}
