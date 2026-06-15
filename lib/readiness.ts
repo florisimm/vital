@@ -26,6 +26,12 @@ export type ReadinessExplanation = {
   primary_driver: 'sleep' | 'hrv' | 'training_load'
 }
 
+export type ReadinessConfidence = {
+  level: 'high' | 'medium' | 'low'
+  reason: string
+  data_days: number
+}
+
 // Composite sleep score (0–100) calibrated to approximate Fitbit's score.
 export function computeSleepScore(r: HealthRow): number | null {
   const asleep = r.slaap_minuten
@@ -157,6 +163,45 @@ export function computeRecoveryScore(rows: HealthRow[]): {
   }
 }
 
+// Helper: Calculate confidence in readiness score based on data availability
+function computeReadinessConfidence(rows: HealthRow[], activities: Activity[], hevy: HevyWorkout[]): ReadinessConfidence {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+
+  // Count days with health data (sleep or HRV)
+  const healthDataDays = rows.filter(r => r.slaap_minuten != null || r.hrv_rmssd != null).length
+
+  // Count training sessions
+  const trainingDays = new Set([
+    ...activities.filter(a => a.start_date >= thirtyDaysAgo).map(a => a.start_date.slice(0, 10)),
+    ...hevy.filter(h => h.start_time >= thirtyDaysAgo).map(h => h.start_time.slice(0, 10)),
+  ]).size
+
+  const totalDataPoints = healthDataDays + trainingDays
+
+  // Confidence assessment
+  if (healthDataDays < 5 && trainingDays < 5) {
+    return {
+      level: 'low',
+      reason: `Limited data: only ${healthDataDays} health days and ${trainingDays} training days`,
+      data_days: healthDataDays,
+    }
+  }
+
+  if (healthDataDays < 10 || trainingDays < 3) {
+    return {
+      level: 'medium',
+      reason: `Some data missing: ${healthDataDays} health days, ${trainingDays} training days (need 15+ total for high confidence)`,
+      data_days: healthDataDays,
+    }
+  }
+
+  return {
+    level: 'high',
+    reason: `Sufficient data from ${healthDataDays} health days and ${trainingDays} training days`,
+    data_days: healthDataDays,
+  }
+}
+
 // Training Readiness: Recovery Score + Training Load + Weekly Goals context
 // Indicates whether today is suitable for hard training.
 // Weighting: Sleep 40% + HRV 40% + Training Load 20%
@@ -174,6 +219,7 @@ export function computePhysiologyReadiness(
     training_load: { value: number | null; status: string }
   }
   explanation: ReadinessExplanation
+  confidence: ReadinessConfidence
 } {
   const noData = {
     score: null,
@@ -264,6 +310,8 @@ export function computePhysiologyReadiness(
     : score >= 50 ? '#fb923c'
     : '#f87171'
 
+  const confidence = computeReadinessConfidence(rows, activities, hevy)
+
   return {
     score,
     label,
@@ -274,6 +322,7 @@ export function computePhysiologyReadiness(
       training_load: { value: loadScore, status: loadStatus },
     },
     explanation: { positive, negative, primary_driver },
+    confidence,
   }
 }
 
