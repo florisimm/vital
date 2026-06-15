@@ -67,6 +67,7 @@ export default function TrainingPage() {
   const activities = data?.activities ?? []
   const hevy = data?.hevy ?? []
   const calendarEvents = data?.calendarEvents ?? []
+  const trainingFrequencies = data?.trainingFrequencies ?? {}
 
   return (
     <PremiumScreen title="Training" subtitle="Training Overview" contentGap={18}>
@@ -88,7 +89,7 @@ export default function TrainingPage() {
 
       {/* Tab content — only after mount so SSR and first client render match */}
       <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} />}
+        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} trainingFrequencies={trainingFrequencies} />}
         {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} />}

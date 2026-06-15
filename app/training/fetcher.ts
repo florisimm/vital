@@ -18,7 +18,7 @@ export async function trainingFetcher() {
   const now = new Date()
   const todayDate = now.toISOString().split('T')[0]
 
-  const [{ data: activities }, { data: hevy }, { data: calendarEvents, error: calendarError }] = await Promise.all([
+  const [{ data: activities }, { data: hevy }, { data: calendarEvents, error: calendarError }, { data: settings }] = await Promise.all([
     supabase
       .from('strava_activities')
       .select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules')
@@ -30,7 +30,12 @@ export async function trainingFetcher() {
     supabase
       .from('calendar_events')
       .select('id,title,start_date,start_datetime,end_datetime')
-      .eq('user_id', user.id).gte('start_date', todayDate).order('start_date', { ascending: true })
+      .eq('user_id', user.id).gte('start_date', todayDate).order('start_date', { ascending: true }),
+    supabase
+      .from('user_settings')
+      .select('training_frequencies')
+      .eq('user_id', user.id)
+      .single()
   ])
 
   if (calendarError) console.error('Calendar fetch error:', calendarError)
@@ -44,9 +49,12 @@ export async function trainingFetcher() {
     return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
   })
 
+  const trainingFrequencies: Record<string, number> = (settings as any)?.training_frequencies ?? {}
+
   return {
     activities: (activities ?? []) as Activity[],
     hevy: (hevy ?? []) as HevyWorkout[],
-    calendarEvents: filteredCalendarEvents
+    calendarEvents: filteredCalendarEvents,
+    trainingFrequencies,
   }
 }

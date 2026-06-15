@@ -2278,21 +2278,23 @@ function buildWeekPrediction(
   return null
 }
 
-function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, weekStrengthDone, weekCardioDone, weekStrengthPlanned, weekCardioPlanned }: {
-  weekCompleted: number; weekUpcomingPlanned: number
-  weekStrengthDone: number; weekCardioDone: number
-  weekStrengthPlanned: number; weekCardioPlanned: number
+function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, sportRows }: {
+  weekCompleted: number
+  weekUpcomingPlanned: number
+  sportRows: { icon: string; label: string; done: number; target: number }[]
 }) {
-  const totalPlanned = weekStrengthPlanned + weekCardioPlanned
+  const totalTarget = sportRows.reduce((s, r) => s + r.target, 0)
   const coachLabel = (() => {
-    if (weekCompleted === 0) return { text: 'Nog niets gedaan', color: 'text-white/40' }
-    if (totalPlanned === 0) return weekCompleted >= 3
-      ? { text: 'Goed bezig', color: 'text-teal-400' }
-      : { text: 'Aan het opbouwen', color: 'text-white/50' }
-    if (weekCompleted >= totalPlanned) return { text: 'Op schema', color: 'text-teal-400' }
-    if (weekCompleted >= totalPlanned - 1) return { text: 'Bijna op schema', color: 'text-yellow-400' }
-    return { text: `${totalPlanned - weekCompleted} training${totalPlanned - weekCompleted !== 1 ? 's' : ''} behind`, color: 'text-orange-400' }
+    if (weekCompleted === 0) return { text: 'Nothing done yet', color: 'text-white/40' }
+    if (totalTarget === 0) return weekCompleted >= 3
+      ? { text: 'Good progress', color: 'text-teal-400' }
+      : { text: 'Building up', color: 'text-white/50' }
+    if (weekCompleted >= totalTarget) return { text: 'On track', color: 'text-teal-400' }
+    if (weekCompleted >= totalTarget - 1) return { text: 'Almost on track', color: 'text-yellow-400' }
+    return { text: `${totalTarget - weekCompleted} session${totalTarget - weekCompleted !== 1 ? 's' : ''} behind`, color: 'text-orange-400' }
   })()
+
+  const visibleRows = sportRows.filter(r => r.done > 0 || r.target > 0)
 
   return (
     <Card>
@@ -2304,35 +2306,38 @@ function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, weekStrengthDone,
 
         <div className="flex items-baseline gap-2">
           <span className="text-[36px] font-bold text-white leading-none">{weekCompleted}</span>
-          <span className="text-[16px] text-white/50">trainings completed</span>
+          <span className="text-[16px] text-white/50">
+            {totalTarget > 0 ? `/ ${totalTarget} sessions` : 'sessions completed'}
+          </span>
         </div>
 
         {weekUpcomingPlanned > 0 && (
-          <span className="text-[13px] text-white/40">{weekUpcomingPlanned} {weekUpcomingPlanned === 1 ? 'training' : 'trainings'} still planned</span>
+          <span className="text-[13px] text-white/40">{weekUpcomingPlanned} {weekUpcomingPlanned === 1 ? 'session' : 'sessions'} still planned</span>
         )}
 
-        {(weekStrengthDone > 0 || weekCardioDone > 0) && (
+        {visibleRows.length > 0 && (
           <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.06]">
-            {(weekStrengthDone > 0 || weekStrengthPlanned > 0) && (
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] text-white/40">Kracht</span>
-                <span className="text-[14px] font-semibold text-white">
-                  {weekStrengthPlanned > 0
-                    ? `${weekStrengthDone}/${weekStrengthPlanned} sessies`
-                    : `${weekStrengthDone} sessie${weekStrengthDone !== 1 ? 's' : ''}`}
-                </span>
+            {visibleRows.map(r => (
+              <div key={r.label} className="flex items-center justify-between">
+                <span className="text-[13px] text-white/50">{r.icon} {r.label}</span>
+                <div className="flex items-center gap-2">
+                  {r.target > 0 && (
+                    <div className="flex gap-1">
+                      {Array.from({ length: r.target }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-[8px] h-[8px] rounded-full"
+                          style={{ background: i < r.done ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.12)' }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <span className="text-[14px] font-semibold text-white">
+                    {r.target > 0 ? `${r.done}/${r.target}` : `${r.done}×`}
+                  </span>
+                </div>
               </div>
-            )}
-            {(weekCardioDone > 0 || weekCardioPlanned > 0) && (
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] text-white/40">Cardio</span>
-                <span className="text-[14px] font-semibold text-white">
-                  {weekCardioPlanned > 0
-                    ? `${weekCardioDone}/${weekCardioPlanned} sessies`
-                    : `${weekCardioDone} sessie${weekCardioDone !== 1 ? 's' : ''}`}
-                </span>
-              </div>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -2637,8 +2642,8 @@ function NextWorkoutCard({ calendarEvents }: {
 
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
-export function OverviewSection({ activities, hevy, calendarEvents }: {
-  activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
+export function OverviewSection({ activities, hevy, calendarEvents, trainingFrequencies = {} }: {
+  activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]; trainingFrequencies?: Record<string, number>
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
 
@@ -2659,20 +2664,18 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
     return dt >= nowStr && dt < weekEnd
   }).length
 
-  const GYM_KW_W  = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox']
-  const CARD_KW_W = ['run','loop','hardloop','ride','fiet','cycl','bike','swim','zwem','interval','tempo']
-  const weekStrengthDone    = weekHevy.length
-  const weekCardioDone      = weekActivities.filter(a => !isWeightTraining(a)).length
-  const weekStrengthPlanned = (calendarEvents ?? []).filter((e: any) => {
-    const dt = e.start_datetime || e.start_date
-    const t  = (e.title ?? '').toLowerCase()
-    return dt >= weekStart && dt < weekEnd && GYM_KW_W.some(k => t.includes(k))
-  }).length
-  const weekCardioPlanned = (calendarEvents ?? []).filter((e: any) => {
-    const dt = e.start_datetime || e.start_date
-    const t  = (e.title ?? '').toLowerCase()
-    return dt >= weekStart && dt < weekEnd && CARD_KW_W.some(k => t.includes(k)) && !GYM_KW_W.some(k => t.includes(k))
-  }).length
+  // Per-sport counts this week
+  const weekGym      = weekHevy.length
+  const weekRunning  = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('run')).length
+  const weekCycling  = weekActivities.filter(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') }).length
+  const weekSwimming = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('swim')).length
+
+  const sportRows = [
+    { icon: '🏋️', label: 'Gym',      done: weekGym,      target: trainingFrequencies.gym      ?? 0 },
+    { icon: '🏃', label: 'Running',  done: weekRunning,  target: trainingFrequencies.running  ?? 0 },
+    { icon: '🚴', label: 'Cycling',  done: weekCycling,  target: trainingFrequencies.cycling  ?? 0 },
+    { icon: '🏊', label: 'Swimming', done: weekSwimming, target: trainingFrequencies.swimming ?? 0 },
+  ]
 
   const unifiedReadinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
@@ -2699,10 +2702,7 @@ export function OverviewSection({ activities, hevy, calendarEvents }: {
       <WeekSummaryCard
         weekCompleted={weekCompleted}
         weekUpcomingPlanned={weekUpcomingPlanned}
-        weekStrengthDone={weekStrengthDone}
-        weekCardioDone={weekCardioDone}
-        weekStrengthPlanned={weekStrengthPlanned}
-        weekCardioPlanned={weekCardioPlanned}
+        sportRows={sportRows}
       />
 
       {/* 3. Readiness */}
