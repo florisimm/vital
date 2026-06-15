@@ -1,4 +1,4 @@
-import type { ReadinessConfidence } from '@/lib/readiness'
+import type { ReadinessConfidence } from '@/lib/adaptive-coaching-types'
 
 interface ReadinessConfidenceIndicatorProps {
   confidence: ReadinessConfidence

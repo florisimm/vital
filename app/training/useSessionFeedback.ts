@@ -43,7 +43,7 @@ export function useSessionFeedback(
 
       return {
         type,
-        id: a.id,
+        id: String(a.id),
         date: todayStr,
         name: a.name,
         startTime: a.start_date,

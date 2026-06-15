@@ -9,7 +9,7 @@ export default function StrengthPage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   return (
     <TrainingDetailScreen title="Strength" active="Strength">
-      <StrengthSection hevy={data?.hevy ?? []} calendarEvents={data?.calendarEvents ?? []} />
+      <StrengthSection hevy={data?.hevy ?? []} />
     </TrainingDetailScreen>
   )
 }
