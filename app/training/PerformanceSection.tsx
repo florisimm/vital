@@ -36,16 +36,9 @@ export function PerformanceSection() {
   const hevy: HevyWorkout[] = data?.hevy ?? []
   const lifts = extractKeyLifts(hevy)
 
-  // Readiness
-  const physiologyReadiness = computePhysiologyReadiness(healthRows)
-  const allTimes = [...activities.map(a => a.start_date), ...hevy.map(h => h.start_time)].sort().reverse()
-  const hoursSince = allTimes.length ? Math.max(0, (Date.now() - new Date(allTimes[0]).getTime()) / 3600000) : null
-  const trainingLoadPct = hoursSince !== null
-    ? hoursSince < 12 ? 45 : hoursSince < 24 ? 65 : hoursSince < 48 ? 82 : 95
-    : 95
-  const recoveryPct = physiologyReadiness.score !== null
-    ? Math.round(physiologyReadiness.score * 0.70 + trainingLoadPct * 0.30)
-    : trainingLoadPct
+  // Readiness (unified score with training load integration)
+  const physiologyReadiness = computePhysiologyReadiness(healthRows, activities, hevy)
+  const recoveryPct = physiologyReadiness.score
 
   // Consistency (14 days)
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
