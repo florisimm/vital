@@ -255,16 +255,21 @@ function buildRecommendation(rows: HealthRow[], data: any) {
     if (done) {
       // Workout completed — show what's next, not the completed event
       const cardioNeeded = weeklyProgress.details.find(d => d.includes('run') || d.includes('ride'))
+      // Compute target bedtime from avg wake time (slaap_einde_min) or fallback to 7am
+      const wakes = rows.filter(r => (r as any).slaap_einde_min != null).slice(0, 7).map(r => (r as any).slaap_einde_min as number)
+      const wakeMin = wakes.length >= 2 ? Math.round(wakes.reduce((a, b) => a + b, 0) / wakes.length) : 7 * 60
+      const bedMin = ((wakeMin - 8 * 60) + 1440) % 1440
+      const bedtime = `${Math.floor(bedMin / 60)}:${(bedMin % 60).toString().padStart(2, '0')}`
       if (cardioNeeded && readiness.score !== null && readiness.score >= 55) {
         icon = cardioNeeded.includes('run') ? '🏃' : '🚴'
         title = cardioNeeded.includes('run') ? 'Optional easy run' : 'Optional easy ride'
         href = cardioNeeded.includes('run') ? '/training/running' : '/training/cycling'
-        why.push(`${todayEvent.title} ✓ done`)
         why.push('Room for easy cardio if you feel up to it')
+        why.push(`Tonight: in bed by ${bedtime}`)
       } else {
         icon = '😴'; title = 'Rest & recover'
-        why.push(`${todayEvent.title} ✓ done`)
         why.push('Recovery is your training now')
+        why.push(`Tonight: in bed by ${bedtime}`)
       }
       duration = `${todayEvent.title} completed`
     } else {

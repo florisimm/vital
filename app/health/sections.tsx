@@ -612,14 +612,13 @@ export function RecoverySection() {
     { label: 'Sleep',      status: sleepMin  ? fmtMin(sleepMin)        : '–', ok: sleepOk, note: '7h target' },
   ]
 
-  const aiText = (() => {
-    if (!readiness.score) return 'Connect Fitbit to see personalised readiness data.'
-    const lines: string[] = []
-    if (readiness.score >= 80) lines.push(`Readiness at ${readiness.score}% — ${readiness.label}. A good day to push hard in training.`)
-    else if (readiness.score >= 60) lines.push(`Readiness at ${readiness.score}% — ${readiness.label}. Moderate training is supported; avoid max efforts.`)
-    else lines.push(`Readiness at ${readiness.score}% — ${readiness.label}. Prioritise recovery: sleep, nutrition, and easy movement only.`)
-    if (illnessFlag) lines.push('Physiological stress markers are elevated — consider skipping intense sessions today.')
-    return lines.join(' ')
+  const todayFocus = (() => {
+    if (illnessFlag) return { emoji: '🛑', title: 'Skip training today', sub: illnessFlag.reason }
+    if (!readiness.score) return { emoji: '📊', title: 'Connect Fitbit', sub: 'Sync health data to see personalised focus advice' }
+    if (readiness.score >= 80) return { emoji: '💪', title: 'Push hard today', sub: readiness.explanation || 'Recovery is peak — ideal day for intense training' }
+    if (readiness.score >= 65) return { emoji: '🏃', title: 'Train at moderate intensity', sub: readiness.explanation || 'Good recovery — keep efforts below max today' }
+    if (readiness.score >= 50) return { emoji: '🚶', title: 'Keep it light', sub: readiness.explanation || 'Below-normal recovery — easy movement only' }
+    return { emoji: '😴', title: 'Rest & recover', sub: readiness.explanation || 'Low readiness — prioritise sleep and nutrition today' }
   })()
 
   return (
@@ -635,7 +634,22 @@ export function RecoverySection() {
           </div>
         </div>
       )}
-      <AiInsight text={aiText} />
+      <div className="p-5 rounded-[22px] border border-white/[0.1]" style={{ background: 'rgba(45,212,191,0.07)' }}>
+        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-3">Today's Focus</p>
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-[32px] leading-none">{todayFocus.emoji}</span>
+          <p className="text-[19px] font-bold text-white leading-tight">{todayFocus.title}</p>
+        </div>
+        {todayFocus.sub && <p className="text-[13px] text-white/55 leading-relaxed mb-3">{todayFocus.sub}</p>}
+        <div className="flex flex-col gap-1.5 pt-3 border-t border-white/[0.08]">
+          {factors.map(f => (
+            <div key={f.label} className="flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.ok === true ? 'bg-teal-400' : f.ok === false ? 'bg-orange-400' : 'bg-white/20'}`} />
+              <span className="text-[13px] text-white/60">{f.label}: <span className="text-white/80">{f.status}</span>{f.note ? <span className="text-white/35"> · {f.note}</span> : ''}</span>
+            </div>
+          ))}
+        </div>
+      </div>
       <HeroMetric
         value={readiness.score ? String(readiness.score) : '–'}
         label="Readiness"
