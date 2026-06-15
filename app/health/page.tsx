@@ -312,7 +312,7 @@ export default function HealthPage() {
       {activeTab === 'weight'   && <WeightSection rows={rows} />}
       {activeTab === 'activity' && <ActivitySection rows={rows} />}
 
-      {activeTab === 'overview' && <>
+      {activeTab === 'overview' && <div className="flex flex-col gap-[18px]">
 
         {/* Recovery Score hero */}
         <Card>
@@ -412,7 +412,7 @@ export default function HealthPage() {
             </div>
           )}
         </div>
-      </>}
+      </div>}
 
       </div>
     </PremiumScreen>
