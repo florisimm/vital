@@ -1898,7 +1898,7 @@ function computeTodaysFocus(
     emoji: '🏋️', label: 'Leg day recommended', ...ACT.proceed,
     reasons: [
       'Legs recovered and ready to train',
-      weekStrength < 2 ? 'Weinig krachttraining deze week' : 'Goede balans voor de week',
+      weekStrength < 2 ? 'Low strength training this week' : 'Good balance for the week',
     ],
   }
 
