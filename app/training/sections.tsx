@@ -3494,9 +3494,6 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   const zone = readinessPct >= 85 ? 'Zone 3–4' : 'Zone 2'
   const specific = paceStr ? `${targetKm} km · ${paceStr} · ${zone}` : `${targetKm} km · ${zone}`
 
-  const tomorrowPct = readinessPct >= 85 ? 68 : readinessPct >= 70 ? 80 : 92
-  const tomorrowLabel = tomorrowPct >= 85 ? 'Harder training possible' : tomorrowPct >= 70 ? 'Easy run' : 'Rest day'
-
   const reasons: string[] = []
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Last run ${hoursSince}h ago`)
   if (readinessPct >= 85) reasons.push('Well recovered — high intensity possible')
@@ -3508,20 +3505,10 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
       <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Running Advice</p>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
-          <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
-          <span className="text-[13px] font-semibold" style={{ color: c }}>{specific}</span>
-        </div>
-        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Tomorrow</span>
-          <span className="text-[15px] font-semibold text-white/80 leading-tight">{tomorrowLabel}</span>
-          <div className="flex items-center gap-1.5 mt-auto">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: tomorrowPct >= 80 ? '#4ade80' : tomorrowPct >= 65 ? '#facc15' : '#fb923c' }} />
-            <span className="text-[12px] text-white/40">Expected {tomorrowPct}%</span>
-          </div>
-        </div>
+      <div className="flex flex-col gap-1.5 p-3 rounded-[14px] mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
+        <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
+        <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
+        <span className="text-[13px] font-semibold" style={{ color: c }}>{specific}</span>
       </div>
 
       <div className="border-t border-white/[0.08] pt-3">
@@ -3673,10 +3660,6 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
     ? `${targetKm} km · ${targetSpeedKmh.toFixed(0)} km/h · ${zone}`
     : `${targetKm} km · ${zone}`
 
-  const tomorrowPct = readinessPct >= 85 ? 72 : readinessPct >= 70 ? 82 : 92
-  const tomorrowLabel = tomorrowPct >= 85 ? 'Threshold training possible' : tomorrowPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
-  const tomorrowColor = tomorrowPct >= 85 ? '#4ade80' : tomorrowPct >= 70 ? '#facc15' : '#fb923c'
-
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Last ride ${hoursSince}h ago`)
   if (readinessPct >= 85) reasons.push('Well recovered — threshold training possible')
@@ -3685,22 +3668,12 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(34,211,238,0.07)' }}>
-      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Cycling advice</p>
+      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Cycling Advice</p>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
-          <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
-          <span className="text-[13px] font-semibold" style={{ color: c }}>{specific}</span>
-        </div>
-        <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Tomorrow</span>
-          <span className="text-[15px] font-semibold text-white/80 leading-tight">{tomorrowLabel}</span>
-          <div className="flex items-center gap-1.5 mt-auto">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: tomorrowColor }} />
-            <span className="text-[12px] text-white/40">Expected {tomorrowPct}%</span>
-          </div>
-        </div>
+      <div className="flex flex-col gap-1.5 p-3 rounded-[14px] mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
+        <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
+        <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
+        <span className="text-[13px] font-semibold" style={{ color: c }}>{specific}</span>
       </div>
 
       <div className="border-t border-white/[0.08] pt-3">
@@ -4266,10 +4239,10 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null }: { 
   if (allSwims.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <AiInsight text="Nog geen zwemdata. Log je eerste zwembeurt in Strava om inzichten te zien." />
+        <AiInsight text="No swim data yet. Log your first swim in Strava to see insights." />
         <Card>
           <p className="text-[15px] text-white/40 text-center py-6">
-            Verbind Strava en log een zwembeurt om je voortgang bij te houden.
+            Connect Strava and log a swim to start tracking your progress.
           </p>
         </Card>
       </div>
