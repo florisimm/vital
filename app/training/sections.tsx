@@ -8,6 +8,7 @@ import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
+import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2908,10 +2909,46 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
     [gezondheid, activities, hevy, pastCalendarEvents]
   )
 
+  // Build today's planned items for PlannedTodayCard
+  const todayDoneGym  = todayHevy.length > 0
+  const todayDoneRun  = todayActivities.some(a => (a.sport_type ?? '').toLowerCase().includes('run'))
+  const todayDoneRide = todayActivities.some(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') })
+  const todayDoneSwim = todayActivities.some(a => (a.sport_type ?? '').toLowerCase().includes('swim'))
+
+  const todayPlannedItems = useMemo((): PlannedItem[] => {
+    const sportKw = ['run','loop','hardloop','ride','fiet','cycl','bike','swim','zwem','interval','tempo','training','workout','sport','push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox']
+    const gymKw  = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox']
+    const runKw  = ['run','loop','hardloop','interval','tempo']
+    const rideKw = ['ride','fiet','cycl','bike']
+    const swimKw = ['swim','zwem']
+
+    return (calendarEvents ?? [])
+      .filter((e: any) => (e.start_datetime || e.start_date).slice(0, 10) === todayStr && sportKw.some(k => (e.title ?? '').toLowerCase().includes(k)))
+      .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+      .map((e: any): PlannedItem => {
+        const t = (e.title ?? '').toLowerCase()
+        const isGym  = gymKw.some(k => t.includes(k))
+        const isRun  = runKw.some(k => t.includes(k))
+        const isRide = rideKw.some(k => t.includes(k))
+        const isSwim = swimKw.some(k => t.includes(k))
+        const sport  = isGym ? 'strength' : isRun ? 'running' : isRide ? 'cycling' : isSwim ? 'swimming' : 'strength'
+        const emoji  = isGym ? '🏋️' : isRun ? '🏃' : isRide ? '🚴' : isSwim ? '🏊' : '🏃'
+        const done   = isGym ? todayDoneGym : isRun ? todayDoneRun : isRide ? todayDoneRide : isSwim ? todayDoneSwim : false
+        const dt = e.start_datetime || e.start_date
+        const time = dt && dt.includes('T') ? new Date(dt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null
+        return { title: e.title ?? '', time, done, sport, emoji }
+      })
+  }, [calendarEvents, todayStr, todayDoneGym, todayDoneRun, todayDoneRide, todayDoneSwim]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="flex flex-col gap-[18px]">
-      {/* 1. Today's Recommendation — hero */}
-      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} />
+      {/* 1. Today's Plan — shows planned events + Light/Medium/Heavy feedback */}
+      <PlannedTodayCard
+        items={todayPlannedItems}
+        defaultSport="strength"
+        readinessPct={unifiedReadinessPct}
+        recoveryPct={recoveryDetail.pct}
+      />
 
       {/* 2. This Week */}
       <WeekSummaryCard
