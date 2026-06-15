@@ -371,6 +371,98 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   }
 }
 
+// Training load score (0–100) for readiness calculation.
+// Uses ACWR, load ratio, session density, and consecutive training days.
+// Score is inverse: high load = low score (more recovery needed)
+export function computeTrainingLoadScore(activities: Activity[], hevy: HevyWorkout[]): {
+  score: number  // 0–100, where 100 = fully rested, 0 = extreme overload
+  volume7d: number  // total load units (kJ equivalent)
+  sessionCount7d: number
+  consecutiveDays: number
+  acwr: number | null
+  status: 'rested' | 'normal' | 'elevated' | 'high' | 'very_high'
+} {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+
+  // Load calculation: kJ for cardio, kg×sets for strength
+  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+
+  // ACWR: Acute (7d) / Chronic (28d average)
+  const kj28 = activities.filter(a => a.start_date >= thirtyDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= thirtyDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
+  const acwr = kj28 > 0 ? kj7 / (kj28 / 4) : null
+
+  // Session count and consecutive days
+  const sessions7d = [
+    ...new Set([
+      ...activities.filter(a => a.start_date >= sevenDaysAgo).map(a => a.start_date.slice(0, 10)),
+      ...hevy.filter(h => h.start_time >= sevenDaysAgo).map(h => h.start_time.slice(0, 10)),
+    ]),
+  ].length
+
+  // Consecutive training days (streak)
+  const allDates = [
+    ...activities.map(a => new Date(a.start_date).getTime()),
+    ...hevy.map(h => new Date(h.start_time).getTime()),
+  ].sort((a, b) => b - a)
+  const dayMs = 86400000
+  let consecutiveDays = 0
+  if (allDates.length > 0) {
+    let lastDate = allDates[0]
+    for (let i = 1; i < allDates.length; i++) {
+      if (lastDate - allDates[i] <= dayMs * 1.1) {  // Allow 1.1 day gap
+        consecutiveDays++
+        lastDate = allDates[i]
+      } else {
+        break
+      }
+    }
+  }
+
+  // Score calculation: inverse (high load → low readiness)
+  let score = 100
+
+  // ACWR penalty: 0.8–1.3 is ideal, <0.8 is deload, >1.5 is overload
+  if (acwr !== null) {
+    if (acwr > 1.5) score -= 60  // Very high load
+    else if (acwr > 1.3) score -= 40  // High load
+    else if (acwr > 1.1) score -= 20  // Elevated
+    else if (acwr < 0.8) score -= 10  // Deload (mild penalty, recovery is good)
+  }
+
+  // Session density penalty: >6 sessions/week with high intensity is fatiguing
+  if (sessions7d > 6) score -= Math.min(20, (sessions7d - 6) * 5)
+  else if (sessions7d > 4) score -= 5
+
+  // Consecutive days penalty: >5 consecutive days compounds fatigue
+  if (consecutiveDays > 6) score -= Math.min(30, (consecutiveDays - 6) * 8)
+  else if (consecutiveDays > 4) score -= 10
+
+  // Ensure score is in [0, 100]
+  score = Math.max(0, Math.min(100, score))
+
+  const status: 'rested' | 'normal' | 'elevated' | 'high' | 'very_high' =
+    score >= 80 ? 'rested'
+    : score >= 65 ? 'normal'
+    : score >= 50 ? 'elevated'
+    : score >= 35 ? 'high'
+    : 'very_high'
+
+  return {
+    score,
+    volume7d: kj7,
+    sessionCount7d: sessions7d,
+    consecutiveDays,
+    acwr,
+    status,
+  }
+}
+
 function computeRunningReadiness(activities: Activity[]) {
   const runs = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   if (runs.length === 0) return { pct: 90, suggestion: 'Easy Run' }
@@ -2382,7 +2474,7 @@ function RecoveryDetailCard({
   physiology,
 }: {
   recovery: { pct: number; label: string; factors: string[] }
-  physiology: { score: number | null; label: string; color: string; explanation: string }
+  physiology: { score: number | null; label: string; color: string; explanation: { positive: string[]; negative: string[]; primary_driver: string } }
 }) {
   const unified = physiology.score !== null
     ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
@@ -2392,9 +2484,9 @@ function RecoveryDetailCard({
 
   // Show fatigue explanation when training load is the dominant drag
   const fatigueIsDominant = recovery.pct < 55 && (physiology.score === null || recovery.pct < physiology.score - 20)
-  const explanation = fatigueIsDominant
-    ? 'Readiness is primarily limited by high training fatigue from recent days.'
-    : physiology.explanation
+  const explanationBullets = fatigueIsDominant
+    ? ['High training fatigue from recent days', 'Recovery needed before hard efforts']
+    : [...physiology.explanation.positive, ...physiology.explanation.negative]
 
   return (
     <Card>
@@ -2413,9 +2505,17 @@ function RecoveryDetailCard({
             {unified >= 70 ? 'Normaal trainen' : unified >= 45 ? 'Vermijd maximale inspanning' : 'Prioriteit: herstel vandaag'}
           </span>
         </div>
-        {explanation ? (
-          <p className="text-[12px] text-white/40 leading-relaxed pt-0.5">{explanation}</p>
-        ) : physiology.score !== null && (
+        {explanationBullets.length > 0 && (
+          <div className="flex flex-col gap-1.5 pt-2">
+            {explanationBullets.map((b, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-[12px] text-white/40 mt-[2px]">•</span>
+                <span className="text-[12px] text-white/50">{b}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {physiology.score !== null && explanationBullets.length === 0 && (
           <span className="text-[12px] text-white/35 pt-0.5">
             Physiology {physiology.score}% · Training load {recovery.pct}%
           </span>
