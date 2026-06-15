@@ -3091,13 +3091,21 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
 
   useEffect(() => {
     if (!latestWorkout) { setChecking(false); return }
+    // Check localStorage first — instant, no flicker
+    if (typeof window !== 'undefined' && localStorage.getItem(`rated-${latestWorkout.day}`)) {
+      setDismissed(true); setChecking(false); return
+    }
+    // Also check DB (covers other devices)
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setChecking(false); return }
       const { data } = await supabase
         .from('session_ratings').select('rating')
         .eq('user_id', user.id).eq('date', latestWorkout!.day).maybeSingle()
-      if (data?.rating) setDismissed(true)
+      if (data?.rating) {
+        localStorage.setItem(`rated-${latestWorkout!.day}`, data.rating)
+        setDismissed(true)
+      }
       setChecking(false)
     }
     load()
@@ -3107,13 +3115,16 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
 
   const save = async (rating: string) => {
     setSelected(rating)
+    // Persist to localStorage immediately — card won't come back even if DB fails
+    localStorage.setItem(`rated-${latestWorkout.day}`, rating)
+    setTimeout(() => setDismissed(true), 600)
+    // Best-effort DB save for learning engine
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('session_ratings').upsert(
       { user_id: user.id, date: latestWorkout.day, rating, coach_advice: coachAdvice },
       { onConflict: 'user_id,date' }
     )
-    setTimeout(() => setDismissed(true), 600)
   }
 
   const whenLabel = latestWorkout.day === yesterdayStr ? "yesterday's" : "today's"
