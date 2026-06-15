@@ -1267,13 +1267,13 @@ function RunningTrendCard({ trend }: { trend: ReturnType<typeof computeRunning7D
             <span className="text-[22px] font-bold text-white leading-none">{trend.vol7 > 0 ? `${trend.vol7.toFixed(1)}` : '–'}</span>
             <span className="text-[11px] text-white/40">km</span>
             {trend.volPct !== null && (
-              <span className="text-[12px] font-semibold" style={{ color: volColor }}>{volSign}{trend.volPct}% vs vorige week</span>
+              <span className="text-[12px] font-semibold" style={{ color: volColor }}>{volSign}{trend.volPct}% vs last week</span>
             )}
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-teal-400 leading-none">{trend.avgPace7 ?? '–'}</span>
             <span className="text-[11px] text-white/40">gem. /km</span>
-            {trend.paceDir && <span className="text-[12px] text-white/40">{trend.paceDir} vs vorige week</span>}
+            {trend.paceDir && <span className="text-[12px] text-white/40">{trend.paceDir} vs last week</span>}
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-white leading-none">{trend.runs7}</span>
@@ -1400,7 +1400,7 @@ function CyclingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeCyc
           <div className="flex flex-col gap-0.5">
             <span className="text-[20px] font-bold text-white leading-none">{trend.km7 > 0 ? `${trend.km7.toFixed(0)}` : '–'}</span>
             <span className="text-[11px] text-white/40">km</span>
-            {trend.kmPct !== null && <span className="text-[11px] font-semibold" style={{ color: kmColor }}>{kmSign}{trend.kmPct}% vs vorige week</span>}
+            {trend.kmPct !== null && <span className="text-[11px] font-semibold" style={{ color: kmColor }}>{kmSign}{trend.kmPct}% vs last week</span>}
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[20px] font-bold text-white leading-none">{trend.dur7 > 0 ? formatDuration(trend.dur7) : '–'}</span>
@@ -1932,8 +1932,8 @@ function computeTodaysFocus(
 
   function buildReasons(intensity: Intensity): string[] {
     const r: string[] = []
-    if (highLoad)     r.push(`Trainingsbelasting +${Math.abs(loadPct)}% hoger dan vorige week`)
-    else if (medLoad) r.push(`Trainingsbelasting +${Math.abs(loadPct)}% hoger dan vorige week`)
+    if (highLoad)     r.push(`Training load +${Math.abs(loadPct)}% higher than last week`)
+    else if (medLoad) r.push(`Training load +${Math.abs(loadPct)}% higher than last week`)
     if (recoveryPct < 70) {
       if (lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48) {
         r.push(`Last workout ${lastWorkoutHoursAgo}h ago`)
@@ -2219,7 +2219,7 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Aanbeveling voor vandaag</p>
+      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Today's Recommendation</p>
 
       <div className="flex items-center gap-4 mb-4">
         <span className="text-[42px] leading-none">{focus.emoji}</span>
@@ -2907,10 +2907,10 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   const hoursSince = lastRun ? Math.round((Date.now() - new Date(lastRun.start_date).getTime()) / 3600000) : null
 
   const details = readinessPct >= 85
-    ? { duur: '40–60 min', zone: 'Zone 3–4 (tempo)' }
+    ? { duration: '40–60 min', zone: 'Zone 3–4 (tempo)' }
     : readinessPct >= 70
-    ? { duur: '30–50 min', zone: 'Zone 2 (aerobic)' }
-    : { duur: 'Rest', zone: '–' }
+    ? { duration: '30–50 min', zone: 'Zone 2 (aerobic)' }
+    : { duration: 'Rest', zone: '–' }
 
   const tomorrowPct = readinessPct >= 85 ? 68 : readinessPct >= 70 ? 80 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Harder training possible' : tomorrowPct >= 70 ? 'Easy run' : 'Rest day'
@@ -2919,18 +2919,18 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Last run ${hoursSince}h ago`)
   if (readinessPct >= 85) reasons.push('Well recovered — high intensity possible')
   else if (readinessPct >= 70) reasons.push('Well recovered — easy pace recommended')
-  else reasons.push('Herstel heeft prioriteit')
-  if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs vorige week — niet verder ophogen`)
+  else reasons.push('Recovery is priority — keep it easy')
+  if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs last week — do not increase further`)
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Loopadvies</p>
+      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Running Advice</p>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
           <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
-          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.duur}</span>
+          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.duration}</span>
           <span className="text-[11px] text-white/40">{details.zone}</span>
         </div>
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -3008,7 +3008,7 @@ export function RunningSection({ activities, hevy = [] }: { activities: Activity
                 <span className="text-[28px] font-bold leading-none" style={{ color: trend.volPct > 15 ? '#fb923c' : trend.volPct < -10 ? '#60a5fa' : '#4ade80' }}>
                   {trend.volPct > 0 ? '+' : ''}{trend.volPct}%
                 </span>
-                <span className="text-[12px] text-white/40">vs vorige week</span>
+                <span className="text-[12px] text-white/40">vs last week</span>
               </div>
             )}
           </div>
@@ -3076,10 +3076,10 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   const hoursSince = lastRide ? Math.round((Date.now() - new Date(lastRide.start_date).getTime()) / 3600000) : null
 
   const details = readinessPct >= 85
-    ? { duur: '60–90 min', intensiteit: 'High', zone: 'Zone 3–4' }
+    ? { duration: '60–90 min', intensity: 'High', zone: 'Zone 3–4' }
     : readinessPct >= 70
-    ? { duur: '45–75 min', intensiteit: 'Moderate', zone: 'Zone 2' }
-    : { duur: '20–40 min', intensiteit: 'Recovery', zone: 'Zone 1' }
+    ? { duration: '45–75 min', intensity: 'Moderate', zone: 'Zone 2' }
+    : { duration: '20–40 min', intensity: 'Recovery', zone: 'Zone 1' }
 
   const tomorrowPct = readinessPct >= 85 ? 72 : readinessPct >= 70 ? 82 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Threshold training possible' : tomorrowPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
@@ -3099,8 +3099,8 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
           <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
-          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.intensiteit}</span>
-          <span className="text-[11px] text-white/40">{details.zone} · {details.duur}</span>
+          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.intensity}</span>
+          <span className="text-[11px] text-white/40">{details.zone} · {details.duration}</span>
         </div>
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Tomorrow</span>
