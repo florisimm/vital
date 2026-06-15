@@ -116,7 +116,40 @@ function buildPrompt(
   const totalProtein  = logs.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
   const totalKcal     = logs.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0)
 
-  const recentActivities = activities.slice(0, 10).map(a =>
+  // Compact HRV line: "86.7 ms / baseline 108.4 ms (-20%)"
+  const hrvToday = todayHealth?.hrv_rmssd
+  const hrvDev   = hrvBase.deviationPct
+  const hrvLine  = hrvToday != null
+    ? `${hrvToday} ms${hrvBase.baseline != null ? ` / baseline ${hrvBase.baseline} ms` : ''}${hrvDev != null ? ` (${hrvDev > 0 ? '+' : ''}${hrvDev}%)` : ''}`
+    : '–'
+
+  // Compact RHR line: "58 bpm / baseline 54 bpm (+7%)"
+  const rhrToday = todayHealth?.hartslag_rust
+  const rhrDev   = rhrToday != null && baselines.rhr != null
+    ? Math.round((rhrToday - baselines.rhr) / baselines.rhr * 100)
+    : null
+  const rhrLine  = rhrToday != null
+    ? `${rhrToday} bpm${baselines.rhr != null ? ` / baseline ${baselines.rhr} bpm` : ''}${rhrDev != null ? ` (${rhrDev > 0 ? '+' : ''}${rhrDev}%)` : ''}`
+    : '–'
+
+  // Training load summary: "2 strength, 1 run — 3h12m, ACWR 1.25 (optimal), ramp +8%"
+  const t7       = new Date(Date.now() - 7 * 86400000).toISOString()
+  const acts7    = activities.filter(a => a.start_date >= t7)
+  const hevy7    = hevy.filter(h => h.start_time >= t7)
+  const sportMap: Record<string, number> = {}
+  for (const a of acts7) { const k = (a.sport_type ?? 'other').toLowerCase(); sportMap[k] = (sportMap[k] ?? 0) + 1 }
+  if (hevy7.length) sportMap['strength'] = (sportMap['strength'] ?? 0) + hevy7.length
+  const totalMin7  = acts7.reduce((s, a) => s + (a.moving_time ?? 0) / 60, 0)
+                   + hevy7.reduce((s, h) => s + (h.duration ?? 0) / 60, 0)
+  const loadLine   = [
+    Object.entries(sportMap).length ? Object.entries(sportMap).map(([k, v]) => `${v} ${k}`).join(', ') : 'no sessions',
+    totalMin7 > 0 ? fmtMin(totalMin7) : null,
+    `ACWR ${load.acwr != null ? Math.round(load.acwr * 100) / 100 : '–'} (${load.status})${load.acwr != null && load.acwr > 1.3 ? ' ⚠' : ''}`,
+    rampRate != null ? `ramp ${rampRate > 0 ? '+' : ''}${rampRate}%` : null,
+    load.consecutiveDays > 0 ? `${load.consecutiveDays} consecutive days` : null,
+  ].filter(Boolean).join(', ')
+
+  const recentActivities = activities.slice(0, 5).map(a =>
     `  - ${a.start_date?.slice(0, 10)} ${a.sport_type ?? ''} ${a.name ?? ''} — ${Math.round((a.moving_time ?? 0) / 60)} min${a.distance ? `, ${(a.distance / 1000).toFixed(1)} km` : ''}`
   ).join('\n')
 
@@ -152,25 +185,20 @@ Primary goal: ${goal || '–'}
 ${priority ? `\nPriority order:\n${priority}` : ''}
 ` : ''}
 ### Recovery & readiness
-- Readiness score: ${readiness.score ?? '–'} / 100 (${readiness.label})
-- HRV today: ${todayHealth?.hrv_rmssd != null ? `${todayHealth.hrv_rmssd} ms` : '–'}
-- HRV 30-day baseline: ${hrvBase.baseline != null ? `${hrvBase.baseline} ms` : '–'}${hrvBase.deviationPct != null ? ` (today ${hrvBase.deviationPct > 0 ? '+' : ''}${hrvBase.deviationPct}%)` : ''}
-- Resting HR today: ${todayHealth?.hartslag_rust != null ? `${todayHealth.hartslag_rust} bpm` : '–'}
-- Resting HR 30-day baseline: ${baselines.rhr != null ? `${baselines.rhr} bpm` : '–'}
-- Illness / strain flag: ${illness ? illness.reason : 'none'}
-${readiness.explanation ? `- Readiness note: ${readiness.explanation}` : ''}
+- Readiness: ${readiness.score ?? '–'}/100 (${readiness.label})
+- HRV: ${hrvLine}
+- RHR: ${rhrLine}
+- Illness/strain: ${illness ? illness.reason : 'none'}
+${readiness.explanation ? `- Note: ${readiness.explanation}` : ''}
 
 ### Sleep (last 7 nights)
-- 30-day avg sleep duration: ${baselines.sleep != null ? fmtMin(baselines.sleep) : '–'}
+- 30-day avg: ${baselines.sleep != null ? fmtMin(baselines.sleep) : '–'}
 ${sleepSummary || '  No data'}
 
-### Training load
-- ACWR (7d / 28d avg): ${load.acwr != null ? Math.round(load.acwr * 100) / 100 : '–'} (${load.status})${load.acwr != null && load.acwr > 1.3 ? ' ⚠ elevated injury risk' : ''}
-- Ramp rate (7d vs prev 7d): ${rampRate != null ? `${rampRate > 0 ? '+' : ''}${rampRate}%` : '–'}
-- Sessions last 7 days: ${load.sessionCount7d}
-- Consecutive training days: ${load.consecutiveDays}
+### Training load (last 7d)
+${loadLine}
 
-### Training (last 10 sessions)
+### Recent sessions (last 5)
 ${recentActivities || '  No activities'}
 
 ### Muscle recovery (strength)
