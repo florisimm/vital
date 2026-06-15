@@ -86,6 +86,10 @@ export default function HealthPage() {
     revalidateOnFocus: false, dedupingInterval: 300_000,
   })
   const [activeTab, setActiveTab] = useState('overview')
+  // Server and first client render must match. SWR hydrates from localStorage on the
+  // client, so isLoading state would differ from SSR. Gate tab content on mount.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 
@@ -150,15 +154,15 @@ export default function HealthPage() {
         ))}
       </div>
 
-      {/* Tab content */}
-      <div style={{ opacity: isLoading ? 0 : 1, transition: 'opacity 0.15s ease' }}>
-      {activeTab === 'sleep'    && <SleepSection />}
-      {activeTab === 'recovery' && <RecoverySection />}
-      {activeTab === 'heart'    && <HeartSection />}
-      {activeTab === 'weight'   && <WeightSection rows={rows} />}
-      {activeTab === 'activity' && <ActivitySection rows={rows} />}
+      {/* Tab content — only after mount so SSR and first client render match */}
+      <div style={{ opacity: mounted && !isLoading ? 1 : 0, transition: 'opacity 0.15s ease' }}>
+      {mounted && activeTab === 'sleep'    && <SleepSection />}
+      {mounted && activeTab === 'recovery' && <RecoverySection />}
+      {mounted && activeTab === 'heart'    && <HeartSection />}
+      {mounted && activeTab === 'weight'   && <WeightSection rows={rows} />}
+      {mounted && activeTab === 'activity' && <ActivitySection rows={rows} />}
 
-      {activeTab === 'overview' && <>
+      {mounted && activeTab === 'overview' && <>
 
         {/* Recovery Score hero */}
         <Card>
