@@ -7,6 +7,9 @@ import { PremiumScreen } from '@/components/PremiumScreen'
 import { CoachRecommendation } from '@/components/ui'
 import { computePhysiologyReadiness, computeIllnessFlag, type HealthRow } from '@/lib/readiness'
 import type { Activity, HevyWorkout } from '@/app/training/sections'
+import { healthFetcher } from '@/app/health/fetcher'
+import { trainingFetcher } from '@/app/training/fetcher'
+import { fetchFoodData } from '@/app/food/fetchers'
 
 type Rec = { title: string; text: string }
 
@@ -155,18 +158,20 @@ export default function CoachPage() {
   const [prompt, setPrompt]     = useState<string | null>(null)
   const [copied, setCopied]     = useState(false)
 
-  const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', null, { revalidateOnFocus: false, dedupingInterval: 60_000 })
-  const { data: training } = useSWR<{ activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[] }>('training', null, { revalidateOnFocus: false, dedupingInterval: 60_000 })
-  const { data: foodData } = useSWR<any>('food-log', null, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data: training } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data: foodData } = useSWR(`food-log-${today}`, () => fetchFoodData(today), { revalidateOnFocus: false, dedupingInterval: 60_000 })
 
   const activities     = training?.activities ?? []
   const calendarEvents = training?.calendarEvents ?? []
-  const recs           = buildRecs(healthRows, activities, calendarEvents, foodData)
+  const foodForRecs    = foodData ? { food_log: foodData.foodLog, targets: foodData.targets } : null
+  const recs           = buildRecs(healthRows, activities, calendarEvents, foodForRecs)
   const hasData        = healthRows.length > 0 || activities.length > 0
 
   function handleSend() {
     if (!message.trim()) return
-    const full = buildPrompt(message, healthRows, activities, calendarEvents, foodData)
+    const full = buildPrompt(message, healthRows, activities, calendarEvents, foodForRecs)
     setPrompt(full)
     setMessage('')
   }
