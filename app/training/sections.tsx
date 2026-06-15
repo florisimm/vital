@@ -2035,6 +2035,67 @@ function computeTodaysFocus(
     }
   }
 
+  // ── Workout done today (no calendar event) ─────────────────────────────────
+  if (todayEvtsDone.length === 0 && todayEvts.length === 0
+    && (todayHevy.length > 0 || todayDoneRun || todayDoneRide || todayDoneSwim)) {
+    const doneWasCardio = todayDoneRun || todayDoneRide || todayDoneSwim
+    const workoutName = todayHevy[0]?.title ?? todayActivities[0]?.name ?? 'Training'
+    const rs = riskScore()
+
+    const cardioStillToDo = cardioTargets.filter(c => c.target > 0 && c.done < c.target)
+    const canAddCardio = !doneWasCardio
+      && recoveryPct >= 60
+      && rs <= 3
+      && weightedACWRRisk() < 0.35
+      && !upcomingHard
+
+    if (canAddCardio) {
+      if (cardioStillToDo.length > 0) {
+        const top = cardioStillToDo[0]
+        const others = cardioStillToDo.slice(1).map(c => c.label.toLowerCase())
+        const orList = others.length > 0 ? ` (or ${others.join('/')})` : ''
+        return {
+          emoji: top.emoji,
+          label: `${workoutName} done — room for easy ${top.label.toLowerCase()}`,
+          action: 'Optional Zone 2',
+          actionColor: '#2dd4bf',
+          reasons: [
+            `${top.done}/${top.target} ${top.label.toLowerCase()} sessions this week — ${top.target - top.done} to go`,
+            `An easy ${top.label.toLowerCase()}${orList} fits — keep it Zone 2`,
+            tomorrowEvts[0] ? `${tomorrowEvts[0].title} planned tomorrow — keep it light` : 'Or simply rest — both work',
+          ],
+        }
+      }
+      if (recoveryPct >= 70) {
+        // No targets but good recovery — suggest optional easy cardio
+        return {
+          emoji: '🚴',
+          label: `${workoutName} done — room for easy cycling`,
+          action: 'Optional Zone 2',
+          actionColor: '#2dd4bf',
+          reasons: [
+            `Recovery ${recoveryPct}% — room for an easy aerobic session`,
+            '20–30 min Zone 2 ride or run fits well after strength',
+            'Or rest — both are good choices',
+          ],
+        }
+      }
+    }
+
+    return {
+      emoji: '✅',
+      label: `${workoutName} done`,
+      ...ACT.skip,
+      action: 'Rest & recover',
+      actionColor: '#4ade80',
+      reasons: [
+        doneWasCardio ? 'Cardio done — let your body absorb it' : 'Strength done — recovery is priority',
+        recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition` : `Recovery ${recoveryPct}% — looking good`,
+        upcomingHard ? `${upcomingHard.title} coming up — recover well` : 'Hydrate and get quality sleep tonight',
+      ],
+    }
+  }
+
   // ── Today has planned sessions ──────────────────────────────────────────────
   if (todayEvts.length > 0) {
     const ev        = todayEvts[0]
