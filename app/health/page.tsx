@@ -7,7 +7,7 @@ import { ChevronRight } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
-import { computePhysiologyReadiness } from '@/lib/readiness'
+import { computeRecoveryScore, computePhysiologyReadiness } from '@/lib/readiness'
 import {
   computeSleepScore,
   SleepSection,
@@ -124,10 +124,11 @@ export default function HealthPage() {
     : null
   const stepsDetail = avgSteps ? `avg ${avgSteps.toLocaleString('nl-NL')} / day` : '–'
 
-  const physiologyReadiness = computePhysiologyReadiness(rows)
-  const readinessPct = physiologyReadiness.score
-  const readinessColor = readinessPct !== null
-    ? (readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171')
+  const recoveryScore = computeRecoveryScore(rows)
+  const readiness = computePhysiologyReadiness(rows)
+  const recoveryScorepct = recoveryScore.score
+  const recoveryColor = recoveryScorepct !== null
+    ? (recoveryScorepct >= 85 ? '#4ade80' : recoveryScorepct >= 70 ? '#2dd4bf' : recoveryScorepct >= 50 ? '#fb923c' : '#f87171')
     : 'rgba(255,255,255,0.3)'
 
 
@@ -168,28 +169,28 @@ export default function HealthPage() {
         <Card>
           <div className="flex flex-col gap-3">
             <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Recovery Score</span>
-            {readinessPct !== null ? (<>
+            {recoveryScorepct !== null ? (<>
               <div className="flex items-end justify-between">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-[56px] font-bold text-white leading-none">{readinessPct}</span>
+                  <span className="text-[56px] font-bold text-white leading-none">{recoveryScorepct}</span>
                   <span className="text-[24px] font-semibold text-white/50">%</span>
                 </div>
                 <div className="flex items-center gap-1.5 pb-1">
-                  <div className="w-[8px] h-[8px] rounded-full" style={{ background: readinessColor }} />
-                  <span className="text-[17px] font-semibold" style={{ color: readinessColor }}>{physiologyReadiness.label}</span>
+                  <div className="w-[8px] h-[8px] rounded-full" style={{ background: recoveryColor }} />
+                  <span className="text-[17px] font-semibold" style={{ color: recoveryColor }}>{recoveryScore.label}</span>
                 </div>
               </div>
               <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <div className="h-full rounded-full" style={{ width: `${readinessPct}%`, background: readinessColor }} />
+                <div className="h-full rounded-full" style={{ width: `${recoveryScorepct}%`, background: recoveryColor }} />
               </div>
               <div className="flex items-center gap-2 pt-0.5">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: readinessColor }} />
-                <span className="text-[14px] font-semibold" style={{ color: readinessColor }}>
-                  {readinessPct >= 70 ? 'Ready for training' : readinessPct >= 45 ? 'Light training only' : 'Rest recommended'}
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: recoveryColor }} />
+                <span className="text-[14px] font-semibold" style={{ color: recoveryColor }}>
+                  {recoveryScorepct >= 85 ? 'Fully recovered' : recoveryScorepct >= 70 ? 'Good recovery' : recoveryScorepct >= 50 ? 'Moderate recovery' : 'Low recovery'}
                 </span>
               </div>
             </>) : (
-              <p className="text-[15px] text-white/40">Connect Fitbit to see readiness data.</p>
+              <p className="text-[15px] text-white/40">Connect Fitbit to see recovery data.</p>
             )}
           </div>
         </Card>

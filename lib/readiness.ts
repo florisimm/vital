@@ -46,9 +46,120 @@ export function computeSleepScore(r: HealthRow): number | null {
   return Math.round((parts.reduce((s, [v, w]) => s + v * w, 0) / totalWeight) * 100)
 }
 
-// Training readiness: Sleep 40% + HRV 40% + Training Load 20%
-// Accounts for recent training load (ACWR, ramp rate, session density).
-// RHR is removed from readiness but kept as separate illness/strain warning.
+// Recovery Score: physiological recovery based on sleep and HRV only
+// Indicates how recovered the body is (independent of training context).
+// Weighting: Sleep 50% + HRV 50%
+export function computeRecoveryScore(rows: HealthRow[]): {
+  score: number | null
+  label: string
+  color: string
+  components: {
+    sleep: { value: number | null; status: string }
+    hrv: { value: number | null; status: string; devPct: number | null }
+  }
+  explanation: ReadinessExplanation
+} {
+  const noData = {
+    score: null,
+    label: '–',
+    color: 'rgba(255,255,255,0.3)',
+    components: {
+      sleep: { value: null, status: 'no data' },
+      hrv: { value: null, status: 'no data', devPct: null },
+    },
+    explanation: { positive: [], negative: [], primary_driver: 'sleep' as const },
+  }
+
+  const todayStr = localDateStr()
+  const todayRow = rows.find(r => r.datum === todayStr) ?? null
+
+  // Sleep (0–1)
+  const sleepRows = rows.filter(r => r.slaap_minuten != null)
+  const sleepScore = todayRow?.slaap_minuten != null
+    ? computeSleepScore(todayRow)
+    : sleepRows.length >= 2
+      ? Math.round(sleepRows.slice(0, 7).reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / Math.min(sleepRows.length, 7))
+      : null
+  const sleepComponent = sleepScore != null ? sleepScore / 100 : null
+
+  // HRV (0–1)
+  const hrvRows = rows.filter(r => r.hrv_rmssd != null)
+  const todayHRV = todayRow?.hrv_rmssd ?? null
+  let hrvComponent: number | null = null
+  let hrvDevPct: number | null = null
+  if (todayHRV != null) {
+    const hist = hrvRows.slice(1, 31).map(r => r.hrv_rmssd as number)
+    if (hist.length >= 4) {
+      const baseline = hist.reduce((a, b) => a + b, 0) / hist.length
+      hrvDevPct = Math.round(((todayHRV - baseline) / baseline) * 100)
+      hrvComponent = Math.max(0, Math.min(1, 0.5 + (todayHRV - baseline) / baseline / 0.6))
+    } else {
+      hrvComponent = todayHRV / (todayHRV + 50)
+    }
+  }
+
+  // Weighted recovery: Sleep 50% + HRV 50%
+  const components: Array<[number | null, number, string]> = [
+    [sleepComponent, 50, 'sleep'],
+    [hrvComponent, 50, 'hrv'],
+  ]
+  const available = components.filter(([v]) => v != null) as Array<[number, number, string]>
+  if (available.length === 0) return noData
+
+  const totalWeight = available.reduce((s, [, w]) => s + w, 0)
+  const score = Math.round(available.reduce((s, [v, w]) => s + v * w, 0) / totalWeight * 100)
+
+  // Explanation
+  const positive: string[] = []
+  const negative: string[] = []
+
+  if (sleepComponent !== null) {
+    if (sleepComponent >= 0.85) positive.push('Excellent sleep')
+    else if (sleepComponent >= 0.75) positive.push('Good sleep')
+    else if (sleepComponent < 0.6) negative.push(`Poor sleep (${sleepScore}%)`)
+    else if (sleepComponent < 0.7) negative.push(`Below-average sleep (${sleepScore}%)`)
+  }
+
+  if (hrvComponent !== null) {
+    if (hrvDevPct !== null && hrvDevPct > 10) positive.push(`HRV elevated (+${hrvDevPct}%)`)
+    else if (hrvDevPct !== null && hrvDevPct > 5) positive.push('HRV stable')
+    else if (hrvDevPct !== null && hrvDevPct < -15) negative.push(`HRV suppressed (${hrvDevPct}%)`)
+    else if (hrvDevPct !== null && hrvDevPct < -5) negative.push(`HRV below baseline (${hrvDevPct}%)`)
+  }
+
+  const deficits = available.map(([v, w, name]) => ({
+    name: name as 'sleep' | 'hrv' | 'training_load',
+    deficit: w * (1 - (v ?? 0)),
+    v: v ?? 0,
+  }))
+  deficits.sort((a, b) => b.deficit - a.deficit)
+  const primary_driver = deficits[0]?.name ?? 'sleep'
+
+  const label = score >= 85 ? 'Excellent'
+    : score >= 70 ? 'Good'
+    : score >= 50 ? 'Moderate'
+    : 'Low'
+
+  const color = score >= 85 ? '#4ade80'
+    : score >= 70 ? '#2dd4bf'
+    : score >= 50 ? '#fb923c'
+    : '#f87171'
+
+  return {
+    score,
+    label,
+    color,
+    components: {
+      sleep: { value: sleepScore, status: sleepComponent ? (sleepComponent >= 0.75 ? 'good' : sleepComponent >= 0.6 ? 'ok' : 'poor') : 'no data' },
+      hrv: { value: Math.round(todayHRV ?? 0), status: hrvComponent ? (hrvDevPct !== null ? (hrvDevPct > 5 ? 'elevated' : hrvDevPct < -10 ? 'suppressed' : 'stable') : 'unknown') : 'no data', devPct: hrvDevPct },
+    },
+    explanation: { positive, negative, primary_driver },
+  }
+}
+
+// Training Readiness: Recovery Score + Training Load + Weekly Goals context
+// Indicates whether today is suitable for hard training.
+// Weighting: Sleep 40% + HRV 40% + Training Load 20%
 export function computePhysiologyReadiness(
   rows: HealthRow[],
   activities: Activity[] = [],
@@ -79,40 +190,21 @@ export function computePhysiologyReadiness(
   const todayStr = localDateStr()
   const todayRow = rows.find(r => r.datum === todayStr) ?? null
 
-  // Sleep (0–1) — use last night if available, otherwise 7-day average as fallback
-  const sleepRows = rows.filter(r => r.slaap_minuten != null)
-  const sleepScore = todayRow?.slaap_minuten != null
-    ? computeSleepScore(todayRow)
-    : sleepRows.length >= 2
-      ? Math.round(sleepRows.slice(0, 7).reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / Math.min(sleepRows.length, 7))
-      : null
+  // Get recovery first (Sleep + HRV)
+  const recovery = computeRecoveryScore(rows)
+  const sleepScore = recovery.components.sleep.value
   const sleepComponent = sleepScore != null ? sleepScore / 100 : null
+  const hrvComponent = recovery.components.hrv.value != null ? recovery.components.hrv.value / 100 : null
+  const hrvDevPct = recovery.components.hrv.devPct
 
-  // HRV (0–1) — baseline-relative when ≥4 historical readings, absolute fallback
-  const hrvRows = rows.filter(r => r.hrv_rmssd != null)
-  const todayHRV = todayRow?.hrv_rmssd ?? null
-  let hrvComponent: number | null = null
-  let hrvDevPct: number | null = null
-  if (todayHRV != null) {
-    const hist = hrvRows.slice(1, 31).map(r => r.hrv_rmssd as number)
-    if (hist.length >= 4) {
-      const baseline = hist.reduce((a, b) => a + b, 0) / hist.length
-      hrvDevPct = Math.round(((todayHRV - baseline) / baseline) * 100)
-      // ±30% deviation spans [0, 1]; at baseline = 0.5
-      hrvComponent = Math.max(0, Math.min(1, 0.5 + (todayHRV - baseline) / baseline / 0.6))
-    } else {
-      hrvComponent = todayHRV / (todayHRV + 50)
-    }
-  }
-
-  // Training load (0–1) — derived from ACWR, session density, and consecutive days
+  // Training load (0–1)
   let loadComponent: number | null = null
   let loadScore: number | null = null
   let loadStatus = 'no data'
 
   if (activities.length > 0 || hevy.length > 0) {
     const trainingLoad = computeTrainingLoadScore(activities, hevy)
-    loadComponent = trainingLoad.score / 100  // Convert 0–100 to 0–1
+    loadComponent = trainingLoad.score / 100
     loadScore = trainingLoad.score
     loadStatus = trainingLoad.status
   }
@@ -129,11 +221,10 @@ export function computePhysiologyReadiness(
   const totalWeight = available.reduce((s, [, w]) => s + w, 0)
   const score = Math.round(available.reduce((s, [v, w]) => s + v * w, 0) / totalWeight * 100)
 
-  // Explanation factors — positive, negative, and primary driver
+  // Explanation
   const positive: string[] = []
   const negative: string[] = []
 
-  // Sleep factors
   if (sleepComponent !== null) {
     if (sleepComponent >= 0.85) positive.push('Excellent sleep')
     else if (sleepComponent >= 0.75) positive.push('Good sleep')
@@ -141,7 +232,6 @@ export function computePhysiologyReadiness(
     else if (sleepComponent < 0.7) negative.push(`Below-average sleep (${sleepScore}%)`)
   }
 
-  // HRV factors
   if (hrvComponent !== null) {
     if (hrvDevPct !== null && hrvDevPct > 10) positive.push(`HRV elevated (+${hrvDevPct}%)`)
     else if (hrvDevPct !== null && hrvDevPct > 5) positive.push('HRV stable')
@@ -149,7 +239,6 @@ export function computePhysiologyReadiness(
     else if (hrvDevPct !== null && hrvDevPct < -5) negative.push(`HRV below baseline (${hrvDevPct}%)`)
   }
 
-  // Training load factors (will be populated by external caller)
   if (loadComponent !== null) {
     if (loadComponent >= 0.8) positive.push('Training load low — full recovery')
     else if (loadComponent >= 0.6) positive.push('Training load normal')
@@ -157,7 +246,6 @@ export function computePhysiologyReadiness(
     else negative.push('Training load very high')
   }
 
-  // Primary driver — which metric has the largest deficit
   const deficits = available.map(([v, w, name]) => ({
     name: name as 'sleep' | 'hrv' | 'training_load',
     deficit: w * (1 - (v ?? 0)),
@@ -181,8 +269,8 @@ export function computePhysiologyReadiness(
     label,
     color,
     components: {
-      sleep: { value: sleepScore, status: sleepComponent ? (sleepComponent >= 0.75 ? 'good' : sleepComponent >= 0.6 ? 'ok' : 'poor') : 'no data' },
-      hrv: { value: Math.round(todayHRV ?? 0), status: hrvComponent ? (hrvDevPct !== null ? (hrvDevPct > 5 ? 'elevated' : hrvDevPct < -10 ? 'suppressed' : 'stable') : 'unknown') : 'no data', devPct: hrvDevPct },
+      sleep: { value: sleepScore, status: recovery.components.sleep.status },
+      hrv: { value: recovery.components.hrv.value, status: recovery.components.hrv.status, devPct: hrvDevPct },
       training_load: { value: loadScore, status: loadStatus },
     },
     explanation: { positive, negative, primary_driver },
