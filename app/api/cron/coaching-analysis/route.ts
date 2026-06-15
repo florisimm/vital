@@ -51,7 +51,6 @@ export async function POST(request: NextRequest) {
       .from('coach_overrides')
       .select('user_id, sport_type')
       .gte('date', ninetyDaysAgo)
-      .distinct()
 
     if (fetchError) {
       console.error('Failed to fetch coach_overrides:', fetchError)
