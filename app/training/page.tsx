@@ -92,7 +92,7 @@ export default function TrainingPage() {
         {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} />}
-        {mounted && activeTab === 'strength'    && <StrengthSection hevy={hevy} calendarEvents={calendarEvents} />}
+        {mounted && activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
         {mounted && activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'performance' && <PerformanceSection />}
       </div>
