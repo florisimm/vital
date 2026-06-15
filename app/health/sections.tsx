@@ -28,7 +28,7 @@ export type GezondheidsRow = {
   slaap_einde_min: number | null
 }
 
-const SWR_OPTS = { revalidateOnFocus: false, dedupingInterval: 60_000 }
+const SWR_OPTS = { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -288,7 +288,7 @@ export function SleepSection() {
   const selectedRow = nights[idx]?.row ?? null
 
   const totalMin    = selectedRow?.slaap_minuten ?? null
-  const score       = selectedRow ? computeSleepScore(selectedRow) : null
+  const score       = selectedRow ? (selectedRow.slaap_score ?? computeSleepScore(selectedRow)) : null
   const deep        = selectedRow?.slaap_diep ?? null
   const light       = selectedRow?.slaap_licht ?? null
   const rem         = selectedRow?.slaap_rem ?? null
@@ -301,9 +301,9 @@ export function SleepSection() {
   const last30 = sleepRows.slice(0, 30)
   const last7  = sleepRows.slice(0, 7)
 
-  const avg30Score    = avg(last30.map(computeSleepScore))
+  const avg30Score    = avg(last30.map(r => r.slaap_score ?? computeSleepScore(r)))
   const avg30Min      = avg(last30.map(r => r.slaap_minuten))
-  const avg7Score     = avg(last7.map(computeSleepScore))
+  const avg7Score     = avg(last7.map(r => r.slaap_score ?? computeSleepScore(r)))
   const avg7Min       = avg(last7.map(r => r.slaap_minuten))
   const avg7Bedtime   = avgSleepTime(last7.map(r => r.slaap_start_min))
   const avg7WakeTime  = avgSleepTime(last7.map(r => r.slaap_einde_min))
@@ -348,7 +348,7 @@ export function SleepSection() {
   }
 
   // Trend arrays oldest→newest
-  const scoreValues    = [...last30].reverse().map(computeSleepScore)
+  const scoreValues    = [...last30].reverse().map(r => r.slaap_score ?? computeSleepScore(r))
   const durationValues = [...last30].reverse().map(r => r.slaap_minuten)
 
   // AI quality
@@ -387,7 +387,7 @@ export function SleepSection() {
   // Sleep → next-day HRV correlation pairs
   const correlationPairs: { sleep: number; hrv: number }[] = []
   for (const r of sleepRows.slice(0, 14)) {
-    const s = computeSleepScore(r)
+    const s = r.slaap_score ?? computeSleepScore(r)
     if (!s) continue
     const next = new Date(r.datum + 'T00:00:00')
     next.setDate(next.getDate() + 1)
@@ -404,7 +404,7 @@ export function SleepSection() {
       {/* Night selector — tap to view other nights */}
       <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
         {nights.map((night, i) => {
-          const s = night.row ? computeSleepScore(night.row) : null
+          const s = night.row ? (night.row.slaap_score ?? computeSleepScore(night.row)) : null
           const active = i === idx
           return (
             <button
@@ -589,7 +589,7 @@ export function RecoverySection() {
 
   const hrv        = latestWithHRV?.hrv_rmssd ?? null
   const restingHR  = latestWithHR?.hartslag_rust ?? null
-  const sleepScore = latestWithSleep ? computeSleepScore(latestWithSleep) : null
+  const sleepScore = latestWithSleep ? (latestWithSleep.slaap_score ?? computeSleepScore(latestWithSleep)) : null
   const sleepMin   = latestWithSleep?.slaap_minuten ?? null
 
   const readiness   = computePhysiologyReadiness(rows)

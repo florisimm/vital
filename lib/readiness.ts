@@ -58,10 +58,11 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
 
   // Sleep (0–1) — use last night if available, otherwise 7-day average as fallback
   const sleepRows = rows.filter(r => r.slaap_minuten != null)
+  const storedOrComputed = (r: HealthRow) => r.slaap_score ?? computeSleepScore(r)
   const sleepScore = todayRow?.slaap_minuten != null
-    ? computeSleepScore(todayRow)
+    ? storedOrComputed(todayRow)
     : sleepRows.length >= 2
-      ? Math.round(sleepRows.slice(0, 7).reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / Math.min(sleepRows.length, 7))
+      ? Math.round(sleepRows.slice(0, 7).reduce((s, r) => s + (storedOrComputed(r) ?? 0), 0) / Math.min(sleepRows.length, 7))
       : null
   const sleepComponent = sleepScore != null ? sleepScore / 100 : null
   const sleepIsFallback = todayRow?.slaap_minuten == null && sleepScore != null
