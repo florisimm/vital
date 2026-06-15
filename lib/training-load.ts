@@ -156,6 +156,23 @@ export function isAccessorySession(h: HevyWorkout): boolean {
 // Export keyword constants for exercises
 export { COMPOUND_KEYWORDS, ISOLATION_KEYWORDS, RECOVERY_TITLE_KEYWORDS, ACCESSORY_TITLE_KEYWORDS }
 
+// Ramp rate: % change in intensity-weighted load, last 7 days vs prior 7 days.
+// Accessory/recovery strength sessions are excluded (same rule as the Training tab).
+// Returns null when the prior week's load is too low to be meaningful.
+export function computeRampRate(activities: Activity[], hevy: HevyWorkout[]): number | null {
+  const now = Date.now()
+  const t7  = new Date(now - 7  * 86400000).toISOString()
+  const t14 = new Date(now - 14 * 86400000).toISOString()
+
+  const acute7 = activities.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= t7 && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
+  const prev7  = activities.filter(a => a.start_date >= t14 && a.start_date < t7).reduce((s, a) => s + effectiveLoad(a), 0)
+    + hevy.filter(h => h.start_time >= t14 && h.start_time < t7 && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
+
+  if (prev7 <= 5) return null
+  return Math.max(-100, Math.min(200, Math.round((acute7 - prev7) / prev7 * 100)))
+}
+
 // Training load score (0–100) for readiness calculation.
 // Uses ACWR, session density, and consecutive training days.
 // Score is inverse: high load = low score (more recovery needed).

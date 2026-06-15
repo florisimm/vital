@@ -9,6 +9,8 @@ import {
   computePhysiologyReadiness, computeIllnessFlag, computeHRVBaseline, type HealthRow,
 } from '@/lib/readiness'
 import type { Activity, HevyWorkout } from '@/app/training/sections'
+import { computeMuscleGroupAdvice } from '@/app/training/sections'
+import { computeTrainingLoadScore, computeRampRate } from '@/lib/training-load'
 import { healthFetcher } from '@/app/health/fetcher'
 import { trainingFetcher } from '@/app/training/fetcher'
 import { fetchFoodData } from '@/app/food/fetchers'
@@ -23,95 +25,23 @@ function fmtMin(min: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-function startOfWeek(d = new Date()): Date {
-  const day = new Date(d); day.setHours(0,0,0,0)
-  day.setDate(day.getDate() - ((day.getDay() + 6) % 7))
-  return day
-}
-
-// ─── Baselines ────────────────────────────────────────────────────────────────
-
-function computeBaselines(rows: HealthRow[]) {
-  const hist = rows.slice(1, 31)   // skip today, last 30 days
-  const hrvVals = hist.filter(r => r.hrv_rmssd != null).map(r => r.hrv_rmssd as number)
-  const rhrVals = hist.filter(r => r.hartslag_rust != null).map(r => r.hartslag_rust as number)
-  const sleepVals = hist.filter(r => r.slaap_minuten != null).map(r => r.slaap_minuten as number)
+// RHR + sleep 30-day means (HRV baseline comes from computeHRVBaseline)
+function computeSimpleBaselines(rows: HealthRow[]) {
+  const hist = rows.slice(1, 31)
   const mean = (a: number[]) => a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length * 10) / 10 : null
   return {
-    hrv:   mean(hrvVals),
-    rhr:   mean(rhrVals),
-    sleep: mean(sleepVals),
+    rhr:   mean(hist.filter(r => r.hartslag_rust != null).map(r => r.hartslag_rust as number)),
+    sleep: mean(hist.filter(r => r.slaap_minuten != null).map(r => r.slaap_minuten as number)),
   }
-}
-
-// ─── Training load ────────────────────────────────────────────────────────────
-
-function computeTrainingLoad(activities: Activity[]) {
-  const now  = Date.now()
-  const d7   = new Date(now - 7  * 86400000).toISOString()
-  const d14  = new Date(now - 14 * 86400000).toISOString()
-  const d28  = new Date(now - 28 * 86400000).toISOString()
-
-  const minOf = (a: Activity) => (a.moving_time ?? 0) / 60
-
-  // All windows are rolling so they're directly comparable
-  const acute7Min    = activities.filter(a => a.start_date >= d7).reduce((s, a) => s + minOf(a), 0)
-  const prev7Min     = activities.filter(a => a.start_date >= d14 && a.start_date < d7).reduce((s, a) => s + minOf(a), 0)
-  const chronic28Min = activities.filter(a => a.start_date >= d28).reduce((s, a) => s + minOf(a), 0)
-  const chronic28Avg = chronic28Min / 4  // avg weekly load over last 4 weeks
-
-  const acwr     = chronic28Avg > 10 ? Math.round((acute7Min / chronic28Avg) * 100) / 100 : null
-  const rampRate = prev7Min > 10 ? Math.round(((acute7Min - prev7Min) / prev7Min) * 100) : null
-
-  // Consecutive training days (rolling back from today; skip today if no session yet)
-  let consecutiveDays = 0
-  const hasActivityToday = activities.some(a => a.start_date.slice(0, 10) === new Date(now).toISOString().slice(0, 10))
-  const startOffset = hasActivityToday ? 0 : 1
-  for (let i = startOffset; i < 21; i++) {
-    const d = new Date(now - i * 86400000).toISOString().slice(0, 10)
-    if (activities.some(a => a.start_date.slice(0, 10) === d)) consecutiveDays++
-    else break
-  }
-
-  return { acute7Min, prev7Min, chronic28Avg, acwr, rampRate, consecutiveDays }
-}
-
-// ─── Muscle recovery ──────────────────────────────────────────────────────────
-
-type MuscleGroup = 'Push (chest/shoulders/triceps)' | 'Pull (back/biceps)' | 'Legs' | 'Core'
-
-const MUSCLE_MAP: Array<{ group: MuscleGroup; keywords: string[]; recoveryH: number }> = [
-  { group: 'Push (chest/shoulders/triceps)', keywords: ['push', 'chest', 'bench', 'shoulder', 'tricep'], recoveryH: 48 },
-  { group: 'Pull (back/biceps)',             keywords: ['pull', 'back', 'row', 'chin', 'lat', 'bicep'],  recoveryH: 48 },
-  { group: 'Legs',                           keywords: ['leg', 'squat', 'deadlift', 'lunge', 'lower'],   recoveryH: 72 },
-  { group: 'Core',                           keywords: ['abs', 'core', 'plank'],                         recoveryH: 24 },
-]
-
-function computeMuscleRecovery(activities: Activity[], hevy: HevyWorkout[]): Array<{ group: MuscleGroup; pct: number; lastSession: string | null }> {
-  const now = Date.now()
-  const allSessions: Array<{ date: string; title: string }> = [
-    ...activities.filter(a => a.sport_type?.toLowerCase().includes('weight') || a.sport_type?.toLowerCase().includes('strength')).map(a => ({ date: a.start_date, title: a.name ?? '' })),
-    ...hevy.map(w => ({ date: w.start_time ?? '', title: w.title ?? '' })),
-  ].sort((a, b) => b.date.localeCompare(a.date))
-
-  return MUSCLE_MAP.map(({ group, keywords, recoveryH }) => {
-    const last = allSessions.find(s => keywords.some(kw => s.title.toLowerCase().includes(kw)))
-    if (!last) return { group, pct: 100, lastSession: null }
-    const hoursElapsed = (now - new Date(last.date).getTime()) / 3600000
-    const pct = Math.min(100, Math.round((hoursElapsed / recoveryH) * 100))
-    return { group, pct, lastSession: last.date.slice(0, 10) }
-  })
 }
 
 // ─── buildRecs (unchanged logic) ─────────────────────────────────────────────
 
 function buildRecs(
-  healthRows: HealthRow[], activities: Activity[], calendarEvents: any[], foodData: any,
+  healthRows: HealthRow[], activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[], foodData: any,
 ): Rec[] {
   const recs: Rec[] = []
   const now = Date.now()
-  const d7  = new Date(now - 7  * 86400000).toISOString()
-  const d28 = new Date(now - 28 * 86400000).toISOString()
   const todayStr    = new Date(now).toISOString().slice(0, 10)
   const tomorrowStr = new Date(now + 86400000).toISOString().slice(0, 10)
 
@@ -130,14 +60,11 @@ function buildRecs(
     else recs.push({ title: 'Rest recommended', text: `Readiness ${readiness.score} (${readiness.label}). Multiple markers low. Quality sleep returns more than any workout today.` })
   }
 
-  const minOf = (a: Activity) => (a.moving_time ?? 0) / 60
-  const acute7   = activities.filter(a => a.start_date >= d7).reduce((s, a) => s + minOf(a), 0)
-  const chronic28 = activities.filter(a => a.start_date >= d28).reduce((s, a) => s + minOf(a), 0)
-  const acwr = chronic28 / 4 > 10 ? Math.round((acute7 / (chronic28 / 4)) * 100) / 100 : null
-
+  const { acwr } = computeTrainingLoadScore(activities, hevy)
   if (acwr !== null) {
-    if (acwr > 1.4) recs.push({ title: 'Reduce volume this week', text: `ACWR ${acwr} — 7-day load is ${Math.round(acwr * 100)}% of 28-day avg. Above 1.3 raises injury risk. Cut 20–30%.` })
-    else if (acwr < 0.7 && activities.length > 3) recs.push({ title: 'Volume below baseline', text: `ACWR ${acwr} — lighter than chronic average. Safe to push if readiness supports it.` })
+    const acwrR = Math.round(acwr * 100) / 100
+    if (acwr > 1.4) recs.push({ title: 'Reduce volume this week', text: `ACWR ${acwrR} — 7-day load is ${Math.round(acwr * 100)}% of 28-day avg. Above 1.3 raises injury risk. Cut 20–30%.` })
+    else if (acwr < 0.7 && activities.length > 3) recs.push({ title: 'Volume below baseline', text: `ACWR ${acwrR} — lighter than chronic average. Safe to push if readiness supports it.` })
   }
 
   const logs = Array.isArray(foodData) ? foodData : (foodData?.food_log ?? foodData?.foodLog ?? [])
@@ -175,9 +102,10 @@ function buildPrompt(
   const today     = new Date().toISOString().slice(0, 10)
   const readiness = computePhysiologyReadiness(healthRows)
   const illness   = computeIllnessFlag(healthRows)
-  const baselines = computeBaselines(healthRows)
-  const load      = computeTrainingLoad(activities)
-  const muscle    = computeMuscleRecovery(activities, hevy)
+  const baselines = computeSimpleBaselines(healthRows)
+  const load      = computeTrainingLoadScore(activities, hevy)   // intensity-weighted ACWR, volume, consecutive days
+  const rampRate  = computeRampRate(activities, hevy)
+  const muscle    = computeMuscleGroupAdvice(hevy)               // per-group recovery % + train/possible/rest
   const hrvBase   = computeHRVBaseline(healthRows)
 
   const todayHealth   = healthRows.find(r => r.datum === today)
@@ -203,7 +131,7 @@ function buildPrompt(
   ).join('\n')
 
   const muscleSummary = muscle.map(m =>
-    `  - ${m.group}: ${m.pct}% recovered${m.lastSession ? ` (last trained ${m.lastSession})` : ' (no recent data)'}`
+    `  - ${m.label}: ${m.recovery}% recovered → ${m.recommendation}`
   ).join('\n')
 
   const GOAL_PRIORITY: Record<string, string> = {
@@ -226,7 +154,7 @@ ${priority ? `\nPriority order:\n${priority}` : ''}
 ### Recovery & readiness
 - Readiness score: ${readiness.score ?? '–'} / 100 (${readiness.label})
 - HRV today: ${todayHealth?.hrv_rmssd != null ? `${todayHealth.hrv_rmssd} ms` : '–'}
-- HRV 30-day baseline: ${baselines.hrv != null ? `${baselines.hrv} ms` : '–'}${hrvBase.deviationPct != null ? ` (today ${hrvBase.deviationPct > 0 ? '+' : ''}${hrvBase.deviationPct}%)` : ''}
+- HRV 30-day baseline: ${hrvBase.baseline != null ? `${hrvBase.baseline} ms` : '–'}${hrvBase.deviationPct != null ? ` (today ${hrvBase.deviationPct > 0 ? '+' : ''}${hrvBase.deviationPct}%)` : ''}
 - Resting HR today: ${todayHealth?.hartslag_rust != null ? `${todayHealth.hartslag_rust} bpm` : '–'}
 - Resting HR 30-day baseline: ${baselines.rhr != null ? `${baselines.rhr} bpm` : '–'}
 - Illness / strain flag: ${illness ? illness.reason : 'none'}
@@ -237,16 +165,15 @@ ${readiness.explanation ? `- Readiness note: ${readiness.explanation}` : ''}
 ${sleepSummary || '  No data'}
 
 ### Training load
-- Last 7 days: ${fmtMin(load.acute7Min)} (prev 7 days: ${fmtMin(load.prev7Min)})
-- 28-day avg weekly volume: ${fmtMin(load.chronic28Avg)}
-- ACWR (7-day / 28-day avg): ${load.acwr != null ? load.acwr : '–'}${load.acwr != null && load.acwr > 1.3 ? ' ⚠ elevated injury risk' : ''}
-- Ramp rate (this vs prev 7 days): ${load.rampRate != null ? `${load.rampRate > 0 ? '+' : ''}${load.rampRate}%` : '–'}
+- ACWR (7d / 28d avg): ${load.acwr != null ? Math.round(load.acwr * 100) / 100 : '–'} (${load.status})${load.acwr != null && load.acwr > 1.3 ? ' ⚠ elevated injury risk' : ''}
+- Ramp rate (7d vs prev 7d): ${rampRate != null ? `${rampRate > 0 ? '+' : ''}${rampRate}%` : '–'}
+- Sessions last 7 days: ${load.sessionCount7d}
 - Consecutive training days: ${load.consecutiveDays}
 
 ### Training (last 10 sessions)
 ${recentActivities || '  No activities'}
 
-### Muscle recovery (time-based estimate)
+### Muscle recovery (strength)
 ${muscleSummary}
 
 ### Nutrition today
@@ -280,7 +207,7 @@ export default function CoachPage() {
   const calendarEvents = training?.calendarEvents ?? []
   const goal           = training?.trainingGoal?.replace(/_/g, ' ') ?? ''
   const foodForRecs    = foodData ? { food_log: foodData.foodLog, targets: foodData.targets } : null
-  const recs           = buildRecs(healthRows, activities, calendarEvents, foodForRecs)
+  const recs           = buildRecs(healthRows, activities, hevy, calendarEvents, foodForRecs)
   const hasData        = healthRows.length > 0 || activities.length > 0
 
   function handleSend() {
