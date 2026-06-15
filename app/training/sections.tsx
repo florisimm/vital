@@ -6,21 +6,16 @@ import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, Chevron
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
+import {
+  computeTrainingLoadScore,
+  isRun, isRide, isSwim, isWeightTraining, isCycling,
+  effectiveLoad, hevyLoad, sessionLoadBreakdown, isAccessorySession, sessionLoadFactor, setIntensityFactor,
+  COMPOUND_KEYWORDS, ISOLATION_KEYWORDS, RECOVERY_TITLE_KEYWORDS, ACCESSORY_TITLE_KEYWORDS,
+  type Activity, type HevyWorkout,
+} from '@/lib/training-load'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type Activity = {
-  id: number; name: string; sport_type: string; start_date: string
-  distance: number | null; moving_time: number | null; elapsed_time: number | null
-  total_elevation_gain: number | null; average_speed: number | null
-  average_heartrate: number | null; average_cadence: number | null; kilojoules: number | null
-}
-
-export type HevyWorkout = {
-  id: string; title: string; start_time: string; end_time: string | null
-  duration: number | null; volume_kg: number | null; sets: number | null
-  exercises: Array<{ title: string; sets: Array<{ weight_kg: number; reps: number }> }> | null
-}
+// ─── Re-export types for convenience ────────────────────────────────────────────
+export type { Activity, HevyWorkout } from '@/lib/training-load'
 
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
@@ -75,147 +70,7 @@ function epley1RM(weight_kg: number, reps: number): number {
   return reps === 1 ? weight_kg : weight_kg * (1 + reps / 30)
 }
 
-function isRide(a: Activity) {
-  const t = a.sport_type?.toLowerCase() ?? ''
-  return t.includes('ride') || t.includes('cycl')
-}
-
-function isRun(a: Activity) {
-  return a.sport_type?.toLowerCase().includes('run')
-}
-
-function isSwim(a: Activity) {
-  return a.sport_type?.toLowerCase().includes('swim')
-}
-
-function isWeightTraining(a: Activity) {
-  return a.sport_type?.toLowerCase() === 'weighttraining'
-}
-
-function isCycling(a: Activity) {
-  return a.sport_type?.toLowerCase().includes('ride')
-}
-
-// Consistent load unit (minutes) with zone-2 dampening.
-// Avoids mixing real kilojoules (available on recent Strava syncs) with the
-// moving_time fallback on older records, which would inflate acute:chronic ratios.
-function cardioZoneMultiplier(hr: number): number {
-  if (hr < 130) return 0.25  // Zone 1: recovery
-  if (hr < 150) return 0.50  // Zone 2: aerobic base
-  if (hr < 165) return 0.75  // Zone 3: aerobic threshold
-  if (hr < 175) return 1.00  // Zone 4: lactate threshold
-  return 1.25                 // Zone 5: VO2max / race effort
-}
-
-function effectiveLoad(a: Activity): number {
-  const mins = (a.moving_time ?? 0) / 60
-  if (mins === 0) return 0
-  if (a.average_heartrate) return mins * cardioZoneMultiplier(a.average_heartrate)
-  if (isRun(a) && a.average_speed) {
-    const mps = a.average_speed
-    return mins * (mps > 4.0 ? 1.00 : mps > 3.2 ? 0.75 : 0.50)
-  }
-  if (isRide(a) && a.average_speed) {
-    const kmh = a.average_speed * 3.6
-    return mins * (kmh > 30 ? 1.00 : kmh > 22 ? 0.75 : 0.50)
-  }
-  return mins * 0.75
-}
-
-const COMPOUND_KEYWORDS = [
-  'squat', 'deadlift', 'rdl', 'bench', 'incline', 'overhead press', 'ohp',
-  'shoulder press', 'military press', 'row', 'pull-up', 'pullup', 'pull up',
-  'chin-up', 'chinup', 'chin up', 'lunge', 'hip thrust',
-]
-const ISOLATION_KEYWORDS = [
-  'curl', 'tricep', 'lateral raise', 'rear delt', 'face pull',
-  'calf', 'leg extension', 'leg curl', 'fly', 'flye', 'shrug', 'kickback',
-]
-const RECOVERY_TITLE_KEYWORDS = [
-  'stretch', 'mobility', 'foam', 'recover', 'herstel',
-  'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
-]
-const ACCESSORY_TITLE_KEYWORDS = ['abs', 'core', 'yoga']
-
-// Per-set intensity factor using Epley %1RM estimate combined with rep-range modifier.
-// Normalised so that 8 reps at typical working weight ≈ 1.0.
-function setIntensityFactor(sets: Array<{ weight_kg: number; reps: number }>): number {
-  const valid = (sets ?? []).filter(s => s.reps > 0)
-  if (!valid.length) return 1.0
-  const avg = valid.reduce((sum, s) => {
-    if (s.weight_kg <= 0) return sum + (s.reps <= 10 ? 0.85 : 0.65)  // bodyweight
-    const pct1rm = s.reps <= 1 ? 1.0 : 30 / (30 + s.reps)
-    const repMod = s.reps <= 3 ? 1.35 : s.reps <= 6 ? 1.15 : s.reps <= 12 ? 1.0 : 0.7
-    return sum + Math.min(1.5, pct1rm * repMod)
-  }, 0) / valid.length
-  return Math.max(0.4, avg)
-}
-
-// Returns a 0.10–1.0 load factor for a Hevy workout based on exercise composition.
-// With exercise data: compound × 1.0 + isolation × 0.6 + other × 0.25 (weighted by set counts).
-// Without exercise data: title-based — recovery → 0.10, accessory → 0.25, primary → 1.0.
-function sessionLoadFactor(h: HevyWorkout): number {
-  if (h.exercises && h.exercises.length > 0) {
-    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
-    if (totalSets > 0) {
-      let compEff = 0, isoEff = 0, otherEff = 0
-      for (const ex of h.exercises) {
-        const t = (ex.title ?? '').toLowerCase()
-        const n = ex.sets?.length ?? 0
-        const intensity = setIntensityFactor(ex.sets ?? [])
-        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
-        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
-        else                                                    otherEff += n * 0.25 * intensity
-      }
-      return (compEff + isoEff + otherEff) / totalSets
-    }
-  }
-  const t = (h.title ?? '').toLowerCase()
-  if (RECOVERY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.10
-  if (ACCESSORY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.25
-  return 1.0
-}
-
-// Splits hevyLoad(h) into compound / isolation / accessory components (sum = hevyLoad(h)).
-function sessionLoadBreakdown(h: HevyWorkout): { compound: number; isolation: number; accessory: number } {
-  const mins = (h.duration ?? 3600) / 60
-  if (h.exercises && h.exercises.length > 0) {
-    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
-    if (totalSets > 0) {
-      let compEff = 0, isoEff = 0, otherEff = 0
-      for (const ex of h.exercises) {
-        const t = (ex.title ?? '').toLowerCase()
-        const n = ex.sets?.length ?? 0
-        const intensity = setIntensityFactor(ex.sets ?? [])
-        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
-        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
-        else                                                    otherEff += n * 0.25 * intensity
-      }
-      const totalEff = compEff + isoEff + otherEff
-      if (totalEff === 0) return { compound: 0, isolation: 0, accessory: mins * 0.25 }
-      const load = hevyLoad(h)
-      return {
-        compound:  (compEff / totalEff) * load,
-        isolation: (isoEff / totalEff) * load,
-        accessory: (otherEff / totalEff) * load,
-      }
-    }
-  }
-  const load = hevyLoad(h)
-  return sessionLoadFactor(h) > 0.30
-    ? { compound: load, isolation: 0, accessory: 0 }
-    : { compound: 0,    isolation: 0, accessory: load }
-}
-
-// A session is treated as accessory/recovery (excluded from primary-load detection and ramp rate)
-// when its load factor is ≤ 0.30 — i.e. recovery (0.10) or accessory (0.25) sessions.
-function isAccessorySession(h: HevyWorkout): boolean {
-  return sessionLoadFactor(h) <= 0.30
-}
-
-function hevyLoad(h: HevyWorkout): number {
-  return (h.duration ?? 3600) / 60 * sessionLoadFactor(h)
-}
+// Load helpers are now in lib/training-load.ts (exported and imported above)
 
 function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
   const t7  = new Date(now - 7  * 86400000).toISOString()
@@ -371,97 +226,7 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   }
 }
 
-// Training load score (0–100) for readiness calculation.
-// Uses ACWR, load ratio, session density, and consecutive training days.
-// Score is inverse: high load = low score (more recovery needed)
-export function computeTrainingLoadScore(activities: Activity[], hevy: HevyWorkout[]): {
-  score: number  // 0–100, where 100 = fully rested, 0 = extreme overload
-  volume7d: number  // total load units (kJ equivalent)
-  sessionCount7d: number
-  consecutiveDays: number
-  acwr: number | null
-  status: 'rested' | 'normal' | 'elevated' | 'high' | 'very_high'
-} {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-
-  // Load calculation: kJ for cardio, kg×sets for strength
-  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-
-  // ACWR: Acute (7d) / Chronic (28d average)
-  const kj28 = activities.filter(a => a.start_date >= thirtyDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-    + hevy.filter(h => h.start_time >= thirtyDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const acwr = kj28 > 0 ? kj7 / (kj28 / 4) : null
-
-  // Session count and consecutive days
-  const sessions7d = [
-    ...new Set([
-      ...activities.filter(a => a.start_date >= sevenDaysAgo).map(a => a.start_date.slice(0, 10)),
-      ...hevy.filter(h => h.start_time >= sevenDaysAgo).map(h => h.start_time.slice(0, 10)),
-    ]),
-  ].length
-
-  // Consecutive training days (streak)
-  const allDates = [
-    ...activities.map(a => new Date(a.start_date).getTime()),
-    ...hevy.map(h => new Date(h.start_time).getTime()),
-  ].sort((a, b) => b - a)
-  const dayMs = 86400000
-  let consecutiveDays = 0
-  if (allDates.length > 0) {
-    let lastDate = allDates[0]
-    for (let i = 1; i < allDates.length; i++) {
-      if (lastDate - allDates[i] <= dayMs * 1.1) {  // Allow 1.1 day gap
-        consecutiveDays++
-        lastDate = allDates[i]
-      } else {
-        break
-      }
-    }
-  }
-
-  // Score calculation: inverse (high load → low readiness)
-  let score = 100
-
-  // ACWR penalty: 0.8–1.3 is ideal, <0.8 is deload, >1.5 is overload
-  if (acwr !== null) {
-    if (acwr > 1.5) score -= 60  // Very high load
-    else if (acwr > 1.3) score -= 40  // High load
-    else if (acwr > 1.1) score -= 20  // Elevated
-    else if (acwr < 0.8) score -= 10  // Deload (mild penalty, recovery is good)
-  }
-
-  // Session density penalty: >6 sessions/week with high intensity is fatiguing
-  if (sessions7d > 6) score -= Math.min(20, (sessions7d - 6) * 5)
-  else if (sessions7d > 4) score -= 5
-
-  // Consecutive days penalty: >5 consecutive days compounds fatigue
-  if (consecutiveDays > 6) score -= Math.min(30, (consecutiveDays - 6) * 8)
-  else if (consecutiveDays > 4) score -= 10
-
-  // Ensure score is in [0, 100]
-  score = Math.max(0, Math.min(100, score))
-
-  const status: 'rested' | 'normal' | 'elevated' | 'high' | 'very_high' =
-    score >= 80 ? 'rested'
-    : score >= 65 ? 'normal'
-    : score >= 50 ? 'elevated'
-    : score >= 35 ? 'high'
-    : 'very_high'
-
-  return {
-    score,
-    volume7d: kj7,
-    sessionCount7d: sessions7d,
-    consecutiveDays,
-    acwr,
-    status,
-  }
-}
+// computeTrainingLoadScore is now imported from lib/training-load.ts
 
 function computeRunningReadiness(activities: Activity[]) {
   const runs = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))

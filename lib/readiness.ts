@@ -2,6 +2,7 @@
 // Health and Training tabs so both show the same numbers.
 
 import { localDateStr } from './timeFormat'
+import { computeTrainingLoadScore, type Activity, type HevyWorkout } from './training-load'
 
 export type HealthRow = {
   datum: string
@@ -17,32 +18,6 @@ export type HealthRow = {
   wakker_count: number | null
   spo2: number | null
   ademhalingsfrequentie: number | null
-}
-
-export type Activity = {
-  id: string
-  name: string
-  sport_type: string | null
-  start_date: string
-  distance: number | null
-  moving_time: number | null
-  elapsed_time: number | null
-  total_elevation_gain: number | null
-  average_speed: number | null
-  average_heartrate: number | null
-  average_cadence: number | null
-  kilojoules: number | null
-}
-
-export type HevyWorkout = {
-  id: string
-  title: string
-  start_time: string
-  end_time: string | null
-  duration: number | null
-  volume_kg: number | null
-  sets: number | null
-  exercises: any[] | null
 }
 
 export type ReadinessExplanation = {
@@ -130,19 +105,16 @@ export function computePhysiologyReadiness(
     }
   }
 
-  // Training load (0–1) — derived from recent session volume, frequency, and intensity
-  // Will be computed by sections.tsx and passed as context
+  // Training load (0–1) — derived from ACWR, session density, and consecutive days
   let loadComponent: number | null = null
   let loadScore: number | null = null
-  let loadStatus = 'calculating...'
+  let loadStatus = 'no data'
 
-  // For now, loadComponent will be set externally by the app that calls this.
-  // This allows us to use ACWR, ramp rate, and other metrics from sections.tsx
-  // For initialization, we set it to 0.5 (neutral) if we have activity data
-  if ((activities.length > 0 || hevy.length > 0)) {
-    loadComponent = 0.5 // placeholder until computeTrainingLoadScore provides real value
-    loadScore = 50
-    loadStatus = 'moderate'
+  if (activities.length > 0 || hevy.length > 0) {
+    const trainingLoad = computeTrainingLoadScore(activities, hevy)
+    loadComponent = trainingLoad.score / 100  // Convert 0–100 to 0–1
+    loadScore = trainingLoad.score
+    loadStatus = trainingLoad.status
   }
 
   // Weighted readiness: Sleep 40% + HRV 40% + Training Load 20%
