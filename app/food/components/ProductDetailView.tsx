@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { MEAL_ORDER, MEAL_ICONS, MEAL_LABELS_SHORT } from '@/app/food/meal-config'
 import { createClient } from '@/lib/supabase'
 import type { FoodLogEntry, Product } from '@/lib/types'
@@ -173,8 +173,29 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
   const [saving, setSaving] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [portionInput, setPortionInput] = useState<string | null>(null)
+  const [avgGrams, setAvgGrams] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const repeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchAvg() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('food_log')
+        .select('amount_g')
+        .eq('user_id', userId)
+        .eq('food_name', selected.name)
+        .not('amount_g', 'is', null)
+        .order('logged_at', { ascending: false })
+        .limit(30)
+      if (cancelled || !data || data.length < 2) return
+      const avg = Math.round(data.reduce((s: number, r: any) => s + Number(r.amount_g), 0) / data.length)
+      if (avg > 0) setAvgGrams(avg)
+    }
+    fetchAvg()
+    return () => { cancelled = true }
+  }, [selected.name, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = selectedServing ?? servings[0] ?? GRAM_SERVING
   const stepAmt = active.amount_g > 1 ? active.amount_g : 10
@@ -320,6 +341,18 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
                 <span className="text-[11px] text-white/30 shrink-0 ml-2">▼</span>
               </button>
             </div>
+
+            {/* Average portion chip */}
+            {avgGrams !== null && (
+              <button
+                onClick={() => { setSelectedServing(GRAM_SERVING); setGrams(String(avgGrams)); setPortionInput(null) }}
+                className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold active:opacity-70 transition-opacity"
+                style={{ background: 'rgba(45,212,191,0.10)', color: 'rgb(45,212,191)', border: '1px solid rgba(45,212,191,0.18)' }}
+              >
+                <span>⌀</span>
+                <span>Gemiddelde · {avgGrams}g</span>
+              </button>
+            )}
 
             {/* Meal selector */}
             <SelectorRow
