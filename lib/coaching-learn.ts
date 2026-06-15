@@ -3,7 +3,6 @@
 // and adjusts future recommendations accordingly.
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { cookies } from 'next/headers'
 
 export type SportType = 'running' | 'cycling' | 'strength' | 'swimming'
 export type FeedbackLevel = 'easier' | 'about_right' | 'hard' | 'very_hard'
@@ -53,7 +52,7 @@ export async function analyzeCoachingPatterns(
   userId: string,
   sportType?: SportType
 ): Promise<CoachingAdjustment | null> {
-  const supabase = createServerSupabaseClient(await cookies())
+  const supabase = await createServerSupabaseClient()
 
   const analysisStart = new Date(Date.now() - ANALYSIS_WINDOW_DAYS * 86400000)
     .toISOString()
@@ -159,7 +158,7 @@ export async function analyzeCoachingPatterns(
  * Returns 1.0 = no adjustment, 0.95 = 5% lower, 1.05 = 5% higher
  */
 export async function getCoachBiasMultiplier(userId: string, sportType: SportType): Promise<number> {
-  const supabase = createServerSupabaseClient(await cookies())
+  const supabase = await createServerSupabaseClient()
 
   const { data, error } = await supabase
     .from('coach_bias_adjustments')
@@ -186,7 +185,7 @@ export async function storeCoachingAdjustment(
   userId: string,
   adjustment: CoachingAdjustment
 ): Promise<void> {
-  const supabase = createServerSupabaseClient(await cookies())
+  const supabase = await createServerSupabaseClient()
 
   // Safety validation
   const safeBias = Math.max(-MAX_BIAS_ADJUSTMENT, Math.min(MAX_BIAS_ADJUSTMENT, adjustment.bias_adjustment))
@@ -231,7 +230,7 @@ export async function storeCoachingAdjustment(
  * Gets all adjustments for a user (across all sports they have data for)
  */
 export async function getUserCoachingAdjustments(userId: string): Promise<CoachingAdjustment[]> {
-  const supabase = createServerSupabaseClient(await cookies())
+  const supabase = await createServerSupabaseClient()
 
   const { data, error } = await supabase
     .from('coach_bias_adjustments')

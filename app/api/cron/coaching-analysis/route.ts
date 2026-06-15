@@ -15,7 +15,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { cookies } from 'next/headers'
 import {
   analyzeCoachingPatterns,
   storeCoachingAdjustment,
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
     // For now, we'll use individual user context via a loop
     // In production, you'd use service_role key to bypass RLS
 
-    const supabase = createServerSupabaseClient(await cookies())
+    const supabase = await createServerSupabaseClient()
 
     // Get all unique users with recent overrides (last 90 days)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000)
