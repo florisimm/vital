@@ -30,7 +30,7 @@ const ALL_TABS = [
 ]
 
 export default function TrainingPage() {
-  const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000 })
   const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const [activeTab, setActiveTab] = useState('overview')
   // Server and first client render must match. SWR hydrates from localStorage on the

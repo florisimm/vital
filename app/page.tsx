@@ -169,7 +169,7 @@ function buildCoach(rows: HealthRow[], data: any) {
 
 // ─── Weekly goals helper ──────────────────────────────────────────────────────
 
-function getWeeklyProgress(activities: any[], hevy: any[]) {
+function getWeeklyProgress(activities: any[], hevy: any[], trainingFrequencies?: Record<string, number>) {
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
   const weekStartIso = weekStart.toISOString().split('T')[0]
 
@@ -177,16 +177,20 @@ function getWeeklyProgress(activities: any[], hevy: any[]) {
   const weekHevy = hevy.filter(h => (h.start_time ?? '').slice(0, 10) >= weekStartIso)
 
   const running = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('run')).length
-  const cycling = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('cycl')).length
+  const cycling = weekActivities.filter(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') }).length
   const strength = weekHevy.length
 
-  // Default weekly targets (can be customized per user later)
-  const targets = { running: 3, cycling: 2, strength: 2 }
-  const isBehind = running < targets.running || cycling < targets.cycling || strength < targets.strength
-  const details = []
-  if (running < targets.running) details.push(`${targets.running - running} more run${targets.running - running !== 1 ? 's' : ''}`)
-  if (cycling < targets.cycling) details.push(`${targets.cycling - cycling} more ride${targets.cycling - cycling !== 1 ? 's' : ''}`)
-  if (strength < targets.strength) details.push(`${targets.strength - strength} more lift${targets.strength - strength !== 1 ? 's' : ''}`)
+  const freq = trainingFrequencies ?? {}
+  const targets = {
+    running:  freq.running  ?? 0,
+    cycling:  freq.cycling  ?? 0,
+    strength: freq.strength ?? 0,
+  }
+  const isBehind = (targets.running > 0 && running < targets.running) || (targets.cycling > 0 && cycling < targets.cycling) || (targets.strength > 0 && strength < targets.strength)
+  const details: string[] = []
+  if (targets.running > 0 && running < targets.running) details.push(`${targets.running - running} more run${targets.running - running !== 1 ? 's' : ''}`)
+  if (targets.cycling > 0 && cycling < targets.cycling) details.push(`${targets.cycling - cycling} more ride${targets.cycling - cycling !== 1 ? 's' : ''}`)
+  if (targets.strength > 0 && strength < targets.strength) details.push(`${targets.strength - strength} more lift${targets.strength - strength !== 1 ? 's' : ''}`)
 
   return { isBehind, details, running, cycling, strength }
 }
@@ -206,9 +210,10 @@ function buildRecommendation(rows: HealthRow[], data: any) {
   const acts           = data?.todayActivities ?? []
   const allActivities  = data?.allActivities ?? []
   const allHevy        = data?.allHevy ?? []
+  const trainingFreq   = (settings as any)?.training_frequencies ?? {}
 
-  // Check weekly goal progress
-  const weeklyProgress = getWeeklyProgress(allActivities, allHevy)
+  // Check weekly goal progress using user's own targets from profile
+  const weeklyProgress = getWeeklyProgress(allActivities, allHevy, trainingFreq)
 
   let icon = '🏃'
   let title = 'Zone 2 Run'
@@ -533,7 +538,7 @@ export default function TodayPage() {
   const { data } = useSWR('today', fetchTodayData, {
     revalidateOnFocus: true,
     revalidateOnMount: true,
-    dedupingInterval: 60_000,
+    dedupingInterval: 5_000,
   })
 
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)

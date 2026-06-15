@@ -83,7 +83,7 @@ function FitbitSyncHandler() {
 
 export default function HealthPage() {
   const { data: rows = [], isLoading } = useSWR('health-gezondheid', fetchHealth, {
-    revalidateOnFocus: false, dedupingInterval: 60_000,
+    revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000,
   })
   const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, {
     revalidateOnFocus: false, dedupingInterval: 300_000,

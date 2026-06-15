@@ -87,7 +87,7 @@ export function FoodClient() {
   const { data, mutate, error, isLoading } = useSWR(
     `food-log-${selectedDate}`,
     () => fetchFoodData(selectedDate),
-    { revalidateOnFocus: false, dedupingInterval: 10_000 }
+    { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000 }
   )
   const { data: products = [] } = useSWR('products', fetchProducts, {
     revalidateOnFocus: false,
