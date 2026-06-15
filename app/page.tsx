@@ -1,6 +1,7 @@
 'use client'
 
-import useSWR from 'swr'
+import { useEffect } from 'react'
+import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { computePhysiologyReadiness, computeHRVBaseline, computeSleepScore, type HealthRow } from '@/lib/readiness'
@@ -469,7 +470,15 @@ export default function TodayPage() {
   })
 
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
+  const { data: training } = useSWR('training', null)
   const rows = gezondheid ?? []
+
+  // Invalidate 'today' cache when training data updates (Hevy sync, activity added, etc.)
+  useEffect(() => {
+    if (training) {
+      mutate('today')
+    }
+  }, [training])
 
   // Prefer steps from the health-gezondheid cache (kept fresh by DataProvider auto-sync)
   // over the today-fetch result, which may have run before today's Fitbit sync completed.
