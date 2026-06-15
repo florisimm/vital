@@ -3074,6 +3074,7 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
   const [selected, setSelected] = useState<string | null>(null)
   const [dismissed, setDismissed] = useState(false)
+  const [checking, setChecking] = useState(true)
 
   // Most recent workout from today or yesterday
   const latestWorkout = useMemo(() => {
@@ -3089,19 +3090,20 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   }, [hevy, activities]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!latestWorkout) return
+    if (!latestWorkout) { setChecking(false); return }
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) { setChecking(false); return }
       const { data } = await supabase
         .from('session_ratings').select('rating')
         .eq('user_id', user.id).eq('date', latestWorkout!.day).maybeSingle()
       if (data?.rating) setDismissed(true)
+      setChecking(false)
     }
     load()
   }, [latestWorkout?.day]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!latestWorkout || dismissed) return null
+  if (checking || !latestWorkout || dismissed) return null
 
   const save = async (rating: string) => {
     setSelected(rating)
@@ -3125,8 +3127,7 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
     <Card>
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">How did {whenLabel} session go?</span>
-          <span className="text-[15px] font-semibold text-white">{latestWorkout.name}</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">How did {whenLabel} {latestWorkout.name} go?</span>
         </div>
         <div className="flex gap-2">
           {options.map(o => (
