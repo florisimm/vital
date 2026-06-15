@@ -18,7 +18,7 @@ export async function trainingFetcher() {
   const now = new Date()
   const todayDate = now.toISOString().split('T')[0]
 
-  const [{ data: activities }, { data: hevy }, { data: calendarEvents, error: calendarError }, { data: settings }] = await Promise.all([
+  const [{ data: activities }, { data: hevy }, { data: calendarEvents, error: calendarError }, { data: settings }, { data: biasRows }] = await Promise.all([
     supabase
       .from('strava_activities')
       .select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules')
@@ -35,7 +35,11 @@ export async function trainingFetcher() {
       .from('user_settings')
       .select('training_frequencies')
       .eq('user_id', user.id)
-      .single()
+      .single(),
+    supabase
+      .from('coach_bias_adjustments')
+      .select('sport_type, bias_adjustment, conservativeness_adjustment, confidence')
+      .eq('user_id', user.id)
   ])
 
   if (calendarError) console.error('Calendar fetch error:', calendarError)
@@ -51,10 +55,17 @@ export async function trainingFetcher() {
 
   const trainingFrequencies: Record<string, number> = (settings as any)?.training_frequencies ?? {}
 
+  // bias_adjustment per sport: positive = user handles more load than model thinks
+  const biasBySport: Record<string, number> = {}
+  for (const row of (biasRows ?? []) as any[]) {
+    if (row.confidence !== 'low') biasBySport[row.sport_type] = row.bias_adjustment ?? 0
+  }
+
   return {
     activities: (activities ?? []) as Activity[],
     hevy: (hevy ?? []) as HevyWorkout[],
     calendarEvents: filteredCalendarEvents,
     trainingFrequencies,
+    biasBySport,
   }
 }

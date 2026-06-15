@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { createClient } from '@/lib/supabase'
 import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
@@ -2237,10 +2238,11 @@ function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub
 const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'weights', 'strength']
 const CARDIO_KW = ['run', 'long run', 'ride', 'bike', 'swim', 'swim', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo']
 
-function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
+function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = false }: {
   focus: TodaysFocus
   calendarEvents: any[]
   readinessPct: number
+  biasApplied?: boolean
 }) {
   const now = new Date().toISOString()
   const next = (calendarEvents ?? [])
@@ -2259,7 +2261,12 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct }: {
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Today's Recommendation</p>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Today's Recommendation</p>
+        {biasApplied && (
+          <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalised</span>
+        )}
+      </div>
 
       <div className="flex items-center gap-4 mb-4">
         <span className="text-[42px] leading-none">{focus.emoji}</span>
@@ -2682,10 +2689,14 @@ function NextWorkoutCard({ calendarEvents }: {
 
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
-export function OverviewSection({ activities, hevy, calendarEvents, trainingFrequencies = {} }: {
-  activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]; trainingFrequencies?: Record<string, number>
+export function OverviewSection({ activities, hevy, calendarEvents, trainingFrequencies = {}, biasBySport = {} }: {
+  activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
+  trainingFrequencies?: Record<string, number>
+  biasBySport?: Record<string, number>
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
+  const supabase = useMemo(() => createClient(), [])
+  const overrideLoggedRef = useRef(false)
 
   const perf = computePerformanceScore(activities, hevy)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
@@ -2717,9 +2728,21 @@ export function OverviewSection({ activities, hevy, calendarEvents, trainingFreq
     { icon: '🏊', label: 'Swimming', done: weekSwimming, target: trainingFrequencies.swimming ?? 0 },
   ]
 
-  const unifiedReadinessPct = physiologyReadiness.score !== null
+  const rawReadinessPct = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
+
+  // Apply personal bias: if user consistently handles more load than model predicts,
+  // adjust displayed readiness upward (capped at ±10 points)
+  const biasValues = Object.values(biasBySport)
+  const avgBias = biasValues.length > 0 ? biasValues.reduce((s, v) => s + v, 0) / biasValues.length : 0
+  const biasPoints = Math.round(avgBias * 100) // e.g. 0.05 bias → +5 points
+  const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints))
+  const biasApplied = biasPoints !== 0
+
+  const todayStr    = new Date().toISOString().slice(0, 10)
+  const todayActivities = activities.filter(a => a.start_date.slice(0, 10) === todayStr)
+  const todayHevy       = hevy.filter(h => h.start_time.slice(0, 10) === todayStr)
 
   const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
   const fourteenDaysAgo  = new Date(now - 14 * 86400000).toISOString()
@@ -2733,10 +2756,55 @@ export function OverviewSection({ activities, hevy, calendarEvents, trainingFreq
   const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate)
 
+  // Detect overrides: did user train today when advice would have been rest?
+  useEffect(() => {
+    if (overrideLoggedRef.current) return
+    if (todayHevy.length === 0 && todayActivities.length === 0) return
+
+    // Recompute what advice WOULD have been without today's workouts
+    const activitiesWithoutToday = activities.filter(a => a.start_date.slice(0, 10) !== todayStr)
+    const hevyWithoutToday       = hevy.filter(h => h.start_time.slice(0, 10) !== todayStr)
+    const priorFocus = computeTodaysFocus(activitiesWithoutToday, hevyWithoutToday, calendarEvents, rawReadinessPct, perf, acwrDetail, rampRate)
+
+    const wasRestAdvice = priorFocus.action === 'Recovery day' || priorFocus.label.toLowerCase().includes('rest')
+    if (!wasRestAdvice) return
+
+    const coachAdvice = priorFocus.label.toLowerCase().includes('rest') ? 'rest' : 'easier'
+
+    const logOverrides = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const rows = [
+        ...todayHevy.map(() => ({
+          user_id: user.id, date: todayStr, sport_type: 'strength',
+          coach_advice: coachAdvice, user_action: 'trained',
+          readiness_score_at_time: rawReadinessPct, recovery_score_at_time: recoveryDetail.pct,
+        })),
+        ...todayActivities.map(a => {
+          const t = (a.sport_type ?? '').toLowerCase()
+          const sport = t.includes('run') ? 'running' : (t.includes('ride') || t.includes('cycl')) ? 'cycling' : t.includes('swim') ? 'swimming' : 'running'
+          return {
+            user_id: user.id, date: todayStr, sport_type: sport,
+            coach_advice: coachAdvice, user_action: 'trained',
+            readiness_score_at_time: rawReadinessPct, recovery_score_at_time: recoveryDetail.pct,
+          }
+        }),
+      ]
+
+      if (rows.length > 0) {
+        await supabase.from('coach_overrides').upsert(rows, { onConflict: 'user_id,date,sport_type' })
+        overrideLoggedRef.current = true
+      }
+    }
+
+    logOverrides()
+  }, [todayHevy.length, todayActivities.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="flex flex-col gap-[18px]">
       {/* 1. Today's Recommendation — hero */}
-      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} />
+      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} />
 
       {/* 2. This Week */}
       <WeekSummaryCard
