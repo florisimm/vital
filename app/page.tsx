@@ -247,14 +247,31 @@ function buildRecommendation(rows: HealthRow[], data: any) {
     } else {
       icon = '🏋️'
     }
-    title    = todayEvent.title
-    duration = done ? 'Completed ✓' : ''
-    href     = isGym
-      ? '/training/strength'
-      : `/training/session?title=${encodeURIComponent(todayEvent.title)}&time=${encodeURIComponent((todayEvent as any).start_datetime ?? '')}`
-    if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high — good day to push')
-    else if (readiness.score !== null)                      why.push('Recovery is solid')
-    why.push(`${todayEvent.title} on the schedule`)
+    if (done) {
+      // Workout completed — show what's next, not the completed event
+      const cardioNeeded = weeklyProgress.details.find(d => d.includes('run') || d.includes('ride'))
+      if (cardioNeeded && readiness.score !== null && readiness.score >= 55) {
+        icon = cardioNeeded.includes('run') ? '🏃' : '🚴'
+        title = cardioNeeded.includes('run') ? 'Optional easy run' : 'Optional easy ride'
+        href = cardioNeeded.includes('run') ? '/training/running' : '/training/cycling'
+        why.push(`${todayEvent.title} ✓ done`)
+        why.push('Room for easy cardio if you feel up to it')
+      } else {
+        icon = '😴'; title = 'Rest & recover'
+        why.push(`${todayEvent.title} ✓ done`)
+        why.push('Recovery is your training now')
+      }
+      duration = `${todayEvent.title} completed`
+    } else {
+      title    = todayEvent.title
+      duration = ''
+      href     = isGym
+        ? '/training/strength'
+        : `/training/session?title=${encodeURIComponent(todayEvent.title)}&time=${encodeURIComponent((todayEvent as any).start_datetime ?? '')}`
+      if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high — good day to push')
+      else if (readiness.score !== null)                      why.push('Recovery is solid')
+      why.push(`${todayEvent.title} on the schedule`)
+    }
   } else {
     icon = '🚴'; title = 'Zone 2 Ride'; duration = '60 min'
     if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high')

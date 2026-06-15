@@ -2383,17 +2383,17 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
   const [ctaLabel, ctaHref] = (() => {
     if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
       const l = focus.label.toLowerCase()
-      if (l.includes('cycling')) return ['Ga een lichte rit →', '/training/cycling']
-      if (l.includes('swimming')) return ['Ga een lichte zwemtraining →', '/training/swimming']
-      return ['Ga een lichte duurloop →', '/training/running']
+      if (l.includes('cycling')) return ['Go for an easy ride →', '/training/cycling']
+      if (l.includes('swimming')) return ['Go for an easy swim →', '/training/swimming']
+      return ['Go for an easy run →', '/training/running']
     }
-    if (!next) return ['Bekijk training →', '/training']
+    if (!next) return ['View training →', '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
     const isCardio = CARDIO_KW.some(k => t.includes(k))
-    if (isGym && !isCardio) return ['Bekijk kracht →', '/training/strength']
+    if (isGym && !isCardio) return ['View strength →', '/training/strength']
     const dateStr = next.start_datetime || next.start_date
-    return ['Bekijk sessie →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
+    return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
 
   function toSpecificRecommendation(): string {
@@ -2402,53 +2402,43 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
 
     // Session done states
     if (l.includes(' done') && (action === 'Rest & recover' || action === 'Recovery day')) {
-      return `${focus.label.split(' done')[0]} gedaan — neem rust vandaag`
+      return `${focus.label.split(' done')[0]} done — take rest today`
     }
     if (l.includes('room for easy')) {
-      if (l.includes('cycling')) return 'Klaar — ga ook nog een lichte fietsrit'
-      if (l.includes('run'))     return 'Klaar — ga ook nog een lichte duurloop'
-      if (l.includes('swim'))    return 'Klaar — ga ook nog een lichte zwemtraining'
-      return 'Klaar — optioneel lichte cardio'
+      if (l.includes('cycling')) return 'Done — optional easy ride today'
+      if (l.includes('run'))     return 'Done — optional easy run today'
+      if (l.includes('swim'))    return 'Done — optional easy swim today'
+      return 'Done — optional easy cardio'
     }
 
     // Known rest/recovery template labels
     const knownLabels: Record<string, string> = {
-      'rest today':                     'Neem vandaag rust',
-      'rest day recommended':           'Neem vandaag rust',
-      'active recovery':                'Doe 20–30 min licht bewegen',
-      'keep it light':                  'Houd het licht vandaag',
-      'leg day recommended':            'Doe vandaag een beentraining',
-      'push day recommended':           'Doe vandaag een push dag',
-      'pull day recommended':           'Doe vandaag een pull dag',
-      'easy endurance run recommended': 'Ga 30–40 min rustig hardlopen',
-      'easy endurance ride recommended':'Ga 30–45 min rustig fietsen',
-      'easy running recommended':       'Ga 30–40 min rustig hardlopen',
-      'easy cycling recommended':       'Ga 30–45 min rustig fietsen',
-      'easy swimming recommended':      'Ga 20–30 min rustig zwemmen',
-      'easy session':                   'Doe iets licht vandaag',
+      'rest today':                     'Take rest today',
+      'rest day recommended':           'Take rest today',
+      'active recovery':                '20–30 min light movement',
+      'keep it light':                  'Keep it light today',
+      'leg day recommended':            'Leg session today',
+      'push day recommended':           'Push day today',
+      'pull day recommended':           'Pull day today',
+      'easy endurance run recommended': '30–40 min easy run',
+      'easy endurance ride recommended':'30–45 min easy ride',
+      'easy running recommended':       '30–40 min easy run',
+      'easy cycling recommended':       '30–45 min easy ride',
+      'easy swimming recommended':      '20–30 min easy swim',
+      'easy session':                   'Do something light today',
     }
     if (knownLabels[l]) return knownLabels[l]
 
     // Calendar-event-driven: label = event title (possibly with time suffix "· 19:00")
     const eventTitle = focus.label.split(' · ')[0]
     const actionMap: Record<string, string> = {
-      'Stay the course':  `Ga ${eventTitle}`,
-      'Train lighter':    `Doe ${eventTitle}, maar houd het lichter`,
-      'Train shorter':    `Doe ${eventTitle}, maar maak het korter`,
-      'Recovery day':     l.includes('rest') ? 'Neem vandaag rust' : `Sla ${eventTitle} over — neem rust`,
-      'Move to tomorrow': `Verplaats ${eventTitle} naar morgen`,
+      'Stay the course':  eventTitle,
+      'Train lighter':    `${eventTitle} — keep it lighter`,
+      'Train shorter':    `${eventTitle} — cut it shorter`,
+      'Recovery day':     l.includes('rest') ? 'Take rest today' : `Skip ${eventTitle} — take rest`,
+      'Move to tomorrow': `Move ${eventTitle} to tomorrow`,
     }
     return actionMap[action] ?? focus.label
-  }
-
-  const DUTCH_ACTION: Record<string, string> = {
-    'Stay the course':  'Train vandaag',
-    'Train lighter':    'Houd het lichter',
-    'Train shorter':    'Maak het korter',
-    'Recovery day':     'Neem rust',
-    'Move to tomorrow': 'Doe het morgen',
-    'Rest & recover':   'Rust & herstel',
-    'Optional Zone 2':  'Optioneel Zone 2',
   }
 
   const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
@@ -2457,10 +2447,10 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Vandaag</p>
+        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Today</p>
         <div className="flex items-center gap-2.5">
           {biasApplied && (
-            <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Gepersonaliseerd</span>
+            <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalized</span>
           )}
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} />
@@ -2477,14 +2467,14 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
             className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black"
             style={{ background: focus.actionColor }}
           >
-            {DUTCH_ACTION[focus.action] ?? focus.action}
+            {focus.action}
           </span>
         </div>
       </div>
 
       {focus.reasons.length > 0 && (
         <div className="pt-3 border-t border-white/[0.08] mb-3">
-          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Waarom?</p>
+          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why?</p>
           <div className="flex flex-col gap-1.5">
             {focus.reasons.map((r, i) => (
               <div key={i} className="flex items-start gap-2">
