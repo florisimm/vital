@@ -2163,14 +2163,32 @@ function computeTodaysFocus(
     reasons: [`Capacity ${recoveryPct}% — endurance or recovery ride recommended`],
   }
 
-  // Default: light training or rest
-  if (recoveryPct >= 70) return {
-    emoji: '🏃', label: 'Easy session', ...ACT.easier,
-    reasons: [
-      '20–30 min easy — Zone 2 cardio or a light full-body circuit',
-      'Keep it conversational (effort you could hold while chatting)',
-      'No muscle group is fully fresh for a hard session today',
-    ],
+  // Default: check remaining weekly targets first, then fall back
+  if (recoveryPct >= 70) {
+    const remaining = cardioTargets
+      .filter(c => c.target > 0 && c.done < c.target)
+      .sort((a, b) => (b.target - b.done) - (a.target - a.done))
+    if (remaining.length > 0) {
+      const top = remaining[0]
+      return {
+        emoji: top.emoji,
+        label: `Easy ${top.label.toLowerCase()} recommended`,
+        ...ACT.easier,
+        reasons: [
+          `${top.done}/${top.target} ${top.label.toLowerCase()} sessions this week — ${top.target - top.done} to go`,
+          `Recovery ${recoveryPct}% — keep it Zone 2, light effort`,
+          'No muscle group is fully fresh — easy cardio is the right call',
+        ],
+      }
+    }
+    return {
+      emoji: '🏃', label: 'Easy session', ...ACT.easier,
+      reasons: [
+        '20–30 min easy — Zone 2 cardio or a light full-body circuit',
+        'Keep it conversational (effort you could hold while chatting)',
+        'No muscle group is fully fresh for a hard session today',
+      ],
+    }
   }
 
   return {
@@ -2343,6 +2361,9 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
       'pull day recommended':           'Doe vandaag een pull dag',
       'easy endurance run recommended': 'Ga 30–40 min rustig hardlopen',
       'easy endurance ride recommended':'Ga 30–45 min rustig fietsen',
+      'easy running recommended':       'Ga 30–40 min rustig hardlopen',
+      'easy cycling recommended':       'Ga 30–45 min rustig fietsen',
+      'easy swimming recommended':      'Ga 20–30 min rustig zwemmen',
       'easy session':                   'Doe iets licht vandaag',
     }
     if (knownLabels[l]) return knownLabels[l]
