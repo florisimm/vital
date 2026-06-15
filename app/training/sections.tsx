@@ -1890,8 +1890,30 @@ function computeTodaysFocus(
     return s
   }
 
-  const todayEvts    = events.filter(e => evtDate(e) === todayStr    && isSportEvt(e))
+  const todayActivities = activities.filter(a => a.start_date.slice(0, 10) === todayStr)
+  const todayHevy       = hevy.filter(h => h.start_time.slice(0, 10) === todayStr)
+  const todayDoneGym    = todayHevy.length > 0
+  const todayDoneRun    = todayActivities.some(a => (a.sport_type ?? '').toLowerCase().includes('run'))
+  const todayDoneRide   = todayActivities.some(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') })
+  const todayDoneSwim   = todayActivities.some(a => (a.sport_type ?? '').toLowerCase().includes('swim'))
+
+  function isEventDone(e: any): boolean {
+    const t = (e.title ?? '').toLowerCase()
+    const isGymEvt = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox'].some(k => t.includes(k))
+    const isRunEvt = ['run','loop','hardloop','interval','tempo'].some(k => t.includes(k))
+    const isRideEvt = ['ride','fiet','cycl','bike'].some(k => t.includes(k))
+    const isSwimEvt = ['swim','zwem'].some(k => t.includes(k))
+    if (isGymEvt) return todayDoneGym
+    if (isRunEvt) return todayDoneRun
+    if (isRideEvt) return todayDoneRide
+    if (isSwimEvt) return todayDoneSwim
+    return false
+  }
+
+  const todayEvtsAll  = events.filter(e => evtDate(e) === todayStr    && isSportEvt(e))
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
+  const todayEvtsDone = todayEvtsAll.filter(e => isEventDone(e))
+  const todayEvts     = todayEvtsAll.filter(e => !isEventDone(e))
   const tomorrowEvts = events.filter(e => evtDate(e) === tomorrowStr && isSportEvt(e))
     .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))
   const day2Evts     = events.filter(e => evtDate(e) === day2Str && isSportEvt(e))
@@ -1950,6 +1972,24 @@ function computeTodaysFocus(
       r.push('Low impact on recovery')
     }
     return r.slice(0, 3)
+  }
+
+  // ── Today's planned session already completed ───────────────────────────────
+  if (todayEvtsDone.length > 0 && todayEvts.length === 0) {
+    const done = todayEvtsDone[0]
+    const tomorrowNext = tomorrowEvts[0] ?? null
+    return {
+      emoji: '✅',
+      label: `${done.title} done`,
+      ...ACT.skip,
+      action: 'Well done',
+      actionColor: '#4ade80',
+      reasons: [
+        tomorrowNext ? `${tomorrowNext.title} planned tomorrow — recover well` : 'Rest and recover for the next session',
+        recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition` : `Recovery ${recoveryPct}% — looking good`,
+        'Hydrate and get quality sleep tonight',
+      ],
+    }
   }
 
   // ── Today has planned sessions ──────────────────────────────────────────────
