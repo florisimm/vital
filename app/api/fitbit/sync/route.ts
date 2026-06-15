@@ -192,7 +192,8 @@ export async function POST(_req: NextRequest) {
     if (min >= 10 * 60 && min < 22 * 60) continue
     const rawDate = h.sampleTime?.civilTime?.date ? dateStr(h.sampleTime.civilTime.date) : physTime ? localDate(physTime, utcOff) : null
     if (!rawDate) continue
-    const date = (min >= 22 * 60 && rows[nextDay(rawDate)]?.slaap_minuten) ? nextDay(rawDate) : rawDate
+    // HRV samples after 22:00 belong to next day (sleep period extends into next calendar day)
+    const date = min >= 22 * 60 ? nextDay(rawDate) : rawDate
     ;(hrvAgg[date] ??= []).push(v)
   }
   for (const [date, vals] of Object.entries(hrvAgg)) {
@@ -207,7 +208,8 @@ export async function POST(_req: NextRequest) {
     const min2 = physTime2 ? localMinutes(physTime2, utcOff2) : -1
     const rawDate = o.sampleTime?.civilTime?.date ? dateStr(o.sampleTime.civilTime.date) : physTime2 ? localDate(physTime2, utcOff2) : null
     if (!rawDate) continue
-    const date = (min2 >= 22 * 60 && rows[nextDay(rawDate)]?.slaap_minuten) ? nextDay(rawDate) : rawDate
+    // SpO2 samples after 22:00 belong to next day (sleep period extends into next calendar day)
+    const date = min2 >= 22 * 60 ? nextDay(rawDate) : rawDate
     ;(spo2Agg[date] ??= []).push(v)
   }
   for (const [date, vals] of Object.entries(spo2Agg)) {
