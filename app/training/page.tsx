@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import {
@@ -71,6 +71,31 @@ export default function TrainingPage() {
   const biasBySport = data?.biasBySport ?? {}
   const pastCalendarEvents = data?.pastCalendarEvents ?? []
 
+  // Derive which sport today's plan recommends, to gate advice in sport tabs
+  const todaySport = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    for (const e of calendarEvents) {
+      if ((e.start_datetime || e.start_date || '').slice(0, 10) !== today) continue
+      const t = (e.title ?? '').toLowerCase()
+      if (['ride', 'fiet', 'cycl', 'bike', 'wielren'].some(k => t.includes(k))) return 'cycling'
+      if (['run', 'loop', 'hardloop', 'interval', 'tempo', 'duurloop'].some(k => t.includes(k))) return 'running'
+      if (['swim', 'zwem'].some(k => t.includes(k))) return 'swimming'
+      if (['gym', 'strength', 'push', 'pull', 'legs', 'kracht', 'bench', 'deadlift', 'hyrox'].some(k => t.includes(k))) return 'strength'
+    }
+    // No calendar event — check which sport still has remaining targets this week
+    const mon = new Date(); mon.setDate(mon.getDate() - (mon.getDay() || 7) + 1)
+    const ws = mon.toISOString().slice(0, 10)
+    const wRuns  = activities.filter((a: any) => a.sport_type?.toLowerCase().includes('run')  && a.start_date >= ws).length
+    const wRides = activities.filter((a: any) => { const t = (a.sport_type ?? '').toLowerCase(); return (t.includes('ride') || t.includes('cycl')) && a.start_date >= ws }).length
+    const wSwims = activities.filter((a: any) => a.sport_type?.toLowerCase().includes('swim') && a.start_date >= ws).length
+    const needs = [
+      { sport: 'running',  need: (trainingFrequencies.running  ?? 0) - wRuns  },
+      { sport: 'cycling',  need: (trainingFrequencies.cycling  ?? 0) - wRides },
+      { sport: 'swimming', need: (trainingFrequencies.swimming ?? 0) - wSwims },
+    ].filter(s => s.need > 0).sort((a, b) => b.need - a.need)
+    return needs[0]?.sport ?? null
+  }, [calendarEvents, activities, trainingFrequencies])
+
   return (
     <PremiumScreen title="Training" subtitle="Training Overview" contentGap={18}>
       {/* Category strip — buttons swap content, no navigation */}
@@ -91,10 +116,10 @@ export default function TrainingPage() {
 
       {/* Tab content — only after mount so SSR and first client render match */}
       <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} />}
-        {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} />}
-        {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} />}
-        {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} />}
+        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} onSwitchTab={switchTab} />}
+        {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} />}
+        {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} todaySport={todaySport} />}
+        {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} todaySport={todaySport} />}
         {mounted && activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
         {mounted && activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'performance' && <PerformanceSection />}

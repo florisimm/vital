@@ -2289,11 +2289,12 @@ function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub
 const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'weights', 'strength']
 const CARDIO_KW = ['run', 'long run', 'ride', 'bike', 'swim', 'swim', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo']
 
-function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = false }: {
+function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = false, onSwitchTab }: {
   focus: TodaysFocus
   calendarEvents: any[]
   readinessPct: number
   biasApplied?: boolean
+  onSwitchTab?: (key: string) => void
 }) {
   const now = new Date().toISOString()
   const next = (calendarEvents ?? [])
@@ -2413,11 +2414,32 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
         </div>
       )}
 
-      <a href={ctaHref}
-        className="flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black"
-        style={{ background: 'rgb(45,212,191)' }}>
-        {ctaLabel}
-      </a>
+      {(() => {
+        const l = focus.label.toLowerCase()
+        let sportKey: string | null = null
+        if (l.includes('run') || l.includes('loop') || focus.emoji === '🏃') sportKey = 'running'
+        else if (l.includes('cycl') || l.includes('ride') || l.includes('fiet') || focus.emoji === '🚴') sportKey = 'cycling'
+        else if (l.includes('swim') || l.includes('zwem') || focus.emoji === '🏊') sportKey = 'swimming'
+        else if (l.includes('leg') || l.includes('push') || l.includes('pull') || l.includes('gym') || l.includes('kracht') || l.includes('strength') || focus.emoji === '💪') sportKey = 'strength'
+
+        if (sportKey && onSwitchTab) {
+          return (
+            <button
+              onClick={() => onSwitchTab(sportKey!)}
+              className="w-full flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black active:scale-95 transition-transform"
+              style={{ background: 'rgb(45,212,191)' }}>
+              {ctaLabel}
+            </button>
+          )
+        }
+        return (
+          <a href={ctaHref}
+            className="flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black"
+            style={{ background: 'rgb(45,212,191)' }}>
+            {ctaLabel}
+          </a>
+        )
+      })()}
     </div>
   )
 }
@@ -3057,11 +3079,12 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   )
 }
 
-export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {} }: {
+export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, onSwitchTab }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]
   trainingFrequencies?: Record<string, number>
   biasBySport?: Record<string, number>
+  onSwitchTab?: (key: string) => void
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const supabase = useMemo(() => createClient(), [])
@@ -3218,7 +3241,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
   return (
     <div className="flex flex-col gap-[18px]">
       {/* 1. Vandaag — specific Dutch recommendation with readiness */}
-      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} />
+      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} onSwitchTab={onSwitchTab} />
 
       {/* 2. Rate recent workout — only visible after a session */}
       <WorkoutRatingCard activities={activities} hevy={hevy} coachAdvice={todaysFocus.label} />
@@ -3431,14 +3454,24 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
 }) {
   const c = readinessPct >= 85 ? '#4ade80' : readinessPct >= 70 ? '#facc15' : '#fb923c'
   const trend = computeRunning7DayTrend(activities)
-  const lastRun = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))[0]
+  const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const lastRun = allRuns[0]
   const hoursSince = lastRun ? Math.round((Date.now() - new Date(lastRun.start_date).getTime()) / 3600000) : null
 
-  const details = readinessPct >= 85
-    ? { duration: '40–60 min', zone: 'Zone 3–4 (tempo)' }
-    : readinessPct >= 70
-    ? { duration: '30–50 min', zone: 'Zone 2 (aerobic)' }
-    : { duration: 'Rest', zone: '–' }
+  // Compute personal pace target from recent runs
+  const recentRuns = allRuns.slice(0, 5).filter(r => r.distance && r.moving_time && r.distance > 1000)
+  const avgPaceSec = recentRuns.length > 0
+    ? recentRuns.reduce((s, r) => s + r.moving_time! / (r.distance! / 1000), 0) / recentRuns.length
+    : null
+  const targetPaceSec = avgPaceSec
+    ? (readinessPct >= 85 ? avgPaceSec * 0.93 : avgPaceSec * 1.08)
+    : null
+  const paceStr = targetPaceSec
+    ? `${Math.floor(targetPaceSec / 60)}:${Math.round(targetPaceSec % 60).toString().padStart(2, '0')}/km`
+    : null
+  const targetKm = readinessPct >= 85 ? 10 : readinessPct >= 70 ? 7 : 4
+  const zone = readinessPct >= 85 ? 'Zone 3–4' : 'Zone 2'
+  const specific = paceStr ? `${targetKm} km · ${paceStr} · ${zone}` : `${targetKm} km · ${zone}`
 
   const tomorrowPct = readinessPct >= 85 ? 68 : readinessPct >= 70 ? 80 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Harder training possible' : tomorrowPct >= 70 ? 'Easy run' : 'Rest day'
@@ -3458,8 +3491,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
           <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
-          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.duration}</span>
-          <span className="text-[11px] text-white/40">{details.zone}</span>
+          <span className="text-[13px] font-semibold" style={{ color: c }}>{specific}</span>
         </div>
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Tomorrow</span>
@@ -3486,7 +3518,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   )
 }
 
-export function RunningSection({ activities, hevy = [] }: { activities: Activity[]; hevy?: HevyWorkout[] }) {
+export function RunningSection({ activities, hevy = [], todaySport = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
@@ -3494,6 +3526,7 @@ export function RunningSection({ activities, hevy = [] }: { activities: Activity
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const runningSuggestion = readinessPct >= 85 ? 'Tempo run' : readinessPct >= 70 ? 'Easy run' : 'Rest day'
+  const showAdvice = todaySport === null || todaySport === 'running'
 
   const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRun = allRuns[0] ?? null
@@ -3513,7 +3546,7 @@ export function RunningSection({ activities, hevy = [] }: { activities: Activity
 
   return (
     <div className="flex flex-col gap-6">
-      <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} />
+      {showAdvice && <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} />}
 
       {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
 
@@ -3600,14 +3633,24 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   readinessPct: number; suggestion: string; activities: Activity[]
 }) {
   const c = readinessPct >= 85 ? '#4ade80' : readinessPct >= 70 ? '#facc15' : '#fb923c'
-  const lastRide = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))[0]
+  const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const lastRide = allRides[0]
   const hoursSince = lastRide ? Math.round((Date.now() - new Date(lastRide.start_date).getTime()) / 3600000) : null
 
-  const details = readinessPct >= 85
-    ? { duration: '60–90 min', intensity: 'High', zone: 'Zone 3–4' }
-    : readinessPct >= 70
-    ? { duration: '45–75 min', intensity: 'Moderate', zone: 'Zone 2' }
-    : { duration: '20–40 min', intensity: 'Recovery', zone: 'Zone 1' }
+  // Compute personal speed from recent rides
+  const recentRides = allRides.slice(0, 5).filter(r => r.distance && r.moving_time && r.distance > 5000)
+  const avgSpeedMps = recentRides.length > 0
+    ? recentRides.reduce((s, r) => s + r.distance! / r.moving_time!, 0) / recentRides.length
+    : null
+  const avgSpeedKmh = avgSpeedMps ? avgSpeedMps * 3.6 : null
+  const targetSpeedKmh = avgSpeedKmh
+    ? (readinessPct >= 85 ? avgSpeedKmh * 1.05 : readinessPct >= 70 ? avgSpeedKmh * 0.95 : avgSpeedKmh * 0.85)
+    : null
+  const targetKm = readinessPct >= 85 ? 50 : readinessPct >= 70 ? 35 : 20
+  const zone = readinessPct >= 85 ? 'Zone 3–4' : readinessPct >= 70 ? 'Zone 2' : 'Zone 1'
+  const specific = targetSpeedKmh
+    ? `${targetKm} km · ${targetSpeedKmh.toFixed(0)} km/h · ${zone}`
+    : `${targetKm} km · ${zone}`
 
   const tomorrowPct = readinessPct >= 85 ? 72 : readinessPct >= 70 ? 82 : 92
   const tomorrowLabel = tomorrowPct >= 85 ? 'Threshold training possible' : tomorrowPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
@@ -3627,8 +3670,7 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Today</span>
           <span className="text-[17px] font-bold text-white leading-tight">{suggestion}</span>
-          <span className="text-[12px] font-semibold" style={{ color: c }}>{details.intensity}</span>
-          <span className="text-[11px] text-white/40">{details.zone} · {details.duration}</span>
+          <span className="text-[13px] font-semibold" style={{ color: c }}>{specific}</span>
         </div>
         <div className="flex flex-col gap-1.5 p-3 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Tomorrow</span>
@@ -3655,7 +3697,7 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   )
 }
 
-export function CyclingSection({ activities, hevy = [] }: { activities: Activity[]; hevy?: HevyWorkout[] }) {
+export function CyclingSection({ activities, hevy = [], todaySport = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
@@ -3663,6 +3705,7 @@ export function CyclingSection({ activities, hevy = [] }: { activities: Activity
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const cyclingSuggestion = readinessPct >= 85 ? 'Threshold training' : readinessPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
+  const showAdvice = todaySport === null || todaySport === 'cycling'
 
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRide = allRides[0] ?? null
@@ -3671,7 +3714,7 @@ export function CyclingSection({ activities, hevy = [] }: { activities: Activity
 
   return (
     <div className="flex flex-col gap-6">
-      <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} />
+      {showAdvice && <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} />}
 
       {lastRide && <LastRideCard ride={lastRide} allRides={allRides} />}
 
@@ -4182,7 +4225,7 @@ function SwimmingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeSw
   )
 }
 
-export function SwimmingSection({ activities, hevy = [] }: { activities: Activity[]; hevy?: HevyWorkout[] }) {
+export function SwimmingSection({ activities, hevy = [], todaySport = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
@@ -4191,6 +4234,7 @@ export function SwimmingSection({ activities, hevy = [] }: { activities: Activit
     : recoveryDetail.pct
   const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swim' : 'Recovery swim'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
+  const showAdvice = todaySport === null || todaySport === 'swimming'
 
   const trend = computeSwimmingWeeklyTrend(activities)
   const allSwims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
@@ -4213,8 +4257,8 @@ export function SwimmingSection({ activities, hevy = [] }: { activities: Activit
 
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />
-      <SwimmingReadinessCard readiness={readiness} />
+      {showAdvice && <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />}
+      {showAdvice && <SwimmingReadinessCard readiness={readiness} />}
       {lastSwim && <LastSwimCard swim={lastSwim} />}
       <SwimmingWeeklyTrendCard trend={trend} />
       <SwimmingVolumeHistoryCard weeks={volumeHistory} />
