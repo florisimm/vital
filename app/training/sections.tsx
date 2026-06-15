@@ -2298,7 +2298,7 @@ function WeekSummaryCard({ weekCompleted, weekUpcomingPlanned, weekStrengthDone,
     <Card>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Deze week</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">This week</span>
           <span className={`text-[13px] font-semibold ${coachLabel.color}`}>{coachLabel.text}</span>
         </div>
 
@@ -2399,7 +2399,7 @@ function RecoveryDetailCard({
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Belastbaarheid</span>
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Training Load</span>
         <div className="flex items-end justify-between">
           <span className="text-[40px] font-bold text-white leading-none">{unified}%</span>
           <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{label}</span>
@@ -2991,7 +2991,7 @@ export function RunningSection({ activities, hevy = [] }: { activities: Activity
 
       <Card>
         <div className="flex flex-col gap-3">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Deze week</span>
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">This week</span>
           <div className="flex gap-6">
             <div className="flex flex-col gap-0.5">
               <span className="text-[28px] font-bold text-white leading-none">{trend.runs7}</span>
