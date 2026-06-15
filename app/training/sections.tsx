@@ -3595,7 +3595,6 @@ export function RunningSection({ activities, hevy = [], todaySport = null }: { a
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const runningSuggestion = readinessPct >= 85 ? 'Tempo run' : readinessPct >= 70 ? 'Easy run' : 'Rest day'
-  const showAdvice = todaySport === null || todaySport === 'running'
 
   const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRun = allRuns[0] ?? null
@@ -3615,7 +3614,7 @@ export function RunningSection({ activities, hevy = [], todaySport = null }: { a
 
   return (
     <div className="flex flex-col gap-6">
-      {showAdvice && <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} />}
+      <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} />
 
       {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
 
@@ -3760,7 +3759,6 @@ export function CyclingSection({ activities, hevy = [], todaySport = null }: { a
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const cyclingSuggestion = readinessPct >= 85 ? 'Threshold training' : readinessPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
-  const showAdvice = todaySport === null || todaySport === 'cycling'
 
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRide = allRides[0] ?? null
@@ -3769,7 +3767,7 @@ export function CyclingSection({ activities, hevy = [], todaySport = null }: { a
 
   return (
     <div className="flex flex-col gap-6">
-      {showAdvice && <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} />}
+      <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} />
 
       {lastRide && <LastRideCard ride={lastRide} allRides={allRides} />}
 
@@ -4289,7 +4287,6 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null }: { 
     : recoveryDetail.pct
   const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swim' : 'Recovery swim'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
-  const showAdvice = todaySport === null || todaySport === 'swimming'
 
   const trend = computeSwimmingWeeklyTrend(activities)
   const allSwims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
@@ -4312,8 +4309,8 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null }: { 
 
   return (
     <div className="flex flex-col gap-6">
-      {showAdvice && <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />}
-      {showAdvice && <SwimmingReadinessCard readiness={readiness} />}
+      <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />
+      <SwimmingReadinessCard readiness={readiness} />
       {lastSwim && <LastSwimCard swim={lastSwim} />}
       <SwimmingWeeklyTrendCard trend={trend} />
       <SwimmingVolumeHistoryCard weeks={volumeHistory} />
