@@ -6,6 +6,7 @@ import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
+import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1979,16 +1980,41 @@ function computeTodaysFocus(
   if (todayEvtsDone.length > 0 && todayEvts.length === 0) {
     const done = todayEvtsDone[0]
     const tomorrowNext = tomorrowEvts[0] ?? null
+    const doneWasCardio = todayDoneRun || todayDoneRide || todayDoneSwim
+    const rs = riskScore()
+
+    // After the planned (usually strength) session: is there still room for an
+    // easy aerobic session today, or is it better to just rest?
+    const canAddCardio = !doneWasCardio
+      && recoveryPct >= 60
+      && rs <= 3
+      && weightedACWRRisk() < 0.35
+      && !upcomingHard
+
+    if (canAddCardio) {
+      return {
+        emoji: '🚴',
+        label: `${done.title} done — room for easy cardio`,
+        action: 'Optional Zone 2',
+        actionColor: '#2dd4bf',
+        reasons: [
+          'You recovered well — an easy run, ride or swim is fine if you want more',
+          'Keep it Zone 2 (conversational pace) — low fatigue cost',
+          tomorrowNext ? `${tomorrowNext.title} planned tomorrow — keep it light` : 'Or simply rest — both are good choices',
+        ],
+      }
+    }
+
     return {
       emoji: '✅',
       label: `${done.title} done`,
       ...ACT.skip,
-      action: 'Well done',
+      action: 'Rest & recover',
       actionColor: '#4ade80',
       reasons: [
-        tomorrowNext ? `${tomorrowNext.title} planned tomorrow — recover well` : 'Rest and recover for the next session',
+        doneWasCardio ? 'Cardio done — let your body absorb it' : 'Enough training for today — no extra cardio needed',
         recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition` : `Recovery ${recoveryPct}% — looking good`,
-        'Hydrate and get quality sleep tonight',
+        tomorrowNext ? `${tomorrowNext.title} planned tomorrow — recover well` : 'Hydrate and get quality sleep tonight',
       ],
     }
   }
@@ -2250,6 +2276,9 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
     .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
 
   const [ctaLabel, ctaHref] = (() => {
+    // When today's session is done and there's room for optional cardio, point at it
+    if (focus.label.toLowerCase().includes('cardio') || focus.action.includes('Zone 2'))
+      return ["Plan easy cardio →", '/training/running']
     if (!next) return ["View training →", '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
@@ -2689,8 +2718,43 @@ function NextWorkoutCard({ calendarEvents }: {
 
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
-export function OverviewSection({ activities, hevy, calendarEvents, trainingFrequencies = {}, biasBySport = {} }: {
+function LearnedAboutYouCard({ profile }: { profile: PersonalProfile }) {
+  if (profile.insights.length === 0) return null
+  const confLabel = profile.dataConfidence === 'high' ? 'High confidence'
+    : profile.dataConfidence === 'medium' ? 'Learning' : 'Early days'
+  const confColor = profile.dataConfidence === 'high' ? 'text-teal-400'
+    : profile.dataConfidence === 'medium' ? 'text-yellow-400' : 'text-white/40'
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">What Kern learned about you</span>
+          <span className={`text-[11px] font-semibold ${confColor}`}>{confLabel}</span>
+        </div>
+        <div className="flex flex-col gap-3">
+          {profile.insights.map((ins, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <span className="text-[20px] leading-none mt-0.5 shrink-0">{ins.icon}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[14px] font-semibold text-white leading-snug">{ins.title}</span>
+                <span className="text-[13px] text-white/55 leading-snug">{ins.detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {profile.dataConfidence !== 'high' && (
+          <span className="text-[12px] text-white/35 pt-1 border-t border-white/[0.06]">
+            Keep wearing your tracker and logging workouts — these get sharper over time.
+          </span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {} }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
+  pastCalendarEvents?: any[]
   trainingFrequencies?: Record<string, number>
   biasBySport?: Record<string, number>
 }) {
@@ -2801,6 +2865,12 @@ export function OverviewSection({ activities, hevy, calendarEvents, trainingFreq
     logOverrides()
   }, [todayHevy.length, todayActivities.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Personal learning profile — derived from the user's own history
+  const personalProfile = useMemo(
+    () => computePersonalProfile(gezondheid ?? [], activities, hevy, pastCalendarEvents),
+    [gezondheid, activities, hevy, pastCalendarEvents]
+  )
+
   return (
     <div className="flex flex-col gap-[18px]">
       {/* 1. Today's Recommendation — hero */}
@@ -2815,6 +2885,9 @@ export function OverviewSection({ activities, hevy, calendarEvents, trainingFreq
 
       {/* 3. Readiness */}
       <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
+
+      {/* 4. What Kern learned about you */}
+      <LearnedAboutYouCard profile={personalProfile} />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import { computePhysiologyReadiness } from '@/lib/readiness'
+import { computePersonalProfile } from '@/lib/personal-learning'
 import {
   computeSleepScore,
   SleepSection,
@@ -175,6 +176,11 @@ export default function HealthPage() {
     ? (readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171')
     : 'rgba(255,255,255,0.3)'
 
+  // Personal thresholds learned from your own baseline (fall back to population cutoffs)
+  const personalProfile = computePersonalProfile(rows as any, [], [], [])
+  const hrvBadCutoff = personalProfile.hrvBadThreshold ?? 25
+  const rhrBadCutoff = personalProfile.rhrBadThreshold ?? 72
+
   const recommendationData = (() => {
     const noData = sleepScore === null && hrv === null && restingHR === null
     if (noData)
@@ -190,13 +196,13 @@ export default function HealthPage() {
         tomEvt ? `${tomEvt.title} planned tomorrow — recover well` : 'Prioritise sleep and nutrition today',
       ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }
 
-    // Suppressed HRV or elevated HR + poor sleep
-    if ((hrv !== null && hrv < 25) || (restingHR !== null && restingHR > 72 && sleepScore !== null && sleepScore < 50))
+    // Suppressed HRV or elevated HR + poor sleep — using YOUR personal baselines
+    if ((hrv !== null && hrv < hrvBadCutoff) || (restingHR !== null && restingHR > rhrBadCutoff && sleepScore !== null && sleepScore < 50))
       return { emoji: '🛌', title: 'Recover Today', bullets: [
         'Do 15–20 min light stretching or a slow walk — nothing more',
-        hrv !== null && hrv < 25
-          ? `HRV at ${Math.round(Number(hrv))} ms — below recovery threshold`
-          : `Resting HR elevated at ${restingHR} bpm`,
+        hrv !== null && hrv < hrvBadCutoff
+          ? `HRV at ${Math.round(Number(hrv))} ms — below your usual range${personalProfile.hrvBadThreshold ? ` (~${personalProfile.hrvBaseline} ms)` : ''}`
+          : `Resting HR elevated at ${restingHR} bpm${personalProfile.rhrBaseline ? ` (your baseline ~${personalProfile.rhrBaseline})` : ''}`,
         tomEvt ? `${tomEvt.title} planned tomorrow — save energy` : 'Aim for 8+ hours of sleep tonight',
       ], cta: { label: 'See HRV trend →', tab: 'heart' as const, href: null } }
 

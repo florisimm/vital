@@ -15,6 +15,7 @@ export async function trainingFetcher() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('unauthenticated')
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+  const thirtyDaysAgoDate = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
   const now = new Date()
   const todayDate = now.toISOString().split('T')[0]
 
@@ -30,7 +31,7 @@ export async function trainingFetcher() {
     supabase
       .from('calendar_events')
       .select('id,title,start_date,start_datetime,end_datetime')
-      .eq('user_id', user.id).gte('start_date', todayDate).order('start_date', { ascending: true }),
+      .eq('user_id', user.id).gte('start_date', thirtyDaysAgoDate).order('start_date', { ascending: true }),
     supabase
       .from('user_settings')
       .select('training_frequencies')
@@ -46,11 +47,18 @@ export async function trainingFetcher() {
 
   const sportKeywords = ['gym', 'run', 'loop', 'ride', 'fietsen', 'zwemmen', 'swim', 'voetbal', 'tennis', 'volleybal', 'training', 'workout', 'strength', 'push', 'pull', 'squat', 'toernooi', 'duurloop', 'interval', 'zone', 'sport', 'sporten', 'hardlopen', 'wielren', 'crossfit', 'kracht', 'fitness', 'gewichten', 'deadlift', 'bench', 'upper', 'lower', 'legs']
 
+  const isSportEvent = (e: any) => sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
+  const eventTimeOf = (e: any) => e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
+
   const filteredCalendarEvents = (calendarEvents ?? []).filter((e: any) => {
-    // Compare exact time if available, otherwise just date
-    const eventTime = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date)
-    if (eventTime < now) return false
-    return sportKeywords.some(kw => e.title.toLowerCase().includes(kw))
+    if (eventTimeOf(e) < now) return false
+    return isSportEvent(e)
+  })
+
+  // Past sport events (last 30 days) — used to learn which sessions you skip
+  const pastCalendarEvents = (calendarEvents ?? []).filter((e: any) => {
+    if (eventTimeOf(e) >= now) return false
+    return isSportEvent(e)
   })
 
   const trainingFrequencies: Record<string, number> = (settings as any)?.training_frequencies ?? {}
@@ -65,6 +73,7 @@ export async function trainingFetcher() {
     activities: (activities ?? []) as Activity[],
     hevy: (hevy ?? []) as HevyWorkout[],
     calendarEvents: filteredCalendarEvents,
+    pastCalendarEvents,
     trainingFrequencies,
     biasBySport,
   }
