@@ -2300,48 +2300,107 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
     .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
 
   const [ctaLabel, ctaHref] = (() => {
-    // When today's session is done and there's room for optional cardio, point at
-    // the specific sport the user planned (from their profile targets)
     if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
       const l = focus.label.toLowerCase()
-      if (l.includes('cycling')) return ["Plan an easy ride →", '/training/cycling']
-      if (l.includes('swimming')) return ["Plan an easy swim →", '/training/swimming']
-      return ["Plan an easy run →", '/training/running']
+      if (l.includes('cycling')) return ['Ga een lichte rit →', '/training/cycling']
+      if (l.includes('swimming')) return ['Ga een lichte zwemtraining →', '/training/swimming']
+      return ['Ga een lichte duurloop →', '/training/running']
     }
-    if (!next) return ["View training →", '/training']
+    if (!next) return ['Bekijk training →', '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
     const isCardio = CARDIO_KW.some(k => t.includes(k))
-    if (isGym && !isCardio) return ["View strength →", '/training/strength']
+    if (isGym && !isCardio) return ['Bekijk kracht →', '/training/strength']
     const dateStr = next.start_datetime || next.start_date
-    return ["View session →", `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
+    return ['Bekijk sessie →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
+
+  function toSpecificRecommendation(): string {
+    const l = focus.label.toLowerCase()
+    const action = focus.action
+
+    // Session done states
+    if (l.includes(' done') && (action === 'Rest & recover' || action === 'Recovery day')) {
+      return `${focus.label.split(' done')[0]} gedaan — neem rust vandaag`
+    }
+    if (l.includes('room for easy')) {
+      if (l.includes('cycling')) return 'Klaar — ga ook nog een lichte fietsrit'
+      if (l.includes('run'))     return 'Klaar — ga ook nog een lichte duurloop'
+      if (l.includes('swim'))    return 'Klaar — ga ook nog een lichte zwemtraining'
+      return 'Klaar — optioneel lichte cardio'
+    }
+
+    // Known rest/recovery template labels
+    const knownLabels: Record<string, string> = {
+      'rest today':                     'Neem vandaag rust',
+      'rest day recommended':           'Neem vandaag rust',
+      'active recovery':                'Doe 20–30 min licht bewegen',
+      'keep it light':                  'Houd het licht vandaag',
+      'leg day recommended':            'Doe vandaag een beentraining',
+      'push day recommended':           'Doe vandaag een push dag',
+      'pull day recommended':           'Doe vandaag een pull dag',
+      'easy endurance run recommended': 'Ga 30–40 min rustig hardlopen',
+      'easy endurance ride recommended':'Ga 30–45 min rustig fietsen',
+      'easy session':                   'Doe iets licht vandaag',
+    }
+    if (knownLabels[l]) return knownLabels[l]
+
+    // Calendar-event-driven: label = event title (possibly with time suffix "· 19:00")
+    const eventTitle = focus.label.split(' · ')[0]
+    const actionMap: Record<string, string> = {
+      'Stay the course':  `Ga ${eventTitle}`,
+      'Train lighter':    `Doe ${eventTitle}, maar houd het lichter`,
+      'Train shorter':    `Doe ${eventTitle}, maar maak het korter`,
+      'Recovery day':     l.includes('rest') ? 'Neem vandaag rust' : `Sla ${eventTitle} over — neem rust`,
+      'Move to tomorrow': `Verplaats ${eventTitle} naar morgen`,
+    }
+    return actionMap[action] ?? focus.label
+  }
+
+  const DUTCH_ACTION: Record<string, string> = {
+    'Stay the course':  'Train vandaag',
+    'Train lighter':    'Houd het lichter',
+    'Train shorter':    'Maak het korter',
+    'Recovery day':     'Neem rust',
+    'Move to tomorrow': 'Doe het morgen',
+    'Rest & recover':   'Rust & herstel',
+    'Optional Zone 2':  'Optioneel Zone 2',
+  }
+
+  const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
+  const headline = toSpecificRecommendation()
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Today's Recommendation</p>
-        {biasApplied && (
-          <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalised</span>
-        )}
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Vandaag</p>
+        <div className="flex items-center gap-2.5">
+          {biasApplied && (
+            <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Gepersonaliseerd</span>
+          )}
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} />
+            <span className="text-[11px] font-semibold" style={{ color: rc }}>Readiness {readinessPct}%</span>
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4 mb-4">
-        <span className="text-[42px] leading-none">{focus.emoji}</span>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[22px] font-bold text-white leading-tight">{focus.label}</span>
+      <div className="flex items-start gap-4 mb-4">
+        <span className="text-[38px] leading-none mt-1 shrink-0">{focus.emoji}</span>
+        <div className="flex flex-col gap-2">
+          <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
           <span
             className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black"
             style={{ background: focus.actionColor }}
           >
-            {focus.action}
+            {DUTCH_ACTION[focus.action] ?? focus.action}
           </span>
         </div>
       </div>
 
       {focus.reasons.length > 0 && (
         <div className="pt-3 border-t border-white/[0.08] mb-3">
-          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why?</p>
+          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Waarom?</p>
           <div className="flex flex-col gap-1.5">
             {focus.reasons.map((r, i) => (
               <div key={i} className="flex items-start gap-2">
@@ -2911,31 +2970,54 @@ function PlannedEventsCard({
   )
 }
 
-function WorkoutRatingCard() {
+function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
+  activities: Activity[]
+  hevy: HevyWorkout[]
+  coachAdvice: string
+}) {
   const supabase = useMemo(() => createClient(), [])
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
   const [selected, setSelected] = useState<string | null>(null)
 
+  // Most recent workout from today or yesterday
+  const latestWorkout = useMemo(() => {
+    const candidates = [
+      ...hevy
+        .filter(h => h.start_time.slice(0, 10) >= yesterdayStr)
+        .map(h => ({ name: h.title, date: h.start_time, day: h.start_time.slice(0, 10) })),
+      ...activities
+        .filter(a => a.start_date.slice(0, 10) >= yesterdayStr)
+        .map(a => ({ name: a.name, date: a.start_date, day: a.start_date.slice(0, 10) })),
+    ].sort((a, b) => b.date.localeCompare(a.date))
+    return candidates[0] ?? null
+  }, [hevy, activities]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
+    if (!latestWorkout) return
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase.from('session_ratings').select('rating').eq('user_id', user.id).eq('date', todayStr).maybeSingle()
+      const { data } = await supabase
+        .from('session_ratings').select('rating')
+        .eq('user_id', user.id).eq('date', latestWorkout!.day).maybeSingle()
       if (data?.rating) setSelected(data.rating)
     }
     load()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [latestWorkout?.day]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!latestWorkout) return null
 
   const save = async (rating: string) => {
     setSelected(rating)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('session_ratings').upsert(
-      { user_id: user.id, date: todayStr, rating },
+      { user_id: user.id, date: latestWorkout.day, rating, coach_advice: coachAdvice },
       { onConflict: 'user_id,date' }
     )
   }
 
+  const whenLabel = latestWorkout.day === yesterdayStr ? 'gisteren' : 'vandaag'
   const options = [
     { key: 'licht', label: 'Licht', emoji: '😌' },
     { key: 'middel', label: 'Middel', emoji: '💪' },
@@ -2945,7 +3027,10 @@ function WorkoutRatingCard() {
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Hoe voelde de training vandaag?</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Hoe voelde het {whenLabel}?</span>
+          <span className="text-[15px] font-semibold text-white">{latestWorkout.name}</span>
+        </div>
         <div className="flex gap-2">
           {options.map(o => (
             <button
@@ -3098,7 +3183,10 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
 
   return (
     <div className="flex flex-col gap-[18px]">
-      {/* 1. Gepland + gedaan + readiness */}
+      {/* 1. Vandaag — specific Dutch recommendation with readiness */}
+      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} />
+
+      {/* 2. Gepland + gedaan */}
       <PlannedEventsCard
         calendarEvents={calendarEvents}
         pastCalendarEvents={pastCalendarEvents}
@@ -3108,20 +3196,20 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
         recoveryDetail={recoveryDetail}
       />
 
-      {/* 2. This Week */}
+      {/* 3. Rate recent workout — only visible after a session */}
+      <WorkoutRatingCard activities={activities} hevy={hevy} coachAdvice={todaysFocus.label} />
+
+      {/* 4. This Week */}
       <WeekSummaryCard
         weekCompleted={weekCompleted}
         weekUpcomingPlanned={weekUpcomingPlanned}
         sportRows={sportRows}
       />
 
-      {/* 3. Hoe voelde de training */}
-      <WorkoutRatingCard />
-
-      {/* 4. Readiness detail */}
+      {/* 5. Readiness detail */}
       <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
 
-      {/* 5. What Kern learned about you */}
+      {/* 6. What Kern learned about you */}
       <LearnedAboutYouCard profile={personalProfile} />
     </div>
   )
