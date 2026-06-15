@@ -124,7 +124,7 @@ export async function POST(_req: NextRequest) {
   const token = await getValidToken(supabase, user.id)
   if (!token) return NextResponse.json({ error: 'not connected' }, { status: 404 })
 
-  const cutoff     = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+  const cutoff     = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const cutoffIso  = cutoff.toISOString()
   const cutoffDate = cutoffIso.split('T')[0]
 
