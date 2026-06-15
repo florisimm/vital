@@ -18,7 +18,8 @@ type Rec = { title: string; text: string }
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function fmtMin(min: number) {
-  const h = Math.floor(min / 60), m = min % 60
+  const total = Math.round(min)
+  const h = Math.floor(total / 60), m = total % 60
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
@@ -46,35 +47,33 @@ function computeBaselines(rows: HealthRow[]) {
 // ─── Training load ────────────────────────────────────────────────────────────
 
 function computeTrainingLoad(activities: Activity[]) {
-  const now   = Date.now()
-  const todayDate = new Date(now).toISOString().slice(0, 10)
-  const d7    = new Date(now - 7  * 86400000).toISOString()
-  const d14   = new Date(now - 14 * 86400000).toISOString()
-  const d28   = new Date(now - 28 * 86400000).toISOString()
-
-  const week0 = startOfWeek().toISOString()
-  const week1 = startOfWeek(new Date(now - 7 * 86400000)).toISOString()
+  const now  = Date.now()
+  const d7   = new Date(now - 7  * 86400000).toISOString()
+  const d14  = new Date(now - 14 * 86400000).toISOString()
+  const d28  = new Date(now - 28 * 86400000).toISOString()
 
   const minOf = (a: Activity) => (a.moving_time ?? 0) / 60
 
-  const thisWeekMin  = activities.filter(a => a.start_date >= week0).reduce((s, a) => s + minOf(a), 0)
-  const lastWeekMin  = activities.filter(a => a.start_date >= week1 && a.start_date < week0).reduce((s, a) => s + minOf(a), 0)
+  // All windows are rolling so they're directly comparable
   const acute7Min    = activities.filter(a => a.start_date >= d7).reduce((s, a) => s + minOf(a), 0)
+  const prev7Min     = activities.filter(a => a.start_date >= d14 && a.start_date < d7).reduce((s, a) => s + minOf(a), 0)
   const chronic28Min = activities.filter(a => a.start_date >= d28).reduce((s, a) => s + minOf(a), 0)
-  const chronic28Avg = chronic28Min / 4
+  const chronic28Avg = chronic28Min / 4  // avg weekly load over last 4 weeks
 
-  const acwr       = chronic28Avg > 10 ? Math.round((acute7Min / chronic28Avg) * 100) / 100 : null
-  const rampRate   = lastWeekMin > 10 ? Math.round(((thisWeekMin - lastWeekMin) / lastWeekMin) * 100) : null
+  const acwr     = chronic28Avg > 10 ? Math.round((acute7Min / chronic28Avg) * 100) / 100 : null
+  const rampRate = prev7Min > 10 ? Math.round(((acute7Min - prev7Min) / prev7Min) * 100) : null
 
-  // consecutive training days ending today
+  // Consecutive training days (rolling back from today; skip today if no session yet)
   let consecutiveDays = 0
-  for (let i = 0; i < 14; i++) {
+  const hasActivityToday = activities.some(a => a.start_date.slice(0, 10) === new Date(now).toISOString().slice(0, 10))
+  const startOffset = hasActivityToday ? 0 : 1
+  for (let i = startOffset; i < 21; i++) {
     const d = new Date(now - i * 86400000).toISOString().slice(0, 10)
     if (activities.some(a => a.start_date.slice(0, 10) === d)) consecutiveDays++
-    else if (i > 0) break
+    else break
   }
 
-  return { thisWeekMin, lastWeekMin, acwr, rampRate, consecutiveDays }
+  return { acute7Min, prev7Min, chronic28Avg, acwr, rampRate, consecutiveDays }
 }
 
 // ─── Muscle recovery ──────────────────────────────────────────────────────────
@@ -166,6 +165,7 @@ function buildRecs(
 function buildPrompt(
   userMessage: string,
   goal: string,
+  trainingGoalKey: string,
   healthRows: HealthRow[],
   activities: Activity[],
   hevy: HevyWorkout[],
@@ -206,10 +206,23 @@ function buildPrompt(
     `  - ${m.group}: ${m.pct}% recovered${m.lastSession ? ` (last trained ${m.lastSession})` : ' (no recent data)'}`
   ).join('\n')
 
+  const GOAL_PRIORITY: Record<string, string> = {
+    lose_weight:   '1. Recovery\n2. Adherence\n3. Fat loss\n4. Performance',
+    build_muscle:  '1. Recovery\n2. Progressive overload\n3. Protein intake\n4. Cardiovascular fitness',
+    get_fitter:    '1. Recovery\n2. Aerobic load\n3. Consistency\n4. Performance metrics',
+    maintain:      '1. Consistency\n2. Recovery\n3. Balance across modalities',
+    performance:   '1. Performance\n2. Recovery\n3. Training specificity\n4. Volume management',
+  }
+  const priority = GOAL_PRIORITY[trainingGoalKey] ?? null
+
   const system = `You are a data-driven fitness and health coach. You analyse the user's biometric data, training load, sleep, and nutrition and give concise, evidence-based advice. Be direct and specific — no generic tips. Always refer to the actual numbers in the data.`
 
   const context = `## User context — ${today}
-${goal ? `\n### Primary goal\n${goal}\n` : ''}
+${goal || priority ? `
+### Coaching priority
+Primary goal: ${goal || '–'}
+${priority ? `\nPriority order:\n${priority}` : ''}
+` : ''}
 ### Recovery & readiness
 - Readiness score: ${readiness.score ?? '–'} / 100 (${readiness.label})
 - HRV today: ${todayHealth?.hrv_rmssd != null ? `${todayHealth.hrv_rmssd} ms` : '–'}
@@ -224,9 +237,10 @@ ${readiness.explanation ? `- Readiness note: ${readiness.explanation}` : ''}
 ${sleepSummary || '  No data'}
 
 ### Training load
-- This week volume: ${fmtMin(load.thisWeekMin)} (last week: ${fmtMin(load.lastWeekMin)})
+- Last 7 days: ${fmtMin(load.acute7Min)} (prev 7 days: ${fmtMin(load.prev7Min)})
+- 28-day avg weekly volume: ${fmtMin(load.chronic28Avg)}
 - ACWR (7-day / 28-day avg): ${load.acwr != null ? load.acwr : '–'}${load.acwr != null && load.acwr > 1.3 ? ' ⚠ elevated injury risk' : ''}
-- Weekly ramp rate: ${load.rampRate != null ? `${load.rampRate > 0 ? '+' : ''}${load.rampRate}%` : '–'}
+- Ramp rate (this vs prev 7 days): ${load.rampRate != null ? `${load.rampRate > 0 ? '+' : ''}${load.rampRate}%` : '–'}
 - Consecutive training days: ${load.consecutiveDays}
 
 ### Training (last 10 sessions)
@@ -271,7 +285,7 @@ export default function CoachPage() {
 
   function handleSend() {
     if (!message.trim()) return
-    const full = buildPrompt(message, goal, healthRows, activities, hevy, calendarEvents, foodForRecs)
+    const full = buildPrompt(message, goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
     setPrompt(full)
     setMessage('')
   }
