@@ -34,7 +34,7 @@ export async function trainingFetcher() {
       .eq('user_id', user.id).gte('start_date', thirtyDaysAgoDate).order('start_date', { ascending: true }),
     supabase
       .from('user_settings')
-      .select('training_frequencies')
+      .select('training_frequencies,training_goal')
       .eq('user_id', user.id)
       .single(),
     supabase
@@ -62,6 +62,7 @@ export async function trainingFetcher() {
   })
 
   const trainingFrequencies: Record<string, number> = (settings as any)?.training_frequencies ?? {}
+  const trainingGoal: string | null = (settings as any)?.training_goal ?? null
 
   // bias_adjustment per sport: positive = user handles more load than model thinks
   const biasBySport: Record<string, number> = {}
@@ -75,6 +76,7 @@ export async function trainingFetcher() {
     calendarEvents: filteredCalendarEvents,
     pastCalendarEvents,
     trainingFrequencies,
+    trainingGoal,
     biasBySport,
   }
 }

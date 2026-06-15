@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowUp, Copy, Check, X, Pencil } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowUp, Copy, Check, X } from 'lucide-react'
 import useSWR from 'swr'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { CoachRecommendation } from '@/components/ui'
@@ -255,19 +255,6 @@ export default function CoachPage() {
   const [message, setMessage] = useState('')
   const [prompt, setPrompt]   = useState<string | null>(null)
   const [copied, setCopied]   = useState(false)
-  const [goal, setGoal]       = useState('')
-  const [editingGoal, setEditingGoal] = useState(false)
-  const [goalDraft, setGoalDraft]     = useState('')
-
-  useEffect(() => {
-    try { setGoal(localStorage.getItem('coach-goal') ?? '') } catch { /* ignore */ }
-  }, [])
-
-  function saveGoal() {
-    try { localStorage.setItem('coach-goal', goalDraft) } catch { /* ignore */ }
-    setGoal(goalDraft)
-    setEditingGoal(false)
-  }
 
   const today = new Date().toISOString().slice(0, 10)
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
@@ -277,6 +264,7 @@ export default function CoachPage() {
   const activities     = training?.activities ?? []
   const hevy           = training?.hevy ?? []
   const calendarEvents = training?.calendarEvents ?? []
+  const goal           = training?.trainingGoal?.replace(/_/g, ' ') ?? ''
   const foodForRecs    = foodData ? { food_log: foodData.foodLog, targets: foodData.targets } : null
   const recs           = buildRecs(healthRows, activities, calendarEvents, foodForRecs)
   const hasData        = healthRows.length > 0 || activities.length > 0
@@ -297,32 +285,6 @@ export default function CoachPage() {
 
   return (
     <PremiumScreen title="Coach" subtitle="Objective recommendations" contentGap={18}>
-
-      {/* Goal chip */}
-      {editingGoal ? (
-        <div className="flex items-center gap-2">
-          <input
-            autoFocus
-            value={goalDraft}
-            onChange={e => setGoalDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') saveGoal(); if (e.key === 'Escape') setEditingGoal(false) }}
-            placeholder="e.g. HYROX prep, build aerobic base, maintain strength…"
-            className="flex-1 h-[44px] px-4 rounded-[14px] text-white placeholder:text-white/25 outline-none text-[15px]"
-            style={{ background: 'rgba(255,255,255,0.08)' }}
-          />
-          <button onClick={saveGoal} className="h-[44px] px-4 rounded-[14px] text-[14px] font-semibold text-black bg-white shrink-0">Save</button>
-          <button onClick={() => setEditingGoal(false)} className="h-[44px] px-4 rounded-[14px] text-[14px] font-medium text-white/50 shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>Cancel</button>
-        </div>
-      ) : (
-        <button
-          onClick={() => { setGoalDraft(goal); setEditingGoal(true) }}
-          className="flex items-center gap-2 self-start px-4 py-2 rounded-[12px] text-[13px] font-medium transition-opacity"
-          style={{ background: 'rgba(45,212,191,0.10)', border: '1px solid rgba(45,212,191,0.25)', color: goal ? 'rgba(255,255,255,0.8)' : 'rgba(45,212,191,0.7)' }}
-        >
-          <Pencil size={12} />
-          {goal ? `Goal: ${goal}` : 'Set your training goal'}
-        </button>
-      )}
 
       {/* Recs */}
       {hasData ? (
