@@ -98,6 +98,44 @@ export function DataProvider() {
     prefetch()
   }, [])
 
+  // Supabase Realtime — instant SWR revalidation when DB rows change.
+  useEffect(() => {
+    const supabase = createClient()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      const today = () => new Date().toISOString().split('T')[0]
+
+      channel = supabase
+        .channel('app-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'strava_activities', filter: `user_id=eq.${user.id}` }, () => {
+          mutate('training'); mutate('today')
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'hevy_workouts', filter: `user_id=eq.${user.id}` }, () => {
+          mutate('training'); mutate('today')
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter: `user_id=eq.${user.id}` }, () => {
+          mutate('training'); mutate('today')
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_settings', filter: `user_id=eq.${user.id}` }, () => {
+          mutate('training'); mutate('today')
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'gezondheid', filter: `user_id=eq.${user.id}` }, () => {
+          mutate('health-gezondheid'); mutate('today')
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'food_log', filter: `user_id=eq.${user.id}` }, () => {
+          const d = today(); mutate('food-log'); mutate(`food-log-${d}`)
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'coach_bias_adjustments', filter: `user_id=eq.${user.id}` }, () => {
+          mutate('training')
+        })
+        .subscribe()
+    })
+
+    return () => { if (channel) supabase.removeChannel(channel) }
+  }, [])
+
   // Keep health data fresh automatically — no manual sync button.
   // Runs on every app open and re-checks hourly while the app stays open.
   useEffect(() => {
