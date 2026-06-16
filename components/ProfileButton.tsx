@@ -64,6 +64,7 @@ export function ProfileButton() {
   const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
+  const [injuries, setInjuries] = useState<Record<string, boolean>>({ running: false, cycling: false, swimming: false, gym: false })
   const [activeSport, setActiveSport] = useState<string | null>(null)
   const [weeklyDoneIdx, setWeeklyDoneIdx] = useState<Record<string, number[]>>({})
   const [personalZones, setPersonalZones] = useState<Record<string, { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }>>({})
@@ -141,7 +142,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -165,7 +166,36 @@ export function ProfileButton() {
             setSportOrder(data.training_sport_priority)
           if (Array.isArray(data?.training_goal_priority) && data.training_goal_priority.length > 0)
             setGoalOrder(data.training_goal_priority)
+          if (data?.training_injuries && typeof data.training_injuries === 'object')
+            setInjuries(prev => ({ ...prev, ...data.training_injuries }))
         })
+
+      // Auto-detect injuries from calendar events and recent Strava activities
+      const SPORT_KEYWORDS: Record<string, string[]> = {
+        running:  ['hardlopen', 'lopen', 'run', 'running'],
+        cycling:  ['fietsen', 'fiets', 'bike', 'cycling', 'koers', 'wielren'],
+        swimming: ['zwemmen', 'zwem', 'swim', 'swimming', 'pool'],
+        gym:      ['gym', 'krachttraining', 'fitness', 'weight'],
+      }
+      Promise.all([
+        supabase.from('calendar_events').select('title').eq('user_id', uid).gte('start_time', new Date(Date.now() - 14 * 86400000).toISOString()),
+        supabase.from('strava_activities').select('name').eq('user_id', uid).gte('start_date', new Date(Date.now() - 14 * 86400000).toISOString()),
+      ]).then(([cal, strava]) => {
+        const allNames = [
+          ...(cal.data ?? []).map(e => e.title ?? ''),
+          ...(strava.data ?? []).map(a => a.name ?? ''),
+        ]
+        const detected: Record<string, boolean> = {}
+        for (const name of allNames) {
+          const lower = name.toLowerCase()
+          if (!lower.includes('blessure') && !lower.includes('injured') && !lower.includes('injury')) continue
+          for (const [sport, kws] of Object.entries(SPORT_KEYWORDS)) {
+            if (kws.some(kw => lower.includes(kw))) detected[sport] = true
+          }
+        }
+        if (Object.keys(detected).length > 0)
+          setInjuries(prev => ({ ...prev, ...detected }))
+      })
     })
   }, [open])
 
@@ -420,7 +450,7 @@ export function ProfileButton() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder, training_injuries: injuries })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
@@ -1074,14 +1104,24 @@ export function ProfileButton() {
                               key={key}
                               style={{ borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
                             >
-                              <div className="flex items-center gap-3 px-4 py-3.5">
+                              <div className="flex items-center gap-3 px-4 py-3.5" style={{ opacity: injuries[key] ? 0.5 : 1 }}>
                                 <button
-                                  onClick={() => val > 0 && setActiveSport(key)}
+                                  onClick={() => val > 0 && !injuries[key] && setActiveSport(key)}
                                   className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-60"
                                 >
-                                  <span className="text-[16px] shrink-0">{meta.icon}</span>
-                                  <span className="flex-1 text-[15px] text-white">{meta.label}</span>
-                                  {val > 0 && <ChevronRight size={14} className="text-white/25 shrink-0" />}
+                                  <span className="text-[16px] shrink-0">{injuries[key] ? '🤕' : meta.icon}</span>
+                                  <div className="flex-1 flex flex-col gap-0">
+                                    <span className={`text-[15px] ${injuries[key] ? 'line-through text-white/40' : 'text-white'}`}>{meta.label}</span>
+                                    {injuries[key] && <span className="text-[11px] text-orange-400/80">Blessure — niet aanbevolen</span>}
+                                  </div>
+                                  {val > 0 && !injuries[key] && <ChevronRight size={14} className="text-white/25 shrink-0" />}
+                                </button>
+                                <button
+                                  onClick={() => setInjuries(prev => ({ ...prev, [key]: !prev[key] }))}
+                                  className="shrink-0 px-2 py-1 rounded-[10px] text-[11px] font-semibold active:opacity-60"
+                                  style={{ background: injuries[key] ? 'rgba(251,146,60,0.18)' : 'rgba(255,255,255,0.07)', color: injuries[key] ? 'rgb(251,146,60)' : 'rgba(255,255,255,0.35)', border: `1px solid ${injuries[key] ? 'rgba(251,146,60,0.35)' : 'rgba(255,255,255,0.08)'}` }}
+                                >
+                                  {injuries[key] ? 'Hersteld' : 'Blessure'}
                                 </button>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <button onClick={() => setFreq(key, -1)} disabled={val === 0}
