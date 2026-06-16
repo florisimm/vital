@@ -384,7 +384,7 @@ export default function TodayPage() {
         />
         <FocusCard items={focus} />
         <ProgressCard data={effectiveData} />
-        <UpcomingCard events={effectiveData?.calendarEvents ?? []} />
+        <UpcomingCard events={(effectiveData?.calendarEvents ?? []).filter(isSport)} />
       </div>
     </PremiumScreen>
   )
