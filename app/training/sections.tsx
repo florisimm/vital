@@ -3660,14 +3660,17 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   )
 }
 
-export function RunningSection({ activities, hevy = [], todaySport = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null }) {
+const INTENSITY_BIAS: Record<string, number> = { easy: -15, moderate: 0, hard: 15, all_out: 25 }
+
+export function RunningSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate' }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
-  const readinessPct = physiologyReadiness.score !== null
+  const rawReadiness = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
-  const runningSuggestion = readinessPct >= 85 ? 'Tempo run' : readinessPct >= 70 ? 'Easy run' : 'Rest day'
+  const readinessPct = Math.min(100, Math.max(0, rawReadiness + (INTENSITY_BIAS[trainingIntensity] ?? 0)))
+  const runningSuggestion = readinessPct >= 85 ? 'Tempo run' : readinessPct >= 70 ? 'Easy run' : 'Recovery run'
 
   const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRun = allRuns[0] ?? null
@@ -3824,13 +3827,14 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   )
 }
 
-export function CyclingSection({ activities, hevy = [], todaySport = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null }) {
+export function CyclingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate' }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
-  const readinessPct = physiologyReadiness.score !== null
+  const rawReadiness = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
+  const readinessPct = Math.min(100, Math.max(0, rawReadiness + (INTENSITY_BIAS[trainingIntensity] ?? 0)))
   const cyclingSuggestion = readinessPct >= 85 ? 'Threshold training' : readinessPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
 
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
@@ -4351,13 +4355,14 @@ function SwimmingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeSw
   )
 }
 
-export function SwimmingSection({ activities, hevy = [], todaySport = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null }) {
+export function SwimmingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate' }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
-  const readinessPct = physiologyReadiness.score !== null
+  const rawReadiness = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
+  const readinessPct = Math.min(100, Math.max(0, rawReadiness + (INTENSITY_BIAS[trainingIntensity] ?? 0)))
   const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swim' : 'Recovery swim'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
 

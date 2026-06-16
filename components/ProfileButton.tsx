@@ -64,9 +64,9 @@ export function ProfileButton() {
   const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null)
-  const dragFromRef = useRef<number | null>(null)
-  const rowRefs = useRef<(HTMLElement | null)[]>([])
+  const [draggingKey, setDraggingKey] = useState<string | null>(null)
+  const dragKeyRef = useRef<string | null>(null)
+  const dragContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
@@ -426,6 +426,45 @@ export function ProfileButton() {
     setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
   }
 
+  function startDrag(key: string, e: React.MouseEvent | React.TouchEvent) {
+    if ('touches' in e) e.preventDefault()
+    dragKeyRef.current = key
+    setDraggingKey(key)
+
+    function onMove(ev: MouseEvent | TouchEvent) {
+      if (!dragKeyRef.current || !dragContainerRef.current) return
+      const y = 'touches' in ev ? (ev as TouchEvent).touches[0]?.clientY ?? 0 : (ev as MouseEvent).clientY
+      const rows = dragContainerRef.current.querySelectorAll<HTMLElement>('[data-drag-key]')
+      for (const row of Array.from(rows)) {
+        const rect = row.getBoundingClientRect()
+        const k = row.dataset.dragKey
+        if (y >= rect.top && y <= rect.bottom && k && k !== dragKeyRef.current) {
+          const fromKey = dragKeyRef.current
+          setSportOrder(prev => {
+            const from = prev.indexOf(fromKey); const to = prev.indexOf(k)
+            if (from === -1 || to === -1) return prev
+            const next = [...prev]; next.splice(from, 1); next.splice(to, 0, fromKey); return next
+          })
+          break
+        }
+      }
+    }
+
+    function onEnd() {
+      dragKeyRef.current = null
+      setDraggingKey(null)
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('touchmove', onMove as EventListener)
+      document.removeEventListener('mouseup', onEnd)
+      document.removeEventListener('touchend', onEnd)
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('touchmove', onMove as EventListener, { passive: false })
+    document.addEventListener('mouseup', onEnd)
+    document.addEventListener('touchend', onEnd)
+  }
+
 
   async function requestNotifications() {
     if (!('Notification' in window)) return
@@ -717,80 +756,63 @@ export function ProfileButton() {
 
               <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-                {/* Weekly frequency — draggable to set priority */}
+                {/* Weekly frequency — drag ≡ handle to reorder priority */}
                 <div className="flex flex-col gap-2">
-                  <div className="px-1 flex items-center justify-between">
+                  <div className="px-1">
                     <span className="text-[13px] font-medium text-white/40">Weekly frequency</span>
-                    <span className="text-[11px] text-white/25">Drag to set priority</span>
+                    <p className="text-[11px] text-white/25 mt-0.5">Houd het ≡ icoontje vast en sleep om prioriteit te wijzigen</p>
                   </div>
-                  <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                    {(() => {
-                      const SPORT_META: Record<string, { label: string; icon: string }> = {
-                        running:  { label: 'Running',        icon: '🏃' },
-                        cycling:  { label: 'Cycling',        icon: '🚴' },
-                        swimming: { label: 'Swimming',       icon: '🏊' },
-                        gym:      { label: 'Gym / Strength', icon: '🏋️' },
-                      }
-                      return sportOrder.map((key, i) => {
-                        const meta = SPORT_META[key]; if (!meta) return null
-                        const val = trainingFrequencies[key] ?? 0
-                        const isDragging = draggingIdx === i
-                        return (
-                          <div
-                            key={key}
-                            ref={el => { rowRefs.current[i] = el }}
-                            style={{ opacity: isDragging ? 0.45 : 1, transition: 'opacity 0.1s', borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
-                          >
-                            <div className="flex items-center gap-2 px-4 py-3">
-                              {/* drag handle */}
-                              <div
-                                className="touch-none cursor-grab active:cursor-grabbing shrink-0 pr-1"
-                                onPointerDown={e => {
-                                  e.currentTarget.setPointerCapture(e.pointerId)
-                                  dragFromRef.current = i
-                                  setDraggingIdx(i)
-                                }}
-                                onPointerMove={e => {
-                                  if (dragFromRef.current === null) return
-                                  const y = e.clientY
-                                  for (let j = 0; j < rowRefs.current.length; j++) {
-                                    const el = rowRefs.current[j]; if (!el) continue
-                                    const rect = el.getBoundingClientRect()
-                                    if (y >= rect.top && y <= rect.bottom && j !== dragFromRef.current) {
-                                      const from = dragFromRef.current
-                                      setSportOrder(prev => {
-                                        const next = [...prev]; const [item] = next.splice(from, 1); next.splice(j, 0, item); return next
-                                      })
-                                      dragFromRef.current = j; setDraggingIdx(j); break
-                                    }
-                                  }
-                                }}
-                                onPointerUp={() => { dragFromRef.current = null; setDraggingIdx(null) }}
-                                onPointerCancel={() => { dragFromRef.current = null; setDraggingIdx(null) }}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-white/25">
-                                  <circle cx="8" cy="6" r="2"/><circle cx="16" cy="6" r="2"/>
-                                  <circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/>
-                                  <circle cx="8" cy="18" r="2"/><circle cx="16" cy="18" r="2"/>
-                                </svg>
-                              </div>
-                              <span className="text-[16px] w-5 text-center shrink-0">{meta.icon}</span>
-                              <span className="flex-1 text-[15px] text-white">{meta.label}</span>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => setFreq(key, -1)} disabled={val === 0}
-                                  className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                                  style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
-                                <span className="text-[15px] font-semibold text-white w-6 text-center">{val === 0 ? '–' : `${val}×`}</span>
-                                <button onClick={() => setFreq(key, +1)} disabled={val === 7}
-                                  className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                                  style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+                  {(() => {
+                    const SPORT_META: Record<string, { label: string; icon: string }> = {
+                      running:  { label: 'Running',        icon: '🏃' },
+                      cycling:  { label: 'Cycling',        icon: '🚴' },
+                      swimming: { label: 'Swimming',       icon: '🏊' },
+                      gym:      { label: 'Gym / Strength', icon: '🏋️' },
+                    }
+                    return (
+                      <div ref={dragContainerRef} className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        {sportOrder.map((key, i) => {
+                          const meta = SPORT_META[key]; if (!meta) return null
+                          const val = trainingFrequencies[key] ?? 0
+                          const isDragging = draggingKey === key
+                          return (
+                            <div
+                              key={key}
+                              data-drag-key={key}
+                              style={{ opacity: isDragging ? 0.4 : 1, borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
+                            >
+                              <div className="flex items-center gap-3 px-4 py-3.5">
+                                <div
+                                  className="shrink-0 cursor-grab active:cursor-grabbing select-none px-1 py-2"
+                                  style={{ touchAction: 'none' }}
+                                  onMouseDown={e => startDrag(key, e)}
+                                  onTouchStart={e => startDrag(key, e)}
+                                >
+                                  <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="text-white/35">
+                                    <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
+                                    <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
+                                    <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
+                                  </svg>
+                                </div>
+                                <span className="text-[13px] text-teal-400/60 font-bold w-4 shrink-0">{i + 1}</span>
+                                <span className="text-[16px] shrink-0">{meta.icon}</span>
+                                <span className="flex-1 text-[15px] text-white">{meta.label}</span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button onClick={() => setFreq(key, -1)} disabled={val === 0}
+                                    className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                                    style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
+                                  <span className="text-[15px] font-semibold text-white w-6 text-center">{val === 0 ? '–' : `${val}×`}</span>
+                                  <button onClick={() => setFreq(key, +1)} disabled={val === 7}
+                                    className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                                    style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )
-                      })
-                    })()}
-                  </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Intensity preference */}
