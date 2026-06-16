@@ -3146,9 +3146,9 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   )
 }
 
-// Training overview "Today" card — shows only what you've actually completed
-// today. The recommendation itself lives on the Today tab, so we don't repeat it.
-function TodayDoneCard({ activities, hevy }: { activities: Activity[]; hevy: HevyWorkout[] }) {
+const SPORT_KW_OVERVIEW = ['run','ride','bike','cycl','swim','zwem','gym','strength','push','pull','legs','kracht','bench','deadlift','hyrox','loop','hardloop','interval','tempo','toernooi','tournament','sport','training','workout','football','tennis','padel','hockey','basketball','yoga','crossfit']
+
+function TodayDoneCard({ activities, hevy, calendarEvents = [] }: { activities: Activity[]; hevy: HevyWorkout[]; calendarEvents?: any[] }) {
   const done: { name: string; emoji: string }[] = [
     ...hevy.map(h => ({ name: h.title || 'Strength workout', emoji: '🏋️' })),
     ...activities
@@ -3159,22 +3159,64 @@ function TodayDoneCard({ activities, hevy }: { activities: Activity[]; hevy: Hev
       })),
   ]
 
+  const nowIso = new Date().toISOString()
+  const next = calendarEvents
+    .filter(e => {
+      const t = (e.title ?? '').toLowerCase()
+      return SPORT_KW_OVERVIEW.some(k => t.includes(k)) && (e.start_datetime || e.start_date) > nowIso.slice(0, 10)
+    })
+    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0] ?? null
+
+  function nextLabel(e: any): string {
+    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
+    const today = new Date(); today.setHours(0,0,0,0)
+    const tom   = new Date(today); tom.setDate(today.getDate() + 1)
+    const dayStr = d >= tom && d < new Date(tom.getTime() + 86400000) ? 'Tomorrow'
+      : d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })
+    const timeStr = e.start_datetime
+      ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : ''
+    return timeStr ? `${dayStr} · ${timeStr}` : dayStr
+  }
+
+  function sportEmoji(title: string): string {
+    const t = title.toLowerCase()
+    if (['ride','bike','cycl','fiet'].some(k => t.includes(k))) return '🚴'
+    if (['run','loop','hardloop','interval','tempo'].some(k => t.includes(k))) return '🏃'
+    if (['swim','zwem'].some(k => t.includes(k))) return '🏊'
+    if (['gym','push','pull','legs','kracht','bench','deadlift','hyrox','strength'].some(k => t.includes(k))) return '🏋️'
+    return '🏅'
+  }
+
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today</span>
-        {done.length > 0 ? (
-          <div className="flex flex-col gap-2">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Next session</span>
+        {next ? (
+          <a
+            href={`/training/session?title=${encodeURIComponent(next.title)}&time=${encodeURIComponent(next.start_datetime ?? next.start_date)}`}
+            className="flex items-center gap-3 active:opacity-70 transition-opacity"
+          >
+            <span className="text-[28px] leading-none shrink-0">{sportEmoji(next.title)}</span>
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <span className="text-[15px] font-semibold text-white truncate">{next.title}</span>
+              <span className="text-[12px] text-white/40">{nextLabel(next)}</span>
+            </div>
+            <span className="text-white/25 text-[18px] shrink-0">›</span>
+          </a>
+        ) : (
+          <p className="text-[14px] text-white/40">No upcoming sessions planned.</p>
+        )}
+        {done.length > 0 && (
+          <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.06]">
             {done.map((w, i) => (
               <div key={i} className="flex items-center gap-3">
                 <span className="text-[20px] leading-none shrink-0">{w.emoji}</span>
-                <span className="text-[15px] font-semibold text-white flex-1 min-w-0 truncate">{w.name}</span>
-                <span className="text-teal-400 text-[13px] font-bold shrink-0">✓ Done</span>
+                <span className="text-[14px] font-semibold text-white flex-1 min-w-0 truncate">{w.name}</span>
+                <span className="text-teal-400 text-[12px] font-bold shrink-0">✓ Done</span>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-[14px] text-white/40">Nothing logged yet today. Check the Today tab for your recommendation.</p>
         )}
       </div>
     </Card>
@@ -3342,7 +3384,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
   return (
     <div className="flex flex-col gap-[18px]">
       {/* 1. Today — only what you've completed (recommendation lives on the Today tab) */}
-      <TodayDoneCard activities={todayActivities} hevy={todayHevy} />
+      <TodayDoneCard activities={todayActivities} hevy={todayHevy} calendarEvents={calendarEvents} />
 
       {/* 2. Rate recent workout — only visible after a session */}
       <WorkoutRatingCard activities={activities} hevy={hevy} coachAdvice={todaysFocus.label} />
