@@ -64,9 +64,7 @@ export function ProfileButton() {
   const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
-  const [draggingKey, setDraggingKey] = useState<string | null>(null)
-  const dragKeyRef = useRef<string | null>(null)
-  const dragContainerRef = useRef<HTMLDivElement | null>(null)
+  const [activeSport, setActiveSport] = useState<string | null>(null)
   const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
   const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
   const dragGoalKeyRef = useRef<string | null>(null)
@@ -432,44 +430,62 @@ export function ProfileButton() {
     setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
   }
 
-  function startDrag(key: string, e: React.MouseEvent | React.TouchEvent) {
-    if ('touches' in e) e.preventDefault()
-    dragKeyRef.current = key
-    setDraggingKey(key)
+  type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string }
 
-    function onMove(ev: MouseEvent | TouchEvent) {
-      ev.preventDefault()
-      if (!dragKeyRef.current || !dragContainerRef.current) return
-      const y = 'touches' in ev ? (ev as TouchEvent).touches[0]?.clientY ?? 0 : (ev as MouseEvent).clientY
-      const rows = dragContainerRef.current.querySelectorAll<HTMLElement>('[data-drag-key]')
-      for (const row of Array.from(rows)) {
-        const rect = row.getBoundingClientRect()
-        const k = row.dataset.dragKey
-        if (y >= rect.top && y <= rect.bottom && k && k !== dragKeyRef.current) {
-          const fromKey = dragKeyRef.current
-          setSportOrder(prev => {
-            const from = prev.indexOf(fromKey); const to = prev.indexOf(k)
-            if (from === -1 || to === -1) return prev
-            const next = [...prev]; next.splice(from, 1); next.splice(to, 0, fromKey); return next
-          })
-          break
-        }
-      }
+  function getSessionTemplates(sport: string, freq: number): SessionTemplate[] {
+    const n = Math.max(1, Math.min(freq, 7))
+    if (sport === 'running') {
+      const all: SessionTemplate[] = [
+        { title: 'Easy run',          subtitle: 'Zone 2 aerobic — conversational pace',        duration: '40–50 min', emoji: '🏃', href: '/training/session?title=Easy+Run' },
+        { title: 'Interval training', subtitle: '5×1 km at 5K pace — VO2max boost',             duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Running+Intervals' },
+        { title: 'Long run',          subtitle: 'Slow & steady — builds endurance base',        duration: '60–90 min', emoji: '🛣️', href: '/training/session?title=Long+Run' },
+        { title: 'Tempo run',         subtitle: 'Comfortably hard — lactate threshold',         duration: '35–45 min', emoji: '🔥', href: '/training/session?title=Tempo+Run' },
+        { title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',         duration: '40–50 min', emoji: '⛰️', href: '/training/session?title=Hill+Repeats' },
+      ]
+      return all.slice(0, n)
     }
-
-    function onEnd() {
-      dragKeyRef.current = null
-      setDraggingKey(null)
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('touchmove', onMove as EventListener)
-      document.removeEventListener('mouseup', onEnd)
-      document.removeEventListener('touchend', onEnd)
+    if (sport === 'cycling') {
+      const all: SessionTemplate[] = [
+        { title: 'Endurance ride',  subtitle: 'Zone 2 — fat metabolism & aerobic base',       duration: '60–90 min', emoji: '🚴', href: '/training/session?title=Endurance+Ride' },
+        { title: 'FTP intervals',   subtitle: '3×10 min threshold — raise FTP',               duration: '55–65 min', emoji: '⚡', href: '/training/session?title=FTP+Intervals' },
+        { title: 'Recovery ride',   subtitle: 'Easy spin — flush legs & recover',             duration: '30–45 min', emoji: '🌱', href: '/training/session?title=Recovery+Ride' },
+        { title: 'VO₂max effort',   subtitle: '5×3 min at 110% FTP — aerobic ceiling',       duration: '50–60 min', emoji: '🔥', href: '/training/session?title=VO2max+Cycling' },
+        { title: 'Long ride',       subtitle: 'Steady endurance — big aerobic volume',        duration: '90–120 min', emoji: '🛣️', href: '/training/session?title=Long+Ride' },
+      ]
+      return all.slice(0, n)
     }
-
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('touchmove', onMove as EventListener, { passive: false })
-    document.addEventListener('mouseup', onEnd)
-    document.addEventListener('touchend', onEnd)
+    if (sport === 'swimming') {
+      const all: SessionTemplate[] = [
+        { title: 'Endurance swim',   subtitle: 'Steady aerobic pace — 2000–3000m',            duration: '45–60 min', emoji: '🏊', href: '/training/session?title=Endurance+Swim' },
+        { title: 'Speed intervals',  subtitle: '8×100m with 20s rest — pace work',            duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Swimming+Intervals' },
+        { title: 'Technique drills', subtitle: 'Pull buoy, catch drills, form focus',         duration: '40–50 min', emoji: '🎯', href: '/training/session?title=Swim+Technique' },
+        { title: 'Mixed session',    subtitle: 'Warm-up + speed + endurance + cool-down',     duration: '55–70 min', emoji: '🌊', href: '/training/session?title=Swimming' },
+      ]
+      return all.slice(0, n)
+    }
+    if (sport === 'gym') {
+      const splits: SessionTemplate[][] = [
+        [{ title: 'Full body',  subtitle: 'Squat · press · row · hinge — all patterns',         duration: '55–65 min', emoji: '🏋️', href: '/training/strength' }],
+        [
+          { title: 'Upper body', subtitle: 'Chest · shoulders · back · arms',                   duration: '50–60 min', emoji: '💪', href: '/training/strength' },
+          { title: 'Lower body', subtitle: 'Squat · hinge · calves · core',                     duration: '50–60 min', emoji: '🦵', href: '/training/strength' },
+        ],
+        [
+          { title: 'Push',  subtitle: 'Chest · shoulders · triceps',                            duration: '55–65 min', emoji: '⬆️', href: '/training/strength' },
+          { title: 'Pull',  subtitle: 'Back · rear delts · biceps',                             duration: '55–65 min', emoji: '⬇️', href: '/training/strength' },
+          { title: 'Legs',  subtitle: 'Quads · hamstrings · glutes · calves',                  duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
+        ],
+        [
+          { title: 'Upper A', subtitle: 'Chest focus — bench · OHP · rows',                    duration: '55–65 min', emoji: '💪', href: '/training/strength' },
+          { title: 'Lower A', subtitle: 'Squat focus — back squat · lunges · RDL',             duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
+          { title: 'Upper B', subtitle: 'Back focus — pull-ups · rows · chest',                duration: '55–65 min', emoji: '🔄', href: '/training/strength' },
+          { title: 'Lower B', subtitle: 'Hinge focus — deadlift · leg press · core',           duration: '55–65 min', emoji: '🔁', href: '/training/strength' },
+        ],
+      ]
+      const split = splits[Math.min(n - 1, splits.length - 1)]
+      return split.slice(0, n)
+    }
+    return []
   }
 
 
@@ -792,6 +808,65 @@ export function ProfileButton() {
           {editingTraining && (
             <div className="absolute inset-0 z-10 flex flex-col"
               style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+
+              {/* Sport session templates sub-overlay */}
+              {activeSport && (() => {
+                const SPORT_META: Record<string, { label: string; icon: string }> = {
+                  running:  { label: 'Running',        icon: '🏃' },
+                  cycling:  { label: 'Cycling',        icon: '🚴' },
+                  swimming: { label: 'Swimming',       icon: '🏊' },
+                  gym:      { label: 'Gym / Strength', icon: '🏋️' },
+                }
+                const meta = SPORT_META[activeSport]
+                const freq = trainingFrequencies[activeSport] ?? 0
+                const templates = getSessionTemplates(activeSport, freq)
+                return (
+                  <div className="absolute inset-0 z-20 flex flex-col"
+                    style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+                    <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                      <button onClick={() => setActiveSport(null)}
+                        className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.10)' }}>
+                        Back
+                      </button>
+                      <span className="text-[17px] font-semibold text-white">{meta?.label}</span>
+                      <div className="w-16" />
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
+                      <div className="px-1">
+                        <p className="text-[13px] text-white/35">
+                          {freq}× per week · {freq} trainingsschema{freq !== 1 ? "'s" : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {templates.map((t, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { saveTraining(); setOpen(false); router.push(t.href) }}
+                            className="flex items-center gap-4 px-4 py-4 rounded-[18px] text-left active:opacity-70 transition-opacity"
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                          >
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-[20px]"
+                              style={{ background: 'rgba(45,212,191,0.12)' }}>
+                              {t.emoji}
+                            </div>
+                            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-teal-400/70 uppercase tracking-[0.1em]">Sessie {i + 1}</span>
+                              </div>
+                              <span className="text-[15px] font-semibold text-white leading-tight">{t.title}</span>
+                              <span className="text-[12px] text-white/40 leading-snug">{t.subtitle}</span>
+                              <span className="text-[11px] text-white/25 mt-0.5">{t.duration}</span>
+                            </div>
+                            <ChevronRight size={16} className="text-white/20 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
               <div className="flex items-center justify-between px-5 py-4 shrink-0">
                 <button onClick={saveTraining} disabled={trainingSaving}
                   className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold disabled:opacity-40"
@@ -804,11 +879,11 @@ export function ProfileButton() {
 
               <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-                {/* Weekly frequency — drag ≡ handle to reorder priority */}
+                {/* Weekly frequency */}
                 <div className="flex flex-col gap-2">
                   <div className="px-1">
                     <span className="text-[13px] font-medium text-white/40">Weekly frequency</span>
-                    <p className="text-[11px] text-white/25 mt-0.5">Sleep een rij om de volgorde (prioriteit) te wijzigen</p>
+                    <p className="text-[11px] text-white/25 mt-0.5">Tap een sport voor trainingsschema's</p>
                   </div>
                   {(() => {
                     const SPORT_META: Record<string, { label: string; icon: string }> = {
@@ -818,30 +893,25 @@ export function ProfileButton() {
                       gym:      { label: 'Gym / Strength', icon: '🏋️' },
                     }
                     return (
-                      <div ref={dragContainerRef} className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', touchAction: 'none' }}>
+                      <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
                         {sportOrder.map((key, i) => {
                           const meta = SPORT_META[key]; if (!meta) return null
                           const val = trainingFrequencies[key] ?? 0
-                          const isDragging = draggingKey === key
                           return (
                             <div
                               key={key}
-                              data-drag-key={key}
-                              className="cursor-grab active:cursor-grabbing select-none"
-                              style={{ opacity: isDragging ? 0.4 : 1, borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
-                              onMouseDown={e => startDrag(key, e)}
-                              onTouchStart={e => startDrag(key, e)}
+                              style={{ borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
                             >
                               <div className="flex items-center gap-3 px-4 py-3.5">
-                                <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="shrink-0 text-white/35">
-                                  <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
-                                  <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
-                                  <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
-                                </svg>
-                                <span className="text-[13px] text-teal-400/60 font-bold w-4 shrink-0">{i + 1}</span>
-                                <span className="text-[16px] shrink-0">{meta.icon}</span>
-                                <span className="flex-1 text-[15px] text-white select-none">{meta.label}</span>
-                                <div className="flex items-center gap-2 shrink-0" onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+                                <button
+                                  onClick={() => val > 0 && setActiveSport(key)}
+                                  className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-60"
+                                >
+                                  <span className="text-[16px] shrink-0">{meta.icon}</span>
+                                  <span className="flex-1 text-[15px] text-white">{meta.label}</span>
+                                  {val > 0 && <ChevronRight size={14} className="text-white/25 shrink-0" />}
+                                </button>
+                                <div className="flex items-center gap-2 shrink-0">
                                   <button onClick={() => setFreq(key, -1)} disabled={val === 0}
                                     className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
                                     style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
