@@ -1116,13 +1116,6 @@ export function ProfileButton() {
                                   </div>
                                   {val > 0 && !injuries[key] && <ChevronRight size={14} className="text-white/25 shrink-0" />}
                                 </button>
-                                <button
-                                  onClick={() => setInjuries(prev => ({ ...prev, [key]: !prev[key] }))}
-                                  className="shrink-0 px-2 py-1 rounded-[10px] text-[11px] font-semibold active:opacity-60"
-                                  style={{ background: injuries[key] ? 'rgba(251,146,60,0.18)' : 'rgba(255,255,255,0.07)', color: injuries[key] ? 'rgb(251,146,60)' : 'rgba(255,255,255,0.35)', border: `1px solid ${injuries[key] ? 'rgba(251,146,60,0.35)' : 'rgba(255,255,255,0.08)'}` }}
-                                >
-                                  {injuries[key] ? 'Cleared' : 'Injured'}
-                                </button>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <button onClick={() => setFreq(key, -1)} disabled={val === 0}
                                     className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
