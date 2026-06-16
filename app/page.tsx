@@ -49,7 +49,7 @@ async function fetchTodayData() {
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).eq('datum', today).maybeSingle(),
     supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
     supabase.from('food_log').select('date,protein').eq('user_id', user.id).gte('date', sevenDaysAgoStr).order('date', { ascending: false }),
-    supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal').eq('user_id', user.id).maybeSingle(),
+    supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal,training_intensity').eq('user_id', user.id).maybeSingle(),
     supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
     supabase.from('hevy_workouts').select('id,title,start_time').eq('user_id', user.id).gte('start_time', todayIso),
     supabase.from('strava_activities').select('id,name,sport_type,start_date').eq('user_id', user.id).gte('start_date', today),
@@ -392,7 +392,9 @@ export default function TodayPage() {
     const biasValues  = Object.values(biasBySport)
     const avgBias     = biasValues.length > 0 ? biasValues.reduce((s, v) => s + v, 0) / biasValues.length : 0
     const biasPoints  = Math.round(avgBias * 100)
-    const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints))
+    const INTENSITY_BIAS: Record<string, number> = { easy: -15, moderate: 0, hard: 15, all_out: 25 }
+    const intensityBias = INTENSITY_BIAS[effectiveData?.settings?.training_intensity ?? 'moderate'] ?? 0
+    const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints + intensityBias))
 
     const now         = Date.now()
     const weekStart   = startOfWeek()

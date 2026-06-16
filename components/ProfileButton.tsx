@@ -62,7 +62,7 @@ export function ProfileButton() {
   const [trainingSaving, setTrainingSaving] = useState(false)
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null)
   const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
-  const [trainingIntensities, setTrainingIntensities] = useState<Record<string, string>>({ gym: '', running: '', cycling: '', swimming: '' })
+  const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
 
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
@@ -133,7 +133,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensities')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -152,8 +152,7 @@ export function ProfileButton() {
           if (data?.training_goal) setTrainingGoal(data.training_goal)
           if (data?.training_frequencies && typeof data.training_frequencies === 'object')
             setTrainingFrequencies({ gym: 0, running: 0, cycling: 0, swimming: 0, ...data.training_frequencies })
-          if (data?.training_intensities && typeof data.training_intensities === 'object')
-            setTrainingIntensities({ gym: '', running: '', cycling: '', swimming: '', ...data.training_intensities })
+          if (data?.training_intensity) setTrainingIntensity(data.training_intensity)
         })
     })
   }, [open])
@@ -409,19 +408,18 @@ export function ProfileButton() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensities: trainingIntensities })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
+    mutate('today')
+    mutate('training')
   }
 
   function setFreq(sport: string, delta: number) {
     setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
   }
 
-  function setIntensity(sport: string, level: string) {
-    setTrainingIntensities(prev => ({ ...prev, [sport]: prev[sport] === level ? '' : level }))
-  }
 
   async function requestNotifications() {
     if (!('Notification' in window)) return
@@ -716,8 +714,8 @@ export function ProfileButton() {
 
               <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-                {/* Weekly frequency + intensity */}
-                <ProfileSection title="Weekly training">
+                {/* Weekly frequency */}
+                <ProfileSection title="Weekly frequency">
                   {([
                     { key: 'gym',      label: 'Gym / Strength', icon: '🏋️' },
                     { key: 'running',  label: 'Running',        icon: '🏃' },
@@ -725,62 +723,61 @@ export function ProfileButton() {
                     { key: 'swimming', label: 'Swimming',       icon: '🏊' },
                   ] as const).map(({ key, label, icon }, i, arr) => {
                     const val = trainingFrequencies[key] ?? 0
-                    const intensity = trainingIntensities[key] ?? ''
-                    const LEVELS = [
-                      { id: 'easy',     label: 'Easy'    },
-                      { id: 'moderate', label: 'Moderate'},
-                      { id: 'hard',     label: 'Hard'    },
-                      { id: 'varied',   label: 'Varied'  },
-                    ]
                     return (
                       <ProfileRow key={key} separator={i < arr.length - 1}>
-                        <div className="flex flex-col gap-3 py-1 w-full">
-                          {/* Frequency row */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-[18px] w-6 text-center shrink-0">{icon}</span>
+                          <span className="flex-1 text-[17px] text-white">{label}</span>
                           <div className="flex items-center gap-3">
-                            <span className="text-[18px] w-6 text-center shrink-0">{icon}</span>
-                            <span className="flex-1 text-[17px] text-white">{label}</span>
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => setFreq(key, -1)}
-                                disabled={val === 0}
-                                className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                                style={{ background: 'rgba(255,255,255,0.10)' }}>
-                                −
-                              </button>
-                              <span className="text-[17px] font-semibold text-white w-6 text-center">
-                                {val === 0 ? '–' : `${val}×`}
-                              </span>
-                              <button
-                                onClick={() => setFreq(key, +1)}
-                                disabled={val === 7}
-                                className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                                style={{ background: 'rgba(255,255,255,0.10)' }}>
-                                +
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => setFreq(key, -1)}
+                              disabled={val === 0}
+                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                              style={{ background: 'rgba(255,255,255,0.10)' }}>
+                              −
+                            </button>
+                            <span className="text-[17px] font-semibold text-white w-6 text-center">
+                              {val === 0 ? '–' : `${val}×`}
+                            </span>
+                            <button
+                              onClick={() => setFreq(key, +1)}
+                              disabled={val === 7}
+                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                              style={{ background: 'rgba(255,255,255,0.10)' }}>
+                              +
+                            </button>
                           </div>
-                          {/* Intensity pills */}
-                          {val > 0 && (
-                            <div className="flex gap-2 pl-9">
-                              {LEVELS.map(l => (
-                                <button
-                                  key={l.id}
-                                  onClick={() => setIntensity(key, l.id)}
-                                  className="flex-1 py-1.5 rounded-full text-[12px] font-semibold transition-colors active:opacity-70"
-                                  style={{
-                                    background: intensity === l.id ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.08)',
-                                    color: intensity === l.id ? '#000' : 'rgba(255,255,255,0.5)',
-                                  }}>
-                                  {l.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       </ProfileRow>
                     )
                   })}
                 </ProfileSection>
+
+                {/* Intensity preference */}
+                <div className="flex flex-col gap-3">
+                  <div className="px-1">
+                    <span className="text-[13px] font-medium text-white/40">Intensity preference</span>
+                    <p className="text-[12px] text-white/25 mt-0.5">Higher = harder sessions recommended more easily</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { id: 'easy',     label: 'Easy',     desc: 'Zone 2 & recovery focus' },
+                      { id: 'moderate', label: 'Moderate', desc: 'Balanced, default' },
+                      { id: 'hard',     label: 'Hard',     desc: 'Push when body allows' },
+                      { id: 'all_out',  label: 'All Out',  desc: 'Max effort, high threshold' },
+                    ]).map(({ id, label, desc }) => {
+                      const selected = trainingIntensity === id
+                      return (
+                        <button key={id} onClick={() => setTrainingIntensity(id)}
+                          className="flex flex-col gap-0.5 px-4 py-3 rounded-[16px] text-left active:opacity-70 transition-opacity"
+                          style={{ background: selected ? 'rgba(45,212,191,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${selected ? 'rgba(45,212,191,0.4)' : 'rgba(255,255,255,0.07)'}` }}>
+                          <span className="text-[15px] font-semibold" style={{ color: selected ? 'rgb(45,212,191)' : 'white' }}>{label}</span>
+                          <span className="text-[11px] text-white/35">{desc}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
 
                 {/* Goal */}
                 <div className="flex flex-col gap-3">
