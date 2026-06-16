@@ -885,11 +885,11 @@ export function ProfileButton() {
                   </div>
                 </div>
 
-                {/* Goal priority — drag to reorder */}
+                {/* Goal priority — drag to reorder, top = highest priority */}
                 <div className="flex flex-col gap-2">
                   <div className="px-1">
                     <span className="text-[13px] font-medium text-white/40">Goals</span>
-                    <p className="text-[11px] text-white/25 mt-0.5">Sleep om prioriteit te wijzigen · tik om te selecteren</p>
+                    <p className="text-[11px] text-white/25 mt-0.5">Sleep om volgorde te bepalen — bovenaan = hoogste prioriteit</p>
                   </div>
                   {(() => {
                     const GOAL_META: Record<string, { emoji: string; title: string; desc: string }> = {
@@ -900,41 +900,29 @@ export function ProfileButton() {
                       performance:  { emoji: '🏆', title: 'Performance',   desc: 'Train for a race or competition' },
                     }
                     return (
-                      <div ref={dragGoalContainerRef} className="flex flex-col gap-2" style={{ touchAction: 'none' }}>
-                        {goalOrder.map((key) => {
+                      <div ref={dragGoalContainerRef} className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', touchAction: 'none' }}>
+                        {goalOrder.map((key, i) => {
                           const m = GOAL_META[key]; if (!m) return null
-                          const selected = trainingGoal === key
                           const isDragging = draggingGoalKey === key
                           return (
-                            <div key={key} data-goal-key={key} style={{ opacity: isDragging ? 0.4 : 1 }}>
-                              <div
-                                className="flex items-center rounded-[16px] overflow-hidden"
-                                style={{ background: selected ? 'rgba(45,212,191,0.12)' : 'rgba(255,255,255,0.05)', border: `1px solid ${selected ? 'rgba(45,212,191,0.35)' : 'rgba(255,255,255,0.07)'}` }}
-                              >
-                                {/* Drag handle — left strip */}
-                                <div
-                                  className="flex items-center justify-center self-stretch px-3 cursor-grab active:cursor-grabbing"
-                                  style={{ touchAction: 'none', minWidth: 40 }}
-                                  onMouseDown={e => startGoalDrag(key, e)}
-                                  onTouchStart={e => startGoalDrag(key, e)}
-                                >
-                                  <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="text-white/30">
-                                    <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
-                                    <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
-                                    <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
-                                  </svg>
-                                </div>
-                                {/* Tappable area */}
-                                <button
-                                  className="flex items-center gap-3 flex-1 py-3 pr-4 text-left active:opacity-70"
-                                  onClick={() => setTrainingGoal(prev => prev === key ? null : key)}
-                                >
-                                  <span className="text-[20px]">{m.emoji}</span>
-                                  <div className="flex flex-col gap-0.5 min-w-0">
-                                    <span className="text-[15px] font-semibold leading-tight" style={{ color: selected ? 'rgb(45,212,191)' : 'white' }}>{m.title}</span>
-                                    <span className="text-[11px] text-white/35 leading-tight">{m.desc}</span>
-                                  </div>
-                                </button>
+                            <div
+                              key={key}
+                              data-goal-key={key}
+                              className="flex items-center gap-3 px-4 py-3.5 cursor-grab active:cursor-grabbing select-none"
+                              style={{ opacity: isDragging ? 0.4 : 1, borderBottom: i < goalOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
+                              onMouseDown={e => startGoalDrag(key, e)}
+                              onTouchStart={e => startGoalDrag(key, e)}
+                            >
+                              <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="shrink-0 text-white/30">
+                                <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
+                                <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
+                                <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
+                              </svg>
+                              <span className="text-[13px] text-teal-400/60 font-bold w-4 shrink-0">{i + 1}</span>
+                              <span className="text-[18px] shrink-0">{m.emoji}</span>
+                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                <span className="text-[15px] font-semibold text-white">{m.title}</span>
+                                <span className="text-[11px] text-white/35">{m.desc}</span>
                               </div>
                             </div>
                           )
