@@ -65,6 +65,7 @@ export function ProfileButton() {
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
   const [activeSport, setActiveSport] = useState<string | null>(null)
+  const [weeklyDone, setWeeklyDone] = useState<Record<string, number>>({})
   const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
   const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
   const dragGoalKeyRef = useRef<string | null>(null)
@@ -429,6 +430,35 @@ export function ProfileButton() {
   function setFreq(sport: string, delta: number) {
     setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
   }
+
+  useEffect(() => {
+    if (!activeSport || !userId) return
+    const supabase = createClient()
+    const now = new Date()
+    const day = now.getDay() // 0=Sun
+    const diffToMon = (day === 0 ? -6 : 1 - day)
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() + diffToMon)
+    weekStart.setHours(0, 0, 0, 0)
+    const weekStartStr = weekStart.toISOString()
+
+    const done: Record<string, number> = { running: 0, cycling: 0, swimming: 0, gym: 0 }
+
+    Promise.all([
+      supabase.from('strava_activities').select('sport_type').eq('user_id', userId).gte('start_date', weekStartStr),
+      supabase.from('hevy_workouts').select('id').eq('user_id', userId).gte('start_time', weekStartStr),
+    ]).then(([strava, hevy]) => {
+      for (const a of strava.data ?? []) {
+        const t = (a.sport_type ?? '').toLowerCase().replace(/_/g, '')
+        if (['run', 'virtualrun', 'trailrun'].includes(t)) done.running++
+        else if (['ride', 'virtualride', 'ebikeride', 'gravelride', 'mountainbikeride'].includes(t)) done.cycling++
+        else if (['swim'].includes(t)) done.swimming++
+        else if (['weighttraining', 'workout', 'crossfit', 'elliptical', 'rockclimbing'].includes(t)) done.gym++
+      }
+      done.gym += hevy.data?.length ?? 0
+      setWeeklyDone({ ...done })
+    })
+  }, [activeSport, userId])
 
   type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string }
 
@@ -834,33 +864,53 @@ export function ProfileButton() {
                     </div>
                     <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
                       <div className="px-1">
-                        <p className="text-[13px] text-white/35">
-                          {freq}× per week · {freq} trainingsschema{freq !== 1 ? "'s" : ''}
-                        </p>
+                        {(() => {
+                          const done = weeklyDone[activeSport] ?? 0
+                          const remaining = Math.max(0, freq - done)
+                          return (
+                            <p className="text-[13px] text-white/35">
+                              {freq}× per week ·{' '}
+                              {done > 0 ? <span className="text-green-400/70">{done} gedaan</span> : null}
+                              {done > 0 && remaining > 0 ? ' · ' : null}
+                              {remaining > 0 ? <span className="text-teal-400/70">{remaining} te gaan</span> : null}
+                              {done >= freq && freq > 0 ? <span className="text-green-400/70"> Week voltooid 🎉</span> : null}
+                            </p>
+                          )
+                        })()}
                       </div>
                       <div className="flex flex-col gap-3">
-                        {templates.map((t, i) => (
-                          <button
-                            key={i}
-                            onClick={() => { saveTraining(); setOpen(false); router.push(t.href) }}
-                            className="flex items-center gap-4 px-4 py-4 rounded-[18px] text-left active:opacity-70 transition-opacity"
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                          >
-                            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-[20px]"
-                              style={{ background: 'rgba(45,212,191,0.12)' }}>
-                              {t.emoji}
-                            </div>
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-bold text-teal-400/70 uppercase tracking-[0.1em]">Sessie {i + 1}</span>
+                        {templates.map((t, i) => {
+                          const done = i < (weeklyDone[activeSport] ?? 0)
+                          const isNext = !done && i === (weeklyDone[activeSport] ?? 0)
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => { if (!done) { saveTraining(); setOpen(false); router.push(t.href) } }}
+                              className="flex items-center gap-4 px-4 py-4 rounded-[18px] text-left transition-opacity"
+                              style={{
+                                background: done ? 'rgba(74,222,128,0.06)' : isNext ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${done ? 'rgba(74,222,128,0.20)' : isNext ? 'rgba(45,212,191,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                                opacity: done ? 0.65 : 1,
+                              }}
+                            >
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-[20px]"
+                                style={{ background: done ? 'rgba(74,222,128,0.15)' : 'rgba(45,212,191,0.12)' }}>
+                                {done ? '✓' : t.emoji}
                               </div>
-                              <span className="text-[15px] font-semibold text-white leading-tight">{t.title}</span>
-                              <span className="text-[12px] text-white/40 leading-snug">{t.subtitle}</span>
-                              <span className="text-[11px] text-white/25 mt-0.5">{t.duration}</span>
-                            </div>
-                            <ChevronRight size={16} className="text-white/20 shrink-0" />
-                          </button>
-                        ))}
+                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[11px] font-bold uppercase tracking-[0.1em] ${done ? 'text-green-400/70' : isNext ? 'text-teal-400' : 'text-white/30'}`}>
+                                    {done ? 'Gedaan' : isNext ? 'Volgende' : `Sessie ${i + 1}`}
+                                  </span>
+                                </div>
+                                <span className={`text-[15px] font-semibold leading-tight ${done ? 'text-white/50' : 'text-white'}`}>{t.title}</span>
+                                <span className="text-[12px] text-white/40 leading-snug">{t.subtitle}</span>
+                                <span className="text-[11px] text-white/25 mt-0.5">{t.duration}</span>
+                              </div>
+                              {!done && <ChevronRight size={16} className={`shrink-0 ${isNext ? 'text-teal-400/50' : 'text-white/20'}`} />}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   </div>
