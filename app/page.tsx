@@ -381,7 +381,7 @@ export default function TodayPage() {
     const calendarEvents                 = effectiveData?.calendarEvents ?? []
     const biasBySport: Record<string, number> = training?.biasBySport ?? {}
     const trainingFrequencies: Record<string, number> = training?.trainingFrequencies ?? {}
-    const sportPriority: string[] = training?.sportPriority ?? effectiveData?.settings?.training_sport_priority ?? []
+    const sportPriority: string[] = training?.sportPriority ?? (effectiveData?.settings as any)?.training_sport_priority ?? []
 
     const physiologyReadiness = computePhysiologyReadiness(rows)
     const recoveryDetail      = computeRecoveryDetail(activities, hevy)
