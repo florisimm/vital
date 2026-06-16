@@ -66,6 +66,7 @@ export function ProfileButton() {
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
   const [activeSport, setActiveSport] = useState<string | null>(null)
   const [weeklyDoneIdx, setWeeklyDoneIdx] = useState<Record<string, number[]>>({})
+  const [personalZones, setPersonalZones] = useState<Record<string, { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }>>({})
   const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
   const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
   const dragGoalKeyRef = useRef<string | null>(null)
@@ -509,59 +510,125 @@ export function ProfileButton() {
       }
 
       setWeeklyDoneIdx(prev => ({ ...prev, [activeSport]: doneIndices }))
+
+      // Fetch 60-day history for personal zone calculation
+      const sportTypes: Record<string, string[]> = {
+        running:  ['Run', 'VirtualRun', 'TrailRun'],
+        cycling:  ['Ride', 'VirtualRide', 'EBikeRide', 'GravelRide', 'MountainBikeRide'],
+        swimming: ['Swim'],
+        gym:      ['WeightTraining', 'Workout', 'CrossFit'],
+      }
+      const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
+      supabase.from('strava_activities')
+        .select('average_speed, average_heartrate, moving_time, distance')
+        .eq('user_id', userId)
+        .gte('start_date', sixtyDaysAgo)
+        .in('sport_type', sportTypes[activeSport] ?? [])
+        .then(({ data }) => {
+          const withHR = (data ?? []).filter(a => a.average_heartrate && a.average_speed)
+          if (withHR.length < 3) return
+
+          // Estimate max HR: highest avg HR seen ÷ 0.92 (avg HR in a hard effort ≈ 92% max)
+          const maxHR = Math.round(
+            Math.max(...withHR.map(a => a.average_heartrate as number)) / 0.92
+          )
+
+          const avgSpd = (arr: typeof withHR) =>
+            arr.length ? arr.reduce((s, a) => s + (a.average_speed as number), 0) / arr.length : null
+
+          // Zone 2 = 60–70% max HR
+          const z2 = withHR.filter(a => {
+            const r = (a.average_heartrate as number) / maxHR
+            return r >= 0.60 && r <= 0.72
+          })
+
+          // Threshold = 83–92% max HR
+          const thr = withHR.filter(a => {
+            const r = (a.average_heartrate as number) / maxHR
+            return r >= 0.83 && r <= 0.92
+          })
+
+          // Longest effort as proxy for long-ride/long-run distance
+          const longestDist = Math.max(...(data ?? []).map(a => a.distance ?? 0))
+
+          setPersonalZones(prev => ({
+            ...prev,
+            [activeSport]: {
+              z2Speed: avgSpd(z2),
+              thresholdSpeed: avgSpd(thr),
+              longDist: longestDist > 0 ? longestDist : null,
+            },
+          }))
+        })
     })
   }, [activeSport, userId])
 
   type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string }
+  type Zones = { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }
 
-  function getSessionTemplates(sport: string, freq: number): SessionTemplate[] {
+  function getSessionTemplates(sport: string, freq: number, zones?: Zones): SessionTemplate[] {
     const n = Math.max(1, Math.min(freq, 7))
+
+    const kmh = (mps: number | null | undefined) => mps ? `${Math.round(mps * 3.6)} km/h` : null
+    const pace = (mps: number | null | undefined) => {
+      if (!mps) return null
+      const sPerKm = 1000 / mps
+      return `${Math.floor(sPerKm / 60)}:${String(Math.round(sPerKm % 60)).padStart(2, '0')}/km`
+    }
+    const km = (m: number | null | undefined) => m ? `${Math.round(m / 1000)} km` : null
+
     if (sport === 'running') {
+      const z2Pace  = pace(zones?.z2Speed)
+      const thrPace = pace(zones?.thresholdSpeed)
+      const longKm  = km(zones?.longDist)
       const all: SessionTemplate[] = [
-        { title: 'Easy run',          subtitle: 'Zone 2 aerobic — conversational pace',        duration: '40–50 min', emoji: '🏃', href: '/training/session?title=Easy+Run' },
-        { title: 'Interval training', subtitle: '5×1 km at 5K pace — VO2max boost',             duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Running+Intervals' },
-        { title: 'Long run',          subtitle: 'Slow & steady — builds endurance base',        duration: '60–90 min', emoji: '🛣️', href: '/training/session?title=Long+Run' },
-        { title: 'Tempo run',         subtitle: 'Comfortably hard — lactate threshold',         duration: '35–45 min', emoji: '🔥', href: '/training/session?title=Tempo+Run' },
-        { title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',         duration: '40–50 min', emoji: '⛰️', href: '/training/session?title=Hill+Repeats' },
+        { title: 'Easy run',          subtitle: z2Pace ? `Zone 2 — ${z2Pace} — conversational pace` : 'Zone 2 aerobic — conversational pace',                      duration: '40–50 min', emoji: '🏃', href: '/training/session?title=Easy+Run' },
+        { title: 'Interval training', subtitle: thrPace ? `5×1 km at ${thrPace} — VO2max boost` : '5×1 km at 5K pace — VO2max boost',                              duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Running+Intervals' },
+        { title: 'Long run',          subtitle: longKm ? `Slow & steady — target ${longKm}` : 'Slow & steady — builds endurance base',                             duration: '60–90 min', emoji: '🛣️', href: '/training/session?title=Long+Run' },
+        { title: 'Tempo run',         subtitle: thrPace ? `Comfortably hard — ${thrPace} — lactate threshold` : 'Comfortably hard — lactate threshold',             duration: '35–45 min', emoji: '🔥', href: '/training/session?title=Tempo+Run' },
+        { title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',                                                                              duration: '40–50 min', emoji: '⛰️', href: '/training/session?title=Hill+Repeats' },
       ]
       return all.slice(0, n)
     }
     if (sport === 'cycling') {
+      const z2Kmh  = kmh(zones?.z2Speed)
+      const thrKmh = kmh(zones?.thresholdSpeed)
+      const longKm = km(zones?.longDist)
       const all: SessionTemplate[] = [
-        { title: 'Endurance ride',  subtitle: 'Zone 2 — fat metabolism & aerobic base',       duration: '60–90 min', emoji: '🚴', href: '/training/session?title=Endurance+Ride' },
-        { title: 'FTP intervals',   subtitle: '3×10 min threshold — raise FTP',               duration: '55–65 min', emoji: '⚡', href: '/training/session?title=FTP+Intervals' },
-        { title: 'Recovery ride',   subtitle: 'Easy spin — flush legs & recover',             duration: '30–45 min', emoji: '🌱', href: '/training/session?title=Recovery+Ride' },
-        { title: 'VO₂max effort',   subtitle: '5×3 min at 110% FTP — aerobic ceiling',       duration: '50–60 min', emoji: '🔥', href: '/training/session?title=VO2max+Cycling' },
-        { title: 'Long ride',       subtitle: 'Steady endurance — big aerobic volume',        duration: '90–120 min', emoji: '🛣️', href: '/training/session?title=Long+Ride' },
+        { title: 'Endurance ride', subtitle: z2Kmh  ? `Zone 2 — ${z2Kmh} — fat metabolism & aerobic base`     : 'Zone 2 — fat metabolism & aerobic base',     duration: '60–90 min',  emoji: '🚴', href: '/training/session?title=Endurance+Ride' },
+        { title: 'FTP intervals',  subtitle: thrKmh ? `3×10 min at ${thrKmh} — raise FTP`                      : '3×10 min threshold — raise FTP',             duration: '55–65 min',  emoji: '⚡', href: '/training/session?title=FTP+Intervals' },
+        { title: 'Recovery ride',  subtitle: z2Kmh  ? `Easy spin onder ${z2Kmh} — flush legs`                  : 'Easy spin — flush legs & recover',           duration: '30–45 min',  emoji: '🌱', href: '/training/session?title=Recovery+Ride' },
+        { title: 'VO₂max effort',  subtitle: thrKmh ? `5×3 min boven ${thrKmh} — aerobic ceiling`              : '5×3 min at 110% FTP — aerobic ceiling',      duration: '50–60 min',  emoji: '🔥', href: '/training/session?title=VO2max+Cycling' },
+        { title: 'Long ride',      subtitle: longKm ? `Steady endurance — target ${longKm}`                     : 'Steady endurance — big aerobic volume',      duration: '90–120 min', emoji: '🛣️', href: '/training/session?title=Long+Ride' },
       ]
       return all.slice(0, n)
     }
     if (sport === 'swimming') {
       const all: SessionTemplate[] = [
-        { title: 'Endurance swim',   subtitle: 'Steady aerobic pace — 2000–3000m',            duration: '45–60 min', emoji: '🏊', href: '/training/session?title=Endurance+Swim' },
-        { title: 'Speed intervals',  subtitle: '8×100m with 20s rest — pace work',            duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Swimming+Intervals' },
-        { title: 'Technique drills', subtitle: 'Pull buoy, catch drills, form focus',         duration: '40–50 min', emoji: '🎯', href: '/training/session?title=Swim+Technique' },
-        { title: 'Mixed session',    subtitle: 'Warm-up + speed + endurance + cool-down',     duration: '55–70 min', emoji: '🌊', href: '/training/session?title=Swimming' },
+        { title: 'Endurance swim',   subtitle: 'Steady aerobic pace — 2000–3000m',         duration: '45–60 min', emoji: '🏊', href: '/training/session?title=Endurance+Swim' },
+        { title: 'Speed intervals',  subtitle: '8×100m with 20s rest — pace work',          duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Swimming+Intervals' },
+        { title: 'Technique drills', subtitle: 'Pull buoy, catch drills, form focus',       duration: '40–50 min', emoji: '🎯', href: '/training/session?title=Swim+Technique' },
+        { title: 'Mixed session',    subtitle: 'Warm-up + speed + endurance + cool-down',   duration: '55–70 min', emoji: '🌊', href: '/training/session?title=Swimming' },
       ]
       return all.slice(0, n)
     }
     if (sport === 'gym') {
       const splits: SessionTemplate[][] = [
-        [{ title: 'Full body',  subtitle: 'Squat · press · row · hinge — all patterns',         duration: '55–65 min', emoji: '🏋️', href: '/training/strength' }],
+        [{ title: 'Full body',  subtitle: 'Squat · press · row · hinge — all patterns',      duration: '55–65 min', emoji: '🏋️', href: '/training/strength' }],
         [
-          { title: 'Upper body', subtitle: 'Chest · shoulders · back · arms',                   duration: '50–60 min', emoji: '💪', href: '/training/strength' },
-          { title: 'Lower body', subtitle: 'Squat · hinge · calves · core',                     duration: '50–60 min', emoji: '🦵', href: '/training/strength' },
+          { title: 'Upper body', subtitle: 'Chest · shoulders · back · arms',                duration: '50–60 min', emoji: '💪', href: '/training/strength' },
+          { title: 'Lower body', subtitle: 'Squat · hinge · calves · core',                  duration: '50–60 min', emoji: '🦵', href: '/training/strength' },
         ],
         [
-          { title: 'Push',  subtitle: 'Chest · shoulders · triceps',                            duration: '55–65 min', emoji: '⬆️', href: '/training/strength' },
-          { title: 'Pull',  subtitle: 'Back · rear delts · biceps',                             duration: '55–65 min', emoji: '⬇️', href: '/training/strength' },
-          { title: 'Legs',  subtitle: 'Quads · hamstrings · glutes · calves',                  duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
+          { title: 'Push', subtitle: 'Chest · shoulders · triceps',                          duration: '55–65 min', emoji: '⬆️', href: '/training/strength' },
+          { title: 'Pull', subtitle: 'Back · rear delts · biceps',                           duration: '55–65 min', emoji: '⬇️', href: '/training/strength' },
+          { title: 'Legs', subtitle: 'Quads · hamstrings · glutes · calves',                 duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
         ],
         [
-          { title: 'Upper A', subtitle: 'Chest focus — bench · OHP · rows',                    duration: '55–65 min', emoji: '💪', href: '/training/strength' },
-          { title: 'Lower A', subtitle: 'Squat focus — back squat · lunges · RDL',             duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
-          { title: 'Upper B', subtitle: 'Back focus — pull-ups · rows · chest',                duration: '55–65 min', emoji: '🔄', href: '/training/strength' },
-          { title: 'Lower B', subtitle: 'Hinge focus — deadlift · leg press · core',           duration: '55–65 min', emoji: '🔁', href: '/training/strength' },
+          { title: 'Upper A', subtitle: 'Chest focus — bench · OHP · rows',                  duration: '55–65 min', emoji: '💪', href: '/training/strength' },
+          { title: 'Lower A', subtitle: 'Squat focus — back squat · lunges · RDL',           duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
+          { title: 'Upper B', subtitle: 'Back focus — pull-ups · rows · chest',              duration: '55–65 min', emoji: '🔄', href: '/training/strength' },
+          { title: 'Lower B', subtitle: 'Hinge focus — deadlift · leg press · core',        duration: '55–65 min', emoji: '🔁', href: '/training/strength' },
         ],
       ]
       const split = splits[Math.min(n - 1, splits.length - 1)]
@@ -901,7 +968,7 @@ export function ProfileButton() {
                 }
                 const meta = SPORT_META[activeSport]
                 const freq = trainingFrequencies[activeSport] ?? 0
-                const templates = getSessionTemplates(activeSport, freq)
+                const templates = getSessionTemplates(activeSport, freq, personalZones[activeSport])
                 return (
                   <div className="absolute inset-0 z-20 flex flex-col"
                     style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
