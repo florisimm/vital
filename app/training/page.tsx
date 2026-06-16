@@ -76,6 +76,7 @@ export default function TrainingPage() {
   const pastCalendarEvents = data?.pastCalendarEvents ?? []
   const sportPriority: string[] = data?.sportPriority ?? []
   const trainingIntensity: string = (data as any)?.trainingIntensity ?? 'moderate'
+  const goalPriority: string[] = (data as any)?.goalPriority ?? []
 
   // Derive which sport today's plan recommends, to gate advice in sport tabs
   const todaySport = useMemo(() => {
@@ -122,7 +123,7 @@ export default function TrainingPage() {
 
       {/* Tab content — only after mount so SSR and first client render match */}
       <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} sportPriority={sportPriority} onSwitchTab={switchTab} />}
+        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} sportPriority={sportPriority} goalPriority={goalPriority} onSwitchTab={switchTab} />}
         {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} />}
         {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} />}
         {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} />}

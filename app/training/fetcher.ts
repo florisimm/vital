@@ -65,6 +65,7 @@ export async function trainingFetcher() {
   const trainingGoal: string | null = (settings as any)?.training_goal ?? null
   const sportPriority: string[] = (settings as any)?.training_sport_priority ?? ['running', 'cycling', 'swimming', 'gym']
   const trainingIntensity: string = (settings as any)?.training_intensity ?? 'moderate'
+  const goalPriority: string[] = (settings as any)?.training_goal_priority ?? []
 
   // bias_adjustment per sport: positive = user handles more load than model thinks
   const biasBySport: Record<string, number> = {}
@@ -81,6 +82,7 @@ export async function trainingFetcher() {
     trainingGoal,
     sportPriority,
     trainingIntensity,
+    goalPriority,
     biasBySport,
   }
 }

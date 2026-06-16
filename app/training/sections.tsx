@@ -1760,6 +1760,7 @@ export function computeTodaysFocus(
   cardioTargets: CardioTarget[] = [],
   gymTarget: number = 0,
   sportPriority: string[] = [],
+  goalPriority: string[] = [],
 ): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
@@ -2115,8 +2116,9 @@ export function computeTodaysFocus(
 
   // ── Nothing scheduled today ────────────────────────────────────────────────
   // Only two outcomes from here: a rest day, or one of the user's profile sports
-  // (run / bike / swim) — picked by which weekly frequency goal is furthest behind.
+  // (run / bike / swim / gym) — picked by which weekly frequency goal is furthest behind.
   const rs = riskScore()
+  const primaryGoal = goalPriority[0] ?? null
   const stillToDo = cardioTargets
     .filter(c => c.target > 0 && c.done < c.target)
     .sort((a, b) => {
@@ -2127,7 +2129,13 @@ export function computeTodaysFocus(
       }
       return (b.target - b.done) - (a.target - a.done)
     })
-  const top = stillToDo[0] ?? null
+  // When build_muscle is top goal, promote gym over cardio if gym target isn't met
+  const weekGymDone = hevy.filter(h => h.start_time >= startOfWeek()).length
+  const gymBehind = gymTarget > 0 && weekGymDone < gymTarget
+  const top: { emoji: string; label: string; target: number; done: number } | null =
+    (primaryGoal === 'build_muscle' && gymBehind)
+      ? { emoji: '💪', label: 'Strength training', target: gymTarget, done: weekGymDone }
+      : stillToDo[0] ?? null
 
   // Goals not yet met take priority over recovery concerns — only force rest
   // when the body truly can't handle any load (< 35%) or risk is very high (>= 7),
@@ -2149,14 +2157,20 @@ export function computeTodaysFocus(
   // Otherwise: do the profile sport furthest behind its weekly goal.
   // If recovery or risk is elevated, keep it easy — but still do the session.
   const easy = recoveryPct < 70 || rs >= 5
+  const goalReason = primaryGoal === 'build_muscle' && gymBehind
+    ? 'Building muscle is your top goal — hit the weights'
+    : primaryGoal === 'lose_weight' ? 'Losing weight — cardio keeps the deficit up'
+    : primaryGoal === 'performance' ? 'Performance goal — stay consistent with your training'
+    : null
   return {
     emoji: top!.emoji,
     label: top!.label,
     action: easy ? 'Keep it easy' : 'Good to go',
     actionColor: easy ? '#facc15' : '#4ade80',
     reasons: [
-      `${top!.done}/${top!.target} ${top!.label.toLowerCase()} this week — ${top!.target - top!.done} to go`,
+      `${top!.done}/${top!.target} ${top!.label.toLowerCase()} sessions this week — ${top!.target - top!.done} to go`,
       `Recovery ${recoveryPct}% — ${easy ? 'keep it easy today' : 'good to train today'}`,
+      ...(goalReason ? [goalReason] : []),
     ],
   }
 }
@@ -3234,12 +3248,13 @@ function TodayDoneCard({ activities, hevy, calendarEvents = [] }: { activities: 
   )
 }
 
-export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], onSwitchTab }: {
+export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], goalPriority = [], onSwitchTab }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]
   trainingFrequencies?: Record<string, number>
   biasBySport?: Record<string, number>
   sportPriority?: string[]
+  goalPriority?: string[]
   onSwitchTab?: (key: string) => void
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
@@ -3309,7 +3324,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
   const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
-  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority)
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority)
 
   // Detect overrides: did user train today when advice would have been rest?
   useEffect(() => {
