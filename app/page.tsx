@@ -104,6 +104,106 @@ function workoutDone(title: string, hevy: any[], acts: any[]): boolean {
   return hevy.length > 0 || cardioActs.length > 0
 }
 
+// ─── Lifestyle Focus card ─────────────────────────────────────────────────────
+
+type FocusTip = { emoji: string; label: string; sub?: string }
+
+function buildLifestyleFocus({
+  rows,
+  effectiveData,
+  unifiedReadinessPct,
+}: { rows: HealthRow[]; effectiveData: any; unifiedReadinessPct: number }): FocusTip[] {
+  const tips: FocusTip[] = []
+
+  // ── Bedtime recommendation ──
+  const recentSleep = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
+  const avgSleepMin = recentSleep.length
+    ? recentSleep.reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / recentSleep.length
+    : null
+
+  // Tomorrow's earliest sport event
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomStr = tomorrow.toISOString().split('T')[0]
+  const earlyTomorrow = (effectiveData?.calendarEvents ?? []).find((e: any) => {
+    if (e.start_date !== tomStr || !e.start_datetime) return false
+    return new Date(e.start_datetime).getHours() < 9
+  })
+
+  let bedtimeMins = 22 * 60 + 30 // default 22:30
+  let bedtimeSub = '8h sleep before tomorrow'
+  if (earlyTomorrow) {
+    bedtimeMins = 21 * 60 + 30
+    bedtimeSub = `Early session tomorrow`
+  } else if (avgSleepMin != null && avgSleepMin < 7 * 60) {
+    bedtimeMins = 22 * 60
+    bedtimeSub = "You've been sleeping under 7h"
+  } else if (unifiedReadinessPct < 60) {
+    bedtimeMins = 22 * 60
+    bedtimeSub = 'Extra sleep speeds up recovery'
+  }
+  const bh = Math.floor(bedtimeMins / 60)
+  const bm = bedtimeMins % 60
+  tips.push({ emoji: '🌙', label: `Go to sleep by ${bh}:${bm.toString().padStart(2, '0')}`, sub: bedtimeSub })
+
+  // ── HRV warning ──
+  const latestHRV = rows[0]?.hrv_rmssd
+  const recentHRVs = rows.filter(r => r.hrv_rmssd != null).slice(0, 7)
+  if (latestHRV != null && recentHRVs.length >= 3) {
+    const baseline = recentHRVs.reduce((s, r) => s + (r.hrv_rmssd ?? 0), 0) / recentHRVs.length
+    if (latestHRV < baseline * 0.85) {
+      tips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
+    }
+  }
+
+  // ── Readiness advice ──
+  if (unifiedReadinessPct < 55) {
+    tips.push({ emoji: '🛋️', label: 'Rest or easy walk only', sub: 'Recovery is the training today' })
+  } else if (unifiedReadinessPct >= 85) {
+    tips.push({ emoji: '⚡', label: 'Your body is ready — go for it', sub: 'Readiness is high' })
+  }
+
+  // ── Pre-workout nutrition ──
+  const todayCalEvent = (effectiveData?.calendarEvents ?? []).find((e: any) => isToday(e) && isSport(e))
+  if (todayCalEvent?.start_datetime) {
+    const hoursUntil = (new Date(todayCalEvent.start_datetime).getTime() - Date.now()) / 3_600_000
+    if (hoursUntil > 0.5 && hoursUntil <= 2.5) {
+      const t = fmtTime(todayCalEvent.start_datetime)
+      tips.push({ emoji: '🍌', label: `Eat before your ${t} session`, sub: 'Light carbs 60–90 min before' })
+    }
+  }
+
+  // ── Hydration nudge on training days ──
+  const hasTrainingToday = (effectiveData?.calendarEvents ?? []).some((e: any) => isToday(e) && isSport(e))
+  if (hasTrainingToday && tips.length < 3) {
+    tips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
+  }
+
+  return tips.slice(0, 4)
+}
+
+function LifestyleFocusCard({ tips }: { tips: FocusTip[] }) {
+  if (tips.length === 0) return null
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em] mb-3">Focus</p>
+      <div className="rounded-[20px] border border-white/[0.07] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+        {tips.map((tip, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-4 px-4 py-4 ${i < tips.length - 1 ? 'border-b border-white/[0.05]' : ''}`}
+          >
+            <span className="text-[24px] leading-none shrink-0">{tip.emoji}</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[15px] font-semibold text-white leading-snug">{tip.label}</span>
+              {tip.sub && <span className="text-[12px] text-white/35 mt-0.5">{tip.sub}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Focus builder ────────────────────────────────────────────────────────────
 
 function buildFocusItems(data: any) {
@@ -375,6 +475,7 @@ export default function TodayPage() {
   const focus = buildFocusItems(effectiveData)
 
   // Compute training recommendation using the same logic as the Training overview
+
   const { todaysFocus, unifiedReadinessPct, biasApplied } = useMemo(() => {
     const activities: TrainingActivity[] = training?.activities ?? []
     const hevy: TrainingHevyWorkout[]    = training?.hevy ?? []
@@ -428,6 +529,11 @@ export default function TodayPage() {
     return { todaysFocus: focus, unifiedReadinessPct, biasApplied }
   }, [training, rows, effectiveData]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const lifestyleFocus = useMemo(
+    () => buildLifestyleFocus({ rows, effectiveData, unifiedReadinessPct }),
+    [rows, effectiveData, unifiedReadinessPct], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
       <div className="flex flex-col gap-6" style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
@@ -448,6 +554,7 @@ export default function TodayPage() {
             return [...hevy, ...cardio]
           })()}
         />
+        <LifestyleFocusCard tips={lifestyleFocus} />
         <ProgressCard data={effectiveData} />
         <UpcomingCard
           events={(effectiveData?.calendarEvents ?? []).filter(isSport)}
