@@ -191,15 +191,19 @@ function ProgressCard({ data }: { data: any }) {
   const settings = data?.settings
   if (!settings) return null
 
-  const totalProtein  = foodLog.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
+  const totalProtein  = Math.round(foodLog.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0))
   const targetProtein = Number(settings.macro_protein ?? 180)
-  const proteinLeft   = Math.round(Math.max(0, targetProtein - totalProtein))
-  const proteinDone   = proteinLeft <= 0
+  const proteinDone   = totalProtein >= targetProtein
+  const proteinPct    = Math.min(1, totalProtein / targetProtein)
 
   const steps    = data?.latestGezondheid?.stappen ?? 0
   const stepGoal = Number(settings.step_goal ?? 10000)
-  const stepsLeft = Math.max(0, stepGoal - steps)
-  const stepsDone = stepsLeft <= 0
+  const stepsDone = steps >= stepGoal
+  const stepsPct  = Math.min(1, steps / stepGoal)
+
+  // SVG ring for steps
+  const R = 20, C = 2 * Math.PI * R
+  const dash = stepsPct * C
 
   if (totalProtein === 0 && steps === 0) return null
 
@@ -207,25 +211,43 @@ function ProgressCard({ data }: { data: any }) {
     <div>
       <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em] mb-3">Progress</p>
       <div className="flex gap-3">
-        {totalProtein >= 0 && (
+        {settings.macro_protein > 0 && (
           <a href="/food" className="flex-1 block active:opacity-70 transition-opacity">
             <div className="px-4 py-3.5 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              <p className="text-[11px] text-white/30 mb-1.5">Protein</p>
-              <p className={`text-[24px] font-bold leading-none ${proteinDone ? 'text-teal-400' : 'text-white'}`}>
-                {proteinDone ? '✓' : `${proteinLeft}g`}
+              <p className="text-[11px] text-white/30 mb-2">Protein</p>
+              <p className={`text-[22px] font-bold leading-none ${proteinDone ? 'text-teal-400' : 'text-white'}`}>
+                {proteinDone ? '✓' : `${totalProtein}g`}
               </p>
-              <p className="text-[11px] text-white/30 mt-1">{proteinDone ? 'Goal reached' : 'remaining'}</p>
+              <p className="text-[11px] text-white/30 mt-0.5 mb-2">
+                {proteinDone ? 'Goal reached' : `/ ${targetProtein}g`}
+              </p>
+              <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${proteinPct * 100}%`, background: proteinDone ? 'rgb(45,212,191)' : 'rgb(251,146,60)' }} />
+              </div>
             </div>
           </a>
         )}
         {steps > 0 && (
           <a href="/health/activity" className="flex-1 block active:opacity-70 transition-opacity">
             <div className="px-4 py-3.5 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              <p className="text-[11px] text-white/30 mb-1.5">Steps</p>
-              <p className={`text-[24px] font-bold leading-none ${stepsDone ? 'text-teal-400' : 'text-white'}`}>
-                {stepsDone ? '✓' : steps.toLocaleString('en-US')}
-              </p>
-              <p className="text-[11px] text-white/30 mt-1">{stepsDone ? 'Goal reached' : `/ ${stepGoal.toLocaleString('en-US')}`}</p>
+              <p className="text-[11px] text-white/30 mb-2">Steps</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-[22px] font-bold leading-none ${stepsDone ? 'text-teal-400' : 'text-white'}`}>
+                    {stepsDone ? '✓' : steps.toLocaleString('en-US')}
+                  </p>
+                  <p className="text-[11px] text-white/30 mt-0.5">
+                    {stepsDone ? 'Goal reached' : `${Math.round(stepsPct * 100)}%`}
+                  </p>
+                </div>
+                <svg width="44" height="44" viewBox="0 0 48 48" className="shrink-0 -rotate-90">
+                  <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+                  <circle cx="24" cy="24" r={R} fill="none"
+                    stroke={stepsDone ? 'rgb(45,212,191)' : 'rgb(251,146,60)'}
+                    strokeWidth="4" strokeLinecap="round"
+                    strokeDasharray={`${dash} ${C}`} />
+                </svg>
+              </div>
             </div>
           </a>
         )}
@@ -264,6 +286,10 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
     groups.get(key)!.evts.push(e)
   }
 
+  const allEvts = [...groups.entries()].flatMap(([, { label, evts }]) => evts.map(e => ({ ...e, _label: label })))
+  const next = allEvts[0] ?? null
+  const moreCount = allEvts.length - 1
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -281,32 +307,29 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
           </svg>
         </button>
       </div>
-      <div className="flex flex-col gap-4">
-        {[...groups.entries()].slice(0, 4).map(([key, { label, evts }]) => (
-          <div key={key}>
-            <p className="text-[12px] font-semibold text-white/25 mb-2">{label}</p>
-            <div className="flex flex-col gap-1.5">
-              {evts.map((e: any, i: number) => {
-                const time = fmtTime(e.start_datetime)
-                return (
-                  <a
-                    key={i}
-                    href={`/training/session?title=${encodeURIComponent(e.title)}&time=${encodeURIComponent(e.start_datetime ?? '')}`}
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-[12px] border border-white/[0.06] active:opacity-70 transition-opacity"
-                    style={{ background: 'rgba(255,255,255,0.04)' }}
-                  >
-                    {time && (
-                      <span className="text-[12px] font-semibold text-white/30 shrink-0 tabular-nums">
-                        {time}{fmtTime(e.end_datetime) ? ` – ${fmtTime(e.end_datetime)}` : ''}
-                      </span>
-                    )}
-                    <span className="text-[14px] text-white/65">{e.title}</span>
-                  </a>
-                )
-              })}
+      <div className="flex flex-col gap-2">
+        {next ? (
+          <a
+            href={`/training/session?title=${encodeURIComponent(next.title)}&time=${encodeURIComponent(next.start_datetime ?? '')}`}
+            className="flex items-center gap-3 px-4 py-3 rounded-[14px] border border-white/[0.06] active:opacity-70 transition-opacity"
+            style={{ background: 'rgba(255,255,255,0.04)' }}
+          >
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="text-[14px] font-semibold text-white truncate">{next.title}</span>
+              <span className="text-[12px] text-white/35 mt-0.5">
+                {next._label}{fmtTime(next.start_datetime) ? ` · ${fmtTime(next.start_datetime)}` : ''}
+              </span>
             </div>
-          </div>
-        ))}
+            <span className="text-white/30 text-[18px] shrink-0">›</span>
+          </a>
+        ) : (
+          <p className="text-[13px] text-white/30">No upcoming sessions.</p>
+        )}
+        {moreCount > 0 && (
+          <a href="/training" className="text-center text-[12px] font-semibold text-teal-400/70 py-2 active:opacity-60 transition-opacity">
+            View full schedule ({moreCount} more)
+          </a>
+        )}
       </div>
     </div>
   )
