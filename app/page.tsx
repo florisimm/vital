@@ -148,7 +148,7 @@ function buildFocusItems(data: any) {
   if (steps > 0) {
     const stepsLeft = Math.max(0, stepGoal - steps)
     items.push({
-      label: stepsLeft > 0 ? `${stepsLeft.toLocaleString('en-US')} steps left` : 'Step goal reached',
+      label: stepsLeft > 0 ? `${steps.toLocaleString('en-US')} / ${stepGoal.toLocaleString('en-US')} steps` : 'Step goal reached',
       done:  stepsLeft <= 0,
       href:  '/health/activity',
     })
@@ -223,9 +223,9 @@ function ProgressCard({ data }: { data: any }) {
             <div className="px-4 py-3.5 rounded-[18px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }}>
               <p className="text-[11px] text-white/30 mb-1.5">Steps</p>
               <p className={`text-[24px] font-bold leading-none ${stepsDone ? 'text-teal-400' : 'text-white'}`}>
-                {stepsDone ? '✓' : stepsLeft.toLocaleString('en-US')}
+                {stepsDone ? '✓' : steps.toLocaleString('en-US')}
               </p>
-              <p className="text-[11px] text-white/30 mt-1">{stepsDone ? 'Goal reached' : 'remaining'}</p>
+              <p className="text-[11px] text-white/30 mt-1">{stepsDone ? 'Goal reached' : `/ ${stepGoal.toLocaleString('en-US')}`}</p>
             </div>
           </a>
         )}
