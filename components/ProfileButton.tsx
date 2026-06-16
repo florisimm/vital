@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import useSWR, { mutate } from 'swr'
 import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
@@ -63,6 +63,10 @@ export function ProfileButton() {
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null)
   const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
+  const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null)
+  const dragFromRef = useRef<number | null>(null)
+  const rowRefs = useRef<(HTMLElement | null)[]>([])
 
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
@@ -133,7 +137,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -153,6 +157,8 @@ export function ProfileButton() {
           if (data?.training_frequencies && typeof data.training_frequencies === 'object')
             setTrainingFrequencies({ gym: 0, running: 0, cycling: 0, swimming: 0, ...data.training_frequencies })
           if (data?.training_intensity) setTrainingIntensity(data.training_intensity)
+          if (Array.isArray(data?.training_sport_priority) && data.training_sport_priority.length > 0)
+            setSportOrder(data.training_sport_priority)
         })
     })
   }, [open])
@@ -408,7 +414,7 @@ export function ProfileButton() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
@@ -700,58 +706,92 @@ export function ProfileButton() {
             <div className="absolute inset-0 z-10 flex flex-col"
               style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
               <div className="flex items-center justify-between px-5 py-4 shrink-0">
-                <button onClick={() => setEditingTraining(false)}
-                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                <button onClick={saveTraining} disabled={trainingSaving}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold disabled:opacity-40"
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
-                  Back
+                  {trainingSaving ? '…' : 'Back'}
                 </button>
                 <span className="text-[17px] font-semibold text-white">Training</span>
-                <button onClick={saveTraining} disabled={trainingSaving}
-                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
-                  {trainingSaving ? '…' : 'Save'}
-                </button>
+                <div className="w-16" />
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-                {/* Weekly frequency */}
-                <ProfileSection title="Weekly frequency">
-                  {([
-                    { key: 'gym',      label: 'Gym / Strength', icon: '🏋️' },
-                    { key: 'running',  label: 'Running',        icon: '🏃' },
-                    { key: 'cycling',  label: 'Cycling',        icon: '🚴' },
-                    { key: 'swimming', label: 'Swimming',       icon: '🏊' },
-                  ] as const).map(({ key, label, icon }, i, arr) => {
-                    const val = trainingFrequencies[key] ?? 0
-                    return (
-                      <ProfileRow key={key} separator={i < arr.length - 1}>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[18px] w-6 text-center shrink-0">{icon}</span>
-                          <span className="flex-1 text-[17px] text-white">{label}</span>
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => setFreq(key, -1)}
-                              disabled={val === 0}
-                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                              style={{ background: 'rgba(255,255,255,0.10)' }}>
-                              −
-                            </button>
-                            <span className="text-[17px] font-semibold text-white w-6 text-center">
-                              {val === 0 ? '–' : `${val}×`}
-                            </span>
-                            <button
-                              onClick={() => setFreq(key, +1)}
-                              disabled={val === 7}
-                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                              style={{ background: 'rgba(255,255,255,0.10)' }}>
-                              +
-                            </button>
+                {/* Weekly frequency — draggable to set priority */}
+                <div className="flex flex-col gap-2">
+                  <div className="px-1 flex items-center justify-between">
+                    <span className="text-[13px] font-medium text-white/40">Weekly frequency</span>
+                    <span className="text-[11px] text-white/25">Drag to set priority</span>
+                  </div>
+                  <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    {(() => {
+                      const SPORT_META: Record<string, { label: string; icon: string }> = {
+                        running:  { label: 'Running',        icon: '🏃' },
+                        cycling:  { label: 'Cycling',        icon: '🚴' },
+                        swimming: { label: 'Swimming',       icon: '🏊' },
+                        gym:      { label: 'Gym / Strength', icon: '🏋️' },
+                      }
+                      return sportOrder.map((key, i) => {
+                        const meta = SPORT_META[key]; if (!meta) return null
+                        const val = trainingFrequencies[key] ?? 0
+                        const isDragging = draggingIdx === i
+                        return (
+                          <div
+                            key={key}
+                            ref={el => { rowRefs.current[i] = el }}
+                            style={{ opacity: isDragging ? 0.45 : 1, transition: 'opacity 0.1s', borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
+                          >
+                            <div className="flex items-center gap-2 px-4 py-3">
+                              {/* drag handle */}
+                              <div
+                                className="touch-none cursor-grab active:cursor-grabbing shrink-0 pr-1"
+                                onPointerDown={e => {
+                                  e.currentTarget.setPointerCapture(e.pointerId)
+                                  dragFromRef.current = i
+                                  setDraggingIdx(i)
+                                }}
+                                onPointerMove={e => {
+                                  if (dragFromRef.current === null) return
+                                  const y = e.clientY
+                                  for (let j = 0; j < rowRefs.current.length; j++) {
+                                    const el = rowRefs.current[j]; if (!el) continue
+                                    const rect = el.getBoundingClientRect()
+                                    if (y >= rect.top && y <= rect.bottom && j !== dragFromRef.current) {
+                                      const from = dragFromRef.current
+                                      setSportOrder(prev => {
+                                        const next = [...prev]; const [item] = next.splice(from, 1); next.splice(j, 0, item); return next
+                                      })
+                                      dragFromRef.current = j; setDraggingIdx(j); break
+                                    }
+                                  }
+                                }}
+                                onPointerUp={() => { dragFromRef.current = null; setDraggingIdx(null) }}
+                                onPointerCancel={() => { dragFromRef.current = null; setDraggingIdx(null) }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-white/25">
+                                  <circle cx="8" cy="6" r="2"/><circle cx="16" cy="6" r="2"/>
+                                  <circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/>
+                                  <circle cx="8" cy="18" r="2"/><circle cx="16" cy="18" r="2"/>
+                                </svg>
+                              </div>
+                              <span className="text-[16px] w-5 text-center shrink-0">{meta.icon}</span>
+                              <span className="flex-1 text-[15px] text-white">{meta.label}</span>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => setFreq(key, -1)} disabled={val === 0}
+                                  className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                                  style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
+                                <span className="text-[15px] font-semibold text-white w-6 text-center">{val === 0 ? '–' : `${val}×`}</span>
+                                <button onClick={() => setFreq(key, +1)} disabled={val === 7}
+                                  className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                                  style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </ProfileRow>
-                    )
-                  })}
-                </ProfileSection>
+                        )
+                      })
+                    })()}
+                  </div>
+                </div>
 
                 {/* Intensity preference */}
                 <div className="flex flex-col gap-3">
