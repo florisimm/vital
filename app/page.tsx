@@ -501,6 +501,7 @@ export default function TodayPage() {
     const trainingFrequencies: Record<string, number> = training?.trainingFrequencies ?? {}
     const sportPriority: string[] = training?.sportPriority ?? (effectiveData?.settings as any)?.training_sport_priority ?? []
     const goalPriority: string[] = (training as any)?.goalPriority ?? []
+    const injuries: Record<string, boolean> = (training as any)?.injuries ?? {}
 
     const physiologyReadiness = computePhysiologyReadiness(rows)
     const recoveryDetail      = computeRecoveryDetail(activities, hevy)
@@ -535,13 +536,14 @@ export default function TodayPage() {
     const weekCycling  = weekActivities.filter(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') }).length
     const weekSwimming = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('swim')).length
     const cardioTargets = [
-      { sport: 'running'  as const, label: 'Running',  emoji: '🏃', target: trainingFrequencies.running  ?? 0, done: weekRunning },
-      { sport: 'cycling'  as const, label: 'Cycling',  emoji: '🚴', target: trainingFrequencies.cycling  ?? 0, done: weekCycling },
-      { sport: 'swimming' as const, label: 'Swimming', emoji: '🏊', target: trainingFrequencies.swimming ?? 0, done: weekSwimming },
+      { sport: 'running'  as const, label: 'Running',  emoji: '🏃', target: injuries.running  ? 0 : (trainingFrequencies.running  ?? 0), done: weekRunning },
+      { sport: 'cycling'  as const, label: 'Cycling',  emoji: '🚴', target: injuries.cycling  ? 0 : (trainingFrequencies.cycling  ?? 0), done: weekCycling },
+      { sport: 'swimming' as const, label: 'Swimming', emoji: '🏊', target: injuries.swimming ? 0 : (trainingFrequencies.swimming ?? 0), done: weekSwimming },
     ]
+    const gymTarget = injuries.gym ? 0 : (trainingFrequencies.gym ?? 0)
 
     const trainingIntensity = (effectiveData?.settings as any)?.training_intensity ?? 'moderate'
-    const focus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority, trainingIntensity)
+    const focus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, gymTarget, sportPriority, goalPriority, trainingIntensity)
     const biasApplied = biasPoints !== 0
     return { todaysFocus: focus, unifiedReadinessPct, biasApplied }
   }, [training, rows, effectiveData]) // eslint-disable-line react-hooks/exhaustive-deps
