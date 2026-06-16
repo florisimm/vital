@@ -614,88 +614,6 @@ export function RecoverySection() {
     { label: 'Sleep',      status: sleepMin  ? fmtMin(sleepMin)        : '–', ok: sleepOk, note: '7h target' },
   ]
 
-  const todayFocus = (() => {
-    if (illnessFlag) return {
-      emoji: '🛑',
-      title: 'Rest completely today',
-      sub: `${illnessFlag.reason} — prioritise sleep, fluids and no alcohol tonight`,
-    }
-    if (!readiness.score) return {
-      emoji: '📊',
-      title: 'Connect Fitbit',
-      sub: 'Sync health data to see personalised daily focus advice',
-    }
-
-    // Sleep short → suggest earlier bedtime based on typical wake time
-    if (sleepMin !== null && sleepMin < 420) {
-      const hoursSlept = Math.floor(sleepMin / 60)
-      const minsSlept  = sleepMin % 60
-      const bedtimeSuggestion = wakeMin !== null
-        ? (() => {
-            const bed = ((wakeMin - 8 * 60) + 1440) % 1440
-            return `${String(Math.floor(bed / 60)).padStart(2, '0')}:${String(bed % 60).padStart(2, '0')}`
-          })()
-        : null
-      return {
-        emoji: '🛏️',
-        title: `In bed by ${bedtimeSuggestion ?? '22:30'} tonight`,
-        sub: `You got ${hoursSlept}h ${minsSlept}m last night — 30 min more sleep meaningfully improves HRV and recovery.`,
-      }
-    }
-
-    // Deep sleep low → behaviours that improve deep sleep
-    if (sleepDeep !== null && sleepMin !== null && sleepDeep / sleepMin < 0.15) {
-      return {
-        emoji: '🌙',
-        title: 'No alcohol or screens after 21:00',
-        sub: `Deep sleep was ${Math.round(sleepDeep / sleepMin * 100)}% last night (target 20%). Alcohol and blue light suppress slow-wave sleep.`,
-      }
-    }
-
-    // Sleep score low but duration OK → general sleep quality tip
-    if (sleepScore !== null && sleepScore < 60) {
-      return {
-        emoji: '🌡️',
-        title: 'Cool bedroom tonight (16–18 °C)',
-        sub: `Sleep quality score was ${sleepScore} — body temperature needs to drop to reach deep sleep. Keep the bedroom cool.`,
-      }
-    }
-
-    // HRV well below baseline → breathwork
-    if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -15) {
-      return {
-        emoji: '🌬️',
-        title: '5 min box breathing',
-        sub: `HRV is ${Math.abs(hrvBaseline.deviationPct)}% below your baseline. Inhale 4s → hold 4s → exhale 4s → hold 4s. Repeat 5×.`,
-      }
-    }
-
-    // RHR elevated → hydration
-    if (restingHR !== null && restingHR > hrThreshold) {
-      return {
-        emoji: '💧',
-        title: 'Drink 2–3L water today',
-        sub: `Resting heart rate is ${restingHR} bpm — ${restingHR - hrThreshold} bpm above your normal. Dehydration is a common cause of elevated RHR.`,
-      }
-    }
-
-    // Good readiness → proactive tip for tonight
-    if (readiness.score >= 75) {
-      return {
-        emoji: '☀️',
-        title: '10 min sunlight this morning',
-        sub: 'Recovery is strong. Morning light anchors your circadian rhythm and naturally improves deep sleep tonight.',
-      }
-    }
-
-    // Moderate readiness → nutrition
-    return {
-      emoji: '🥗',
-      title: '30–40g protein with dinner',
-      sub: 'Recovery nutrition: protein in the evening supports muscle repair during sleep. Greek yoghurt, eggs or chicken work well.',
-    }
-  })()
-
   return (
     <div className="flex flex-col gap-6">
       {illnessFlag && (
@@ -709,22 +627,6 @@ export function RecoverySection() {
           </div>
         </div>
       )}
-      <div className="p-5 rounded-[22px] border border-white/[0.1]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-3">Today's Focus</p>
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-[32px] leading-none">{todayFocus.emoji}</span>
-          <p className="text-[19px] font-bold text-white leading-tight">{todayFocus.title}</p>
-        </div>
-        {todayFocus.sub && <p className="text-[13px] text-white/55 leading-relaxed mb-3">{todayFocus.sub}</p>}
-        <div className="flex flex-col gap-1.5 pt-3 border-t border-white/[0.08]">
-          {factors.map(f => (
-            <div key={f.label} className="flex items-center gap-2">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.ok === true ? 'bg-teal-400' : f.ok === false ? 'bg-orange-400' : 'bg-white/20'}`} />
-              <span className="text-[13px] text-white/60">{f.label}: <span className="text-white/80">{f.status}</span>{f.note ? <span className="text-white/35"> · {f.note}</span> : ''}</span>
-            </div>
-          ))}
-        </div>
-      </div>
       <HeroMetric
         value={readiness.score ? String(readiness.score) : '–'}
         label="Readiness"

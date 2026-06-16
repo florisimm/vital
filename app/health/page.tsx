@@ -7,7 +7,7 @@ import { Activity, RefreshCw, ChevronRight } from 'lucide-react'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { Card } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
-import { computePhysiologyReadiness } from '@/lib/readiness'
+import { computePhysiologyReadiness, computeIllnessFlag, computeHRVBaseline } from '@/lib/readiness'
 import { computePersonalProfile } from '@/lib/personal-learning'
 import {
   computeSleepScore,
@@ -192,6 +192,47 @@ export default function HealthPage() {
 
   const physiologyReadiness = computePhysiologyReadiness(rows)
   const readinessPct = physiologyReadiness.score
+
+  const illnessFlag  = computeIllnessFlag(rows)
+  const hrvBaseline  = computeHRVBaseline(rows)
+  const _sleepMin    = latestWithSleep?.slaap_minuten ?? null
+  const _sleepDeep   = latestWithSleep?.slaap_diep    ?? null
+  const _wakeMin     = (latestWithSleep as any)?.slaap_einde_min ?? null
+  const _hrThreshold = (() => {
+    const vals = rows.filter(r => r.hartslag_rust != null).slice(0, 14).map(r => r.hartslag_rust as number)
+    return vals.length >= 5 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) + 5 : 65
+  })()
+
+  const todayFocus = (() => {
+    if (illnessFlag) return {
+      emoji: '🛑',
+      title: 'Rest completely today',
+      sub: `${illnessFlag.reason} — prioritise sleep, fluids and no alcohol tonight`,
+    }
+    if (readinessPct === null) return {
+      emoji: '📊',
+      title: 'Connect Fitbit',
+      sub: 'Sync health data to see personalised daily focus advice',
+    }
+    if (_sleepMin !== null && _sleepMin < 420) {
+      const hh = Math.floor(_sleepMin / 60), mm = _sleepMin % 60
+      const bed = _wakeMin !== null
+        ? (() => { const b = ((_wakeMin - 8 * 60) + 1440) % 1440; return `${String(Math.floor(b / 60)).padStart(2, '0')}:${String(b % 60).padStart(2, '0')}` })()
+        : '22:30'
+      return { emoji: '🛏️', title: `In bed by ${bed} tonight`, sub: `You got ${hh}h ${mm}m last night — 30 min more sleep meaningfully improves HRV and recovery.` }
+    }
+    if (_sleepDeep !== null && _sleepMin !== null && _sleepDeep / _sleepMin < 0.15)
+      return { emoji: '🌙', title: 'No alcohol or screens after 21:00', sub: `Deep sleep was ${Math.round(_sleepDeep / _sleepMin * 100)}% last night (target 20%). Alcohol and blue light suppress slow-wave sleep.` }
+    if (sleepScore !== null && sleepScore < 60)
+      return { emoji: '🌡️', title: 'Cool bedroom tonight (16–18 °C)', sub: `Sleep quality score was ${sleepScore} — body temperature needs to drop to reach deep sleep.` }
+    if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -15)
+      return { emoji: '🌬️', title: '5 min box breathing', sub: `HRV is ${Math.abs(hrvBaseline.deviationPct)}% below your baseline. Inhale 4s → hold 4s → exhale 4s → hold 4s. Repeat 5×.` }
+    if (restingHR !== null && restingHR > _hrThreshold)
+      return { emoji: '💧', title: 'Drink 2–3L water today', sub: `Resting heart rate is ${restingHR} bpm — ${restingHR - _hrThreshold} bpm above your normal. Dehydration is a common cause of elevated RHR.` }
+    if (readinessPct >= 75)
+      return { emoji: '☀️', title: '10 min sunlight this morning', sub: 'Recovery is strong. Morning light anchors your circadian rhythm and naturally improves deep sleep tonight.' }
+    return { emoji: '🥗', title: '30–40g protein with dinner', sub: 'Recovery nutrition: protein in the evening supports muscle repair during sleep. Greek yoghurt, eggs or chicken work well.' }
+  })()
   const readinessColor = readinessPct !== null
     ? (readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171')
     : 'rgba(255,255,255,0.3)'
@@ -358,6 +399,16 @@ export default function HealthPage() {
       {activeTab === 'activity' && <ActivitySection rows={rows} />}
 
       {activeTab === 'overview' && <div className="flex flex-col gap-[18px]">
+
+        {/* Today's Focus */}
+        <div className="p-5 rounded-[22px] border border-white/[0.1]" style={{ background: 'rgba(45,212,191,0.07)' }}>
+          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-3">Today's Focus</p>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-[32px] leading-none">{todayFocus.emoji}</span>
+            <p className="text-[19px] font-bold text-white leading-tight">{todayFocus.title}</p>
+          </div>
+          {todayFocus.sub && <p className="text-[13px] text-white/55 leading-relaxed">{todayFocus.sub}</p>}
+        </div>
 
         {/* Recovery Score hero */}
         <Card>
