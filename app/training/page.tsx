@@ -36,7 +36,11 @@ export default function TrainingPage() {
   // Server and first client render must match. SWR hydrates from localStorage on the
   // client, so data-driven content (emoji, labels) would differ from SSR. Gate it on mount.
   const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  useEffect(() => {
+    setMounted(true)
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    if (tab) setActiveTab(tab)
+  }, [])
 
   const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
 

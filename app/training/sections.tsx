@@ -2278,9 +2278,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   const [ctaLabel, ctaHref] = (() => {
     if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
       const l = focus.label.toLowerCase()
-      if (l.includes('cycling')) return ['Go for an easy ride →', '/training/cycling']
-      if (l.includes('swimming')) return ['Go for an easy swim →', '/training/swimming']
-      return ['Go for an easy run →', '/training/running']
+      if (l.includes('cycling')) return ['Go for an easy ride →', '/training?tab=cycling']
+      if (l.includes('swimming')) return ['Go for an easy swim →', '/training?tab=swimming']
+      return ['Go for an easy run →', '/training?tab=running']
     }
 
     // Route straight to the sport the recommendation points at, so the subpage
@@ -2291,18 +2291,18 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     const isRest = l.includes('rest') || l.includes('recovery day') || l.includes('active recovery')
       || l.includes('keep it light') || l.includes('light movement')
     if (!isRest) {
-      if ((l.includes('run') || l.includes('loop')) && !l.includes('swim')) return ['View running plan →', '/training/running']
-      if (l.includes('cycl') || l.includes('ride') || l.includes('bike') || l.includes('fiet')) return ['View cycling plan →', '/training/cycling']
-      if (l.includes('swim') || l.includes('zwem')) return ['View swimming plan →', '/training/swimming']
+      if ((l.includes('run') || l.includes('loop')) && !l.includes('swim')) return ['View running plan →', '/training?tab=running']
+      if (l.includes('cycl') || l.includes('ride') || l.includes('bike') || l.includes('fiet')) return ['View cycling plan →', '/training?tab=cycling']
+      if (l.includes('swim') || l.includes('zwem')) return ['View swimming plan →', '/training?tab=swimming']
       if (l.includes('leg') || l.includes('push') || l.includes('pull') || l.includes('strength')
-        || l.includes('gym') || l.includes('kracht') || e === '💪' || e === '🏋️') return ['View strength plan →', '/training/strength']
+        || l.includes('gym') || l.includes('kracht') || e === '💪' || e === '🏋️') return ['View strength plan →', '/training?tab=strength']
     }
 
     if (!next) return ['View training →', '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
     const isCardio = CARDIO_KW.some(k => t.includes(k))
-    if (isGym && !isCardio) return ['View strength →', '/training/strength']
+    if (isGym && !isCardio) return ['View strength →', '/training?tab=strength']
     const dateStr = next.start_datetime || next.start_date
     return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
