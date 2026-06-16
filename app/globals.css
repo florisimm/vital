@@ -36,6 +36,10 @@ input, textarea {
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; -ms-overflow-style: none; }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Page slide-in transition */
 @keyframes slideInFromRight {
   from { transform: translateX(100%); opacity: 0; }

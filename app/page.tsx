@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { PremiumScreen } from '@/components/PremiumScreen'
@@ -234,8 +234,13 @@ function ProgressCard({ data }: { data: any }) {
   )
 }
 
-function UpcomingCard({ events }: { events: any[] }) {
-  if (!events.length) return null
+function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise<void> }) {
+  const [syncing, setSyncing] = useState(false)
+
+  async function handleSync() {
+    setSyncing(true)
+    try { await onSync() } finally { setSyncing(false) }
+  }
 
   const daTom = new Date(tom0()); daTom.setDate(tom0().getDate() + 1)
 
@@ -256,7 +261,21 @@ function UpcomingCard({ events }: { events: any[] }) {
 
   return (
     <div>
-      <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em] mb-3">Upcoming</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">Upcoming</p>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="text-white/30 active:text-white/60 transition-colors disabled:opacity-40"
+          aria-label="Sync calendar"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            style={{ animation: syncing ? 'spin 1s linear infinite' : undefined }}>
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+        </button>
+      </div>
       <div className="flex flex-col gap-4">
         {[...groups.entries()].slice(0, 3).map(([label, evts]) => (
           <div key={label}>
@@ -398,7 +417,19 @@ export default function TodayPage() {
         />
         <FocusCard items={focus} />
         <ProgressCard data={effectiveData} />
-        <UpcomingCard events={(effectiveData?.calendarEvents ?? []).filter(isSport)} />
+        <UpcomingCard
+          events={(effectiveData?.calendarEvents ?? []).filter(isSport)}
+          onSync={async () => {
+            try {
+              const supabase = createClient()
+              const { data: { session } } = await supabase.auth.getSession()
+              if (!session?.access_token) return
+              const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }
+              await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-calendar-sync`, { method: 'POST', headers })
+              mutate('today')
+            } catch { /* ignore */ }
+          }}
+        />
       </div>
     </PremiumScreen>
   )
