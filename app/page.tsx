@@ -420,7 +420,6 @@ export default function TodayPage() {
             return [...hevy, ...cardio]
           })()}
         />
-        <FocusCard items={focus} />
         <ProgressCard data={effectiveData} />
         <UpcomingCard
           events={(effectiveData?.calendarEvents ?? []).filter(isSport)}
