@@ -2366,7 +2366,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     return focus.label.split(' · ')[0]
   }
 
-  const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
+  const rc = readinessPct >= 80 ? '#4ade80' : readinessPct >= 60 ? '#2dd4bf' : readinessPct >= 45 ? '#fb923c' : '#f87171'
   const headline = simplified ? toSimpleLabel() : toSpecificRecommendation()
 
   if (simplified) {
@@ -2977,7 +2977,7 @@ function PlannedEventsCard({
     else grouped.push({ label: lbl, events: [e] })
   }
 
-  const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
+  const rc = readinessPct >= 80 ? '#4ade80' : readinessPct >= 60 ? '#2dd4bf' : readinessPct >= 45 ? '#fb923c' : '#f87171'
   const rl = readinessPct >= 70 ? 'Goed' : readinessPct >= 45 ? 'Matig' : 'Laag'
 
   return (
