@@ -19,20 +19,26 @@ export type HealthRow = {
   ademhalingsfrequentie: number | null
 }
 
-// Composite sleep score (0–100) calibrated to approximate Fitbit's score.
+// Composite sleep score (0–100).
+// When sleep-stage data is absent (deep+rem=0), composition is excluded and
+// weights redistribute to duration+efficiency so long sleep isn't penalised.
 export function computeSleepScore(r: HealthRow): number | null {
   const asleep = r.slaap_minuten
   if (!asleep) return null
-  const awake = r.wakker_minuten ?? 0
-  const deep  = r.slaap_diep ?? 0
-  const rem   = r.slaap_rem ?? 0
+  const awake     = r.wakker_minuten ?? 0
+  const deep      = r.slaap_diep ?? 0
+  const rem       = r.slaap_rem ?? 0
+  const hasStages = deep + rem > 0
   const duration    = Math.min(asleep / 480, 1) ** 2
-  const composition = Math.min((deep + rem) / asleep / 0.55, 1)
+  const composition = hasStages ? Math.min((deep + rem) / asleep / 0.55, 1) : null
   const efficiency  = Math.max(0, Math.min((asleep / (asleep + awake) - 0.75) / 0.25, 1))
-  const parts: [number, number][] = [[duration, 0.5], [composition, 0.35], [efficiency, 0.15]]
+  const parts: [number, number][] = hasStages
+    ? [[duration, 0.50], [composition!, 0.35], [efficiency, 0.15]]
+    : [[duration, 0.80], [efficiency, 0.20]]
   if (r.wakker_count != null) {
     const restlessness = Math.max(0, Math.min(1 - (r.wakker_count - 1) / 12, 1))
-    parts[0][1] = 0.45; parts[1][1] = 0.30; parts[2][1] = 0.10
+    if (hasStages) { parts[0][1] = 0.45; parts[1][1] = 0.30; parts[2][1] = 0.10 }
+    else           { parts[0][1] = 0.70; parts[1][1] = 0.15 }
     parts.push([restlessness, 0.15])
   }
   const totalWeight = parts.reduce((s, [, w]) => s + w, 0)
@@ -77,8 +83,9 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
     if (hist.length >= 4) {
       const baseline = hist.reduce((a, b) => a + b, 0) / hist.length
       hrvDevPct = Math.round(((todayHRV - baseline) / baseline) * 100)
-      // ±30% deviation spans [0, 1]; at baseline = 0.5
-      hrvComponent = Math.max(0, Math.min(1, 0.5 + (todayHRV - baseline) / baseline / 0.6))
+      // Sitting at your healthy baseline is a GOOD sign, not "average" — center at 0.72.
+      // A meaningful drop (~-20%) pulls toward 0, being above lifts toward 1.
+      hrvComponent = Math.max(0, Math.min(1, 0.72 + (todayHRV - baseline) / baseline / 0.6))
     } else {
       hrvComponent = todayHRV / (todayHRV + 50)
     }
@@ -94,8 +101,9 @@ export function computePhysiologyReadiness(rows: HealthRow[]): {
     if (hist.length >= 4) {
       const baseline = hist.reduce((a, b) => a + b, 0) / hist.length
       rhrDevPct = Math.round(((todayRHR - baseline) / baseline) * 100)
-      // Higher than baseline = worse; ±15% spans [0, 1]; at baseline = 0.5
-      rhrComponent = Math.max(0, Math.min(1, 0.5 - (todayRHR - baseline) / baseline / 0.3))
+      // Resting HR at your baseline is a GOOD sign — center at 0.72.
+      // Higher than baseline = worse (pulls toward 0), lower lifts toward 1.
+      rhrComponent = Math.max(0, Math.min(1, 0.72 - (todayRHR - baseline) / baseline / 0.3))
     } else {
       rhrComponent = Math.max(0, Math.min(1, (100 - todayRHR) / 50))
     }

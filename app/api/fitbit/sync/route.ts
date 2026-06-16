@@ -156,12 +156,16 @@ export async function POST(_req: NextRequest) {
     }
     const awake  = parseInt(s.summary.minutesAwake ?? '0')
     const deepMin = stages.DEEP ?? 0, remMin = stages.REM ?? 0
+    const hasStages        = deepMin + remMin > 0
     const durationScore    = Math.min(asleep / 480, 1) ** 2
-    const compositionScore = asleep > 0 ? Math.min((deepMin + remMin) / asleep / 0.55, 1) : 0
+    const compositionScore = hasStages ? Math.min((deepMin + remMin) / asleep / 0.55, 1) : null
     const efficiencyScore  = asleep + awake > 0 ? Math.max(0, Math.min((asleep / (asleep + awake) - 0.75) / 0.25, 1)) : 0
-    const parts: [number, number][] = [[durationScore, 0.5], [compositionScore, 0.35], [efficiencyScore, 0.15]]
+    const parts: [number, number][] = hasStages
+      ? [[durationScore, 0.50], [compositionScore!, 0.35], [efficiencyScore, 0.15]]
+      : [[durationScore, 0.80], [efficiencyScore, 0.20]]
     if (awakeCount != null) {
-      parts[0][1] = 0.45; parts[1][1] = 0.30; parts[2][1] = 0.10
+      if (hasStages) { parts[0][1] = 0.45; parts[1][1] = 0.30; parts[2][1] = 0.10 }
+      else           { parts[0][1] = 0.70; parts[1][1] = 0.15 }
       parts.push([Math.max(0, Math.min(1 - (awakeCount - 1) / 12, 1)), 0.15])
     }
     const totalW = parts.reduce((a, [, w]) => a + w, 0)

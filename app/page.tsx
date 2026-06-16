@@ -1,11 +1,17 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { PremiumScreen } from '@/components/PremiumScreen'
-import { computePhysiologyReadiness, computeHRVBaseline, computeSleepScore, type HealthRow } from '@/lib/readiness'
+import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { formatTime, localDateStr } from '@/lib/timeFormat'
+import {
+  computeTodaysFocus, computeACWRDetail, computePerformanceScore, computeRecoveryDetail,
+  TodaysPlanCard, startOfWeek,
+  type Activity as TrainingActivity, type HevyWorkout as TrainingHevyWorkout,
+} from '@/app/training/sections'
+import { effectiveLoad, hevyLoad, isAccessorySession } from '@/lib/training-load'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -13,8 +19,6 @@ const STRENGTH_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 's
 const CARDIO_KW   = ['run', 'long run', 'bike', 'swim', 'swim', 'ride', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo', 'zone']
 const CARDIO_SPORT_TYPES = ['run', 'ride', 'swim', 'walk', 'hike', 'virtual_run', 'virtual_ride', 'rowing', 'kayaking', 'crossfit', 'elliptical']
 const SPORT_KW = [...new Set([...STRENGTH_KW, ...CARDIO_KW, 'football', 'tennis', 'volleyball', 'training', 'workout', 'tournament', 'sport', 'sports', 'crossfit', 'yoga', 'padel', 'hockey', 'basketball', 'cycling'])]
-
-type DayStatus = 'green' | 'yellow' | 'red'
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
 
@@ -100,200 +104,6 @@ function workoutDone(title: string, hevy: any[], acts: any[]): boolean {
   return hevy.length > 0 || cardioActs.length > 0
 }
 
-// ─── Coach builder ────────────────────────────────────────────────────────────
-
-function buildCoach(rows: HealthRow[], data: any) {
-  const readiness     = computePhysiologyReadiness(rows)
-  const todayRow      = rows.find(r => r.datum === localDateStr())
-  const sleepRows7    = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
-  const sleepScore    = todayRow?.slaap_minuten != null
-    ? computeSleepScore(todayRow)
-    : sleepRows7.length >= 2
-      ? Math.round(sleepRows7.reduce((s, r) => s + (computeSleepScore(r) ?? 0), 0) / sleepRows7.length)
-      : null
-  const hrvBaseline   = computeHRVBaseline(rows)
-
-  const settings       = data?.settings
-  const foodLogToday   = data?.foodLogToday ?? []
-  const calendarEvents = data?.calendarEvents ?? []
-  const todayEvent     = calendarEvents.find((e: any) => isToday(e) && isSport(e)) ?? null
-
-  const totalProtein  = foodLogToday.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
-  const targetProtein = Number(settings?.macro_protein ?? 180)
-  const proteinLeft   = Math.round(Math.max(0, targetProtein - totalProtein))
-
-  // Status + title
-  let status: DayStatus = 'yellow'
-  let title = 'Steady Day'
-  if (readiness.score !== null) {
-    if (readiness.score >= 75)      { status = 'green';  title = 'Strong Day' }
-    else if (readiness.score >= 50) { status = 'yellow'; title = 'Moderate Day' }
-    else                            { status = 'red';    title = 'Recovery Day' }
-  }
-  if (sleepScore !== null && sleepScore < 50 && status === 'green') {
-    status = 'yellow'; title = 'Easy Day'
-  }
-
-  // 3 compact bullets replacing the paragraph
-  const bullets: string[] = []
-
-  // 1. Recovery level
-  if (readiness.score !== null) {
-    if (readiness.score >= 75)      bullets.push('Recovery is high')
-    else if (readiness.score >= 50) bullets.push('Recovery is moderate')
-    else                            bullets.push('Recovery is low')
-  } else if (sleepScore !== null) {
-    if (sleepScore >= 70)  bullets.push('Sleep was good')
-    else if (sleepScore >= 50) bullets.push('Sleep was moderate')
-    else                    bullets.push('Sleep was poor')
-  }
-
-  // 2. Training context
-  if (todayEvent) {
-    const t = todayEvent.title.toLowerCase()
-    const isCardio = CARDIO_KW.some(kw => t.includes(kw))
-    bullets.push(isCardio ? 'Cardio scheduled today' : `${todayEvent.title} planned today`)
-  } else if (hrvBaseline.deviationPct !== null && hrvBaseline.deviationPct < -10) {
-    bullets.push(`HRV ${Math.abs(hrvBaseline.deviationPct)}% below baseline`)
-  }
-
-  // 3. Protein remaining
-  if (proteinLeft > 0) {
-    bullets.push(`${proteinLeft}g protein remaining`)
-  } else if (foodLogToday.length > 0) {
-    bullets.push('Protein goal reached')
-  }
-
-  return { status, title, bullets: bullets.slice(0, 3) }
-}
-
-// ─── Weekly goals helper ──────────────────────────────────────────────────────
-
-function getWeeklyProgress(activities: any[], hevy: any[], trainingFrequencies?: Record<string, number>) {
-  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
-  const weekStartIso = weekStart.toISOString().split('T')[0]
-
-  const weekActivities = activities.filter(a => (a.start_date ?? '').slice(0, 10) >= weekStartIso)
-  const weekHevy = hevy.filter(h => (h.start_time ?? '').slice(0, 10) >= weekStartIso)
-
-  const running = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('run')).length
-  const cycling = weekActivities.filter(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') }).length
-  const strength = weekHevy.length
-
-  const freq = trainingFrequencies ?? {}
-  const targets = {
-    running:  freq.running  ?? 0,
-    cycling:  freq.cycling  ?? 0,
-    strength: freq.strength ?? 0,
-  }
-  const isBehind = (targets.running > 0 && running < targets.running) || (targets.cycling > 0 && cycling < targets.cycling) || (targets.strength > 0 && strength < targets.strength)
-  const details: string[] = []
-  if (targets.running > 0 && running < targets.running) details.push(`${targets.running - running} more run${targets.running - running !== 1 ? 's' : ''}`)
-  if (targets.cycling > 0 && cycling < targets.cycling) details.push(`${targets.cycling - cycling} more ride${targets.cycling - cycling !== 1 ? 's' : ''}`)
-  if (targets.strength > 0 && strength < targets.strength) details.push(`${targets.strength - strength} more lift${targets.strength - strength !== 1 ? 's' : ''}`)
-
-  return { isBehind, details, running, cycling, strength }
-}
-
-// ─── Recommendation builder ───────────────────────────────────────────────────
-
-function buildRecommendation(rows: HealthRow[], data: any) {
-  const readiness      = computePhysiologyReadiness(rows)
-  const calendarEvents = data?.calendarEvents ?? []
-  const todayEvent     = calendarEvents.find((e: any) => isToday(e) && isSport(e)) ?? null
-  const foodLogToday   = data?.foodLogToday ?? []
-  const settings       = data?.settings
-  const totalProtein   = foodLogToday.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
-  const targetProtein  = Number(settings?.macro_protein ?? 180)
-  const proteinLeft    = Math.round(Math.max(0, targetProtein - totalProtein))
-  const hevy           = data?.todayHevy ?? []
-  const acts           = data?.todayActivities ?? []
-  const allActivities  = data?.allActivities ?? []
-  const allHevy        = data?.allHevy ?? []
-  const trainingFreq   = (settings as any)?.training_frequencies ?? {}
-
-  // Check weekly goal progress using user's own targets from profile
-  const weeklyProgress = getWeeklyProgress(allActivities, allHevy, trainingFreq)
-
-  let icon = '🏃'
-  let title = 'Zone 2 Run'
-  let duration = '45 min'
-  let href: string | undefined
-  const why: string[] = []
-
-  if (readiness.score !== null && readiness.score < 50) {
-    // Very low readiness: rest recommended, but acknowledge weekly goals
-    icon = '😴'; title = 'Rest Day'; duration = ''
-    why.push(`Readiness at ${readiness.score}% — body needs recovery`)
-    if (weeklyProgress.isBehind) {
-      why.push(`Catch up tomorrow (${weeklyProgress.details.join(', ')})`)
-    } else {
-      why.push('Skip training today')
-    }
-  } else if (readiness.score !== null && readiness.score < 65) {
-    // Low readiness: light activity recommended
-    // But if user is behind on weekly goals, make it a light workout instead of rest
-    if (weeklyProgress.isBehind) {
-      icon = '🚶'; title = 'Light Workout'; duration = '30 min'
-      why.push(`Readiness at ${readiness.score}% — light activity only`)
-      why.push(`Behind weekly goals: ${weeklyProgress.details.slice(0, 2).join(', ')}`)
-    } else {
-      icon = '🚶'; title = 'Light Walk or Mobility'; duration = '30 min'
-      why.push(`Readiness at ${readiness.score}% — keep intensity low`)
-    }
-    if (todayEvent) why.push(`${todayEvent.title} — reduce volume by ~25%`)
-  } else if (todayEvent) {
-    const t = todayEvent.title.toLowerCase()
-    const isCardio  = CARDIO_KW.some(k => t.includes(k))
-    const isGym     = STRENGTH_KW.some(k => t.includes(k)) && !isCardio
-    const done      = workoutDone(todayEvent.title, hevy, acts)
-    if (isCardio) {
-      icon = t.includes('fietsen') || t.includes('cycling') || t.includes('ride') || t.includes('wielren') ? '🚴' : '🏃'
-    } else {
-      icon = '🏋️'
-    }
-    if (done) {
-      // Workout completed — show what's next, not the completed event
-      const cardioNeeded = weeklyProgress.details.find(d => d.includes('run') || d.includes('ride'))
-      // Compute target bedtime from avg wake time (slaap_einde_min) or fallback to 7am
-      const wakes = rows.filter(r => (r as any).slaap_einde_min != null).slice(0, 7).map(r => (r as any).slaap_einde_min as number)
-      const wakeMin = wakes.length >= 2 ? Math.round(wakes.reduce((a, b) => a + b, 0) / wakes.length) : 7 * 60
-      const bedMin = ((wakeMin - 8 * 60) + 1440) % 1440
-      const bedtime = `${Math.floor(bedMin / 60)}:${(bedMin % 60).toString().padStart(2, '0')}`
-      if (cardioNeeded && readiness.score !== null && readiness.score >= 55) {
-        icon = cardioNeeded.includes('run') ? '🏃' : '🚴'
-        title = cardioNeeded.includes('run') ? 'Optional easy run' : 'Optional easy ride'
-        href = cardioNeeded.includes('run') ? '/training/running' : '/training/cycling'
-        why.push('Room for easy cardio if you feel up to it')
-        why.push(`Tonight: in bed by ${bedtime}`)
-      } else {
-        icon = '😴'; title = 'Rest & recover'
-        why.push('Recovery is your training now')
-        why.push(`Tonight: in bed by ${bedtime}`)
-      }
-      duration = `${todayEvent.title} completed`
-    } else {
-      title    = todayEvent.title
-      duration = ''
-      href     = isGym
-        ? '/training/strength'
-        : `/training/session?title=${encodeURIComponent(todayEvent.title)}&time=${encodeURIComponent((todayEvent as any).start_datetime ?? '')}`
-      if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high — good day to push')
-      else if (readiness.score !== null)                      why.push('Recovery is solid')
-      why.push(`${todayEvent.title} on the schedule`)
-    }
-  } else {
-    icon = '🚴'; title = 'Zone 2 Ride'; duration = '60 min'
-    if (readiness.score !== null && readiness.score >= 75) why.push('Recovery is high')
-    why.push('No session planned — good day for cardio')
-  }
-
-  if (proteinLeft > 30) why.push(`${proteinLeft}g protein remaining`)
-  else if (proteinLeft <= 0 && foodLogToday.length > 0) why.push('Protein goal already reached')
-
-  return { icon, title, duration, href, why: why.slice(0, 3) }
-}
-
 // ─── Focus builder ────────────────────────────────────────────────────────────
 
 function buildFocusItems(data: any) {
@@ -349,65 +159,6 @@ function buildFocusItems(data: any) {
 }
 
 // ─── UI ───────────────────────────────────────────────────────────────────────
-
-const STATUS_CFG = {
-  green:  { bg: 'rgba(45,212,191,0.08)',  border: 'rgba(45,212,191,0.2)',  dot: '#2dd4bf' },
-  yellow: { bg: 'rgba(251,146,60,0.08)',  border: 'rgba(251,146,60,0.2)',  dot: '#fb923c' },
-  red:    { bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.2)', dot: '#f87171' },
-}
-
-function RecommendationCard({ rec }: { rec: ReturnType<typeof buildRecommendation> }) {
-  const inner = (
-    <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em] mb-4">Today's Recommendation</p>
-      <div className="flex items-center gap-4 mb-4">
-        <span className="text-[42px] leading-none">{rec.icon}</span>
-        <div>
-          <p className="text-[22px] font-bold text-white leading-tight">{rec.title}</p>
-          {rec.duration && (
-            <p className="text-[14px] text-white/40 mt-0.5">{rec.duration}</p>
-          )}
-        </div>
-      </div>
-      {rec.why.length > 0 && (
-        <div className="pt-3 border-t border-white/[0.08]">
-          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2.5">Why?</p>
-          <div className="flex flex-col gap-1.5">
-            {rec.why.map((w, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
-                <span className="text-[13px] text-white/65">{w}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-  return rec.href
-    ? <a href={rec.href} className="block active:opacity-70 transition-opacity">{inner}</a>
-    : inner
-}
-
-function CoachCard({ coach }: { coach: ReturnType<typeof buildCoach> }) {
-  const cfg = STATUS_CFG[coach.status]
-  return (
-    <div className="px-4 py-3.5 rounded-[20px] border" style={{ background: cfg.bg, borderColor: cfg.border }}>
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.dot }} />
-        <span className="text-[15px] font-bold text-white">{coach.title}</span>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        {coach.bullets.map((b, i) => (
-          <div key={i} className="flex items-start gap-2.5">
-            <span className="text-white/25 text-[11px] mt-[3px] shrink-0">•</span>
-            <span className="text-[13px] text-white/60">{b}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 function FocusCard({ items }: { items: ReturnType<typeof buildFocusItems> }) {
   if (items.length === 0) return null
@@ -550,30 +301,87 @@ export default function TodayPage() {
   const { data: training } = useSWR('training', null)
   const rows = gezondheid ?? []
 
-  // Invalidate 'today' cache when training data updates (Hevy sync, activity added, etc.)
   useEffect(() => {
-    if (training) {
-      mutate('today')
-    }
+    if (training) mutate('today')
   }, [training])
 
-  // Prefer steps from the health-gezondheid cache (kept fresh by DataProvider auto-sync)
-  // over the today-fetch result, which may have run before today's Fitbit sync completed.
   const todayStr = localDateStr()
   const todayHealthRow = rows.find(r => r.datum === todayStr)
   const effectiveData = data && todayHealthRow?.stappen != null
     ? { ...data, latestGezondheid: { ...(data.latestGezondheid ?? {}), stappen: todayHealthRow.stappen } }
     : data
 
-  const rec   = buildRecommendation(rows, effectiveData)
-  const coach = buildCoach(rows, effectiveData)
   const focus = buildFocusItems(effectiveData)
+
+  // Compute training recommendation using the same logic as the Training overview
+  const { todaysFocus, unifiedReadinessPct, biasApplied } = useMemo(() => {
+    const activities: TrainingActivity[] = training?.activities ?? []
+    const hevy: TrainingHevyWorkout[]    = training?.hevy ?? []
+    const calendarEvents                 = effectiveData?.calendarEvents ?? []
+    const biasBySport: Record<string, number> = training?.biasBySport ?? {}
+    const trainingFrequencies: Record<string, number> = training?.trainingFrequencies ?? {}
+
+    const physiologyReadiness = computePhysiologyReadiness(rows)
+    const recoveryDetail      = computeRecoveryDetail(activities, hevy)
+    const perf                = computePerformanceScore(activities, hevy)
+
+    const rawReadinessPct = physiologyReadiness.score !== null
+      ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
+      : recoveryDetail.pct
+    const biasValues  = Object.values(biasBySport)
+    const avgBias     = biasValues.length > 0 ? biasValues.reduce((s, v) => s + v, 0) / biasValues.length : 0
+    const biasPoints  = Math.round(avgBias * 100)
+    const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints))
+
+    const now         = Date.now()
+    const weekStart   = startOfWeek()
+    const sevenDaysAgo    = new Date(now - 7  * 86400000).toISOString()
+    const fourteenDaysAgo = new Date(now - 14 * 86400000).toISOString()
+    const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+      + hevy.filter(h => h.start_time >= sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
+    const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+      + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
+    const rampRate = prev7kj > 5
+      ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
+      : null
+    const acwrDetail = computeACWRDetail(activities, hevy, now, rampRate)
+
+    const weekActivities = activities.filter(a => a.start_date >= weekStart)
+    const weekHevy       = hevy.filter(h => h.start_time >= weekStart)
+    const weekRunning  = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('run')).length
+    const weekCycling  = weekActivities.filter(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') }).length
+    const weekSwimming = weekActivities.filter(a => (a.sport_type ?? '').toLowerCase().includes('swim')).length
+    const cardioTargets = [
+      { sport: 'running'  as const, label: 'Running',  emoji: '🏃', target: trainingFrequencies.running  ?? 0, done: weekRunning },
+      { sport: 'cycling'  as const, label: 'Cycling',  emoji: '🚴', target: trainingFrequencies.cycling  ?? 0, done: weekCycling },
+      { sport: 'swimming' as const, label: 'Swimming', emoji: '🏊', target: trainingFrequencies.swimming ?? 0, done: weekSwimming },
+    ]
+
+    const focus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0)
+    const biasApplied = biasPoints !== 0
+    return { todaysFocus: focus, unifiedReadinessPct, biasApplied }
+  }, [training, rows, effectiveData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
       <div className="flex flex-col gap-6" style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        <RecommendationCard rec={rec} />
-        <CoachCard coach={coach} />
+        <TodaysPlanCard
+          simplified
+          focus={todaysFocus}
+          calendarEvents={effectiveData?.calendarEvents ?? []}
+          readinessPct={unifiedReadinessPct}
+          biasApplied={biasApplied}
+          label="Today's Recommendation"
+          completedToday={(() => {
+            const hevy = (effectiveData?.todayHevy ?? []).map((h: any) => ({ name: h.title, sport: 'strength' }))
+            const hevyNames = new Set(hevy.map((h: any) => h.name.toLowerCase()))
+            const cardio = (effectiveData?.todayActivities ?? [])
+              .filter((a: any) => !STRENGTH_KW.some(k => (a.sport_type ?? '').toLowerCase().includes(k)))
+              .filter((a: any) => !hevyNames.has(a.name.toLowerCase()))
+              .map((a: any) => ({ name: a.name, sport: a.sport_type }))
+            return [...hevy, ...cardio]
+          })()}
+        />
         <FocusCard items={focus} />
         <ProgressCard data={effectiveData} />
         <UpcomingCard events={effectiveData?.calendarEvents ?? []} />

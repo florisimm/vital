@@ -62,9 +62,17 @@ function buildRecs(
 
   const { acwr } = computeTrainingLoadScore(activities, hevy)
   if (acwr !== null) {
-    const acwrR = Math.round(acwr * 100) / 100
-    if (acwr > 1.4) recs.push({ title: 'Reduce volume this week', text: `ACWR ${acwrR} — 7-day load is ${Math.round(acwr * 100)}% of 28-day avg. Above 1.3 raises injury risk. Cut 20–30%.` })
-    else if (acwr < 0.7 && activities.length > 3) recs.push({ title: 'Volume below baseline', text: `ACWR ${acwrR} — lighter than chronic average. Safe to push if readiness supports it.` })
+    if (acwr > 1.4) {
+      recs.push({
+        title: 'Ease off this week',
+        text: `You've trained noticeably more this week than your recent average — a jump this big raises injury risk. Cut back about 20–30% before your next hard session.`,
+      })
+    } else if (acwr < 0.7 && activities.length > 3) {
+      recs.push({
+        title: 'Room to do more',
+        text: `This week is lighter than usual for you. If you're feeling fresh, it's a good day to add a bit more.`,
+      })
+    }
   }
 
   const logs = Array.isArray(foodData) ? foodData : (foodData?.food_log ?? foodData?.foodLog ?? [])

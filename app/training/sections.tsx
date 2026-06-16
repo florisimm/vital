@@ -31,7 +31,7 @@ type SportBreakdown = {
   acuteLoad: number; isNew: boolean; hasPrimaryLoad: boolean
   loadComposition: { primary: number; isolation: number; accessory: number } | null
 }
-type ACWRDetail = {
+export type ACWRDetail = {
   total: number | null; confidence: 'low' | 'medium' | 'high'
   sports: SportBreakdown[]; explanation: string
 }
@@ -220,7 +220,7 @@ function hevyLoad(h: HevyWorkout): number {
   return (h.duration ?? 3600) / 60 * sessionLoadFactor(h)
 }
 
-function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
+export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
   const t7  = new Date(now - 7  * 86400000).toISOString()
   const t28 = new Date(now - 28 * 86400000).toISOString()
   const dy  = (iso: string) => iso.slice(0, 10)
@@ -1741,15 +1741,15 @@ function ActivityDetailSheet({ title, rows, onClose }: { title: string; rows: De
   )
 }
 
-type TodaysFocus = {
+export type TodaysFocus = {
   emoji: string; label: string
   action: string; actionColor: string
   reasons: string[]
 }
 
-type CardioTarget = { sport: 'running' | 'cycling' | 'swimming'; label: string; emoji: string; target: number; done: number }
+export type CardioTarget = { sport: 'running' | 'cycling' | 'swimming'; label: string; emoji: string; target: number; done: number }
 
-function computeTodaysFocus(
+export function computeTodaysFocus(
   activities: Activity[],
   hevy: HevyWorkout[],
   calendarEvents: any[],
@@ -1758,6 +1758,7 @@ function computeTodaysFocus(
   acwrDetail: ACWRDetail,
   rampRate: number | null,
   cardioTargets: CardioTarget[] = [],
+  gymTarget: number = 0,
 ): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
@@ -2111,152 +2112,40 @@ function computeTodaysFocus(
     }
   }
 
-  // ── No today events — look ahead up to 3 days ──────────────────────────────
-  const nextPlanned = tomorrowEvts[0] ?? day2Evts[0] ?? day3Evts[0] ?? null
-  if (nextPlanned) {
-    const npIntensity = classify(nextPlanned.title)
-    const npDate      = evtDate(nextPlanned)
-    const npDayLbl    = npDate === tomorrowStr ? 'tomorrow' : npDate === day2Str ? 'day after tomorrow' : 'soon'
-    if (npIntensity === 'hard' || npIntensity === 'very_hard') {
-      if (recoveryPct < 50 || highLoad) {
-        const restReasons = [
-          recoveryPct < 50 ? (lastWorkoutHoursAgo !== null ? `Last workout ${lastWorkoutHoursAgo}h ago` : 'Recovery lower than usual') : '',
-          ...(highLoad ? [`Training load +${Math.abs(loadPct)}% higher than last week`] : []),
-          `${nextPlanned.title} planned ${npDayLbl}`,
-        ].filter(Boolean).slice(0, 3) as string[]
-        return {
-          emoji: '😴', label: 'Rest today',
-          ...ACT.skip, reasons: restReasons,
-        }
-      }
-      return {
-        emoji: '🚶', label: 'Keep it light',
-        ...ACT.easier,
-        reasons: [
-          'Easy 20–30 min only — Zone 2 cardio or mobility, nothing hard',
-          `${nextPlanned.title} planned ${npDayLbl} — save your energy for it`,
-          ...(medLoad ? [`Training load +${Math.abs(loadPct)}% higher than last week`] : []),
-        ].slice(0, 3) as string[],
-      }
-    }
+  // ── Nothing scheduled today ────────────────────────────────────────────────
+  // Only two outcomes from here: a rest day, or one of the user's profile sports
+  // (run / bike / swim) — picked by which weekly frequency goal is furthest behind.
+  const rs = riskScore()
+  const stillToDo = cardioTargets
+    .filter(c => c.target > 0 && c.done < c.target)
+    .sort((a, b) => (b.target - b.done) - (a.target - a.done))
+  const top = stillToDo[0] ?? null
+
+  // Rest when the body needs it, recent load was high, a hard session is coming
+  // up tomorrow, or every weekly goal is already met.
+  let restReason: string | null = null
+  if (recoveryPct < 55)   restReason = `Recovery ${recoveryPct}% — your body needs a rest day`
+  else if (rs >= 5)       restReason = 'A lot of training in the last few days — take a recovery day'
+  else if (upcomingHard)  restReason = `${upcomingHard.title} coming up — rest today so you're fresh for it`
+  else if (!top)          restReason = "You've hit your weekly training goals — rest is earned"
+
+  if (restReason) {
+    const extra = lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48
+      ? `Last workout ${lastWorkoutHoursAgo}h ago`
+      : 'A light walk at most — let your body recover'
+    return { emoji: '😴', label: 'Rest day', ...ACT.skip, reasons: [restReason, extra] }
   }
 
-  // ── No events — muscle-group aware recommendation ──────────────────────────
-  const weekStart    = startOfWeek()
-  const weekStrength = hevy.filter(h => h.start_time >= weekStart && !isAccessorySession(h)).length
-  const weekRuns     = activities.filter(a => isRun(a) && a.start_date >= weekStart).length
-  const weekRides    = activities.filter(a => isRide(a) && a.start_date >= weekStart).length
-  const rs           = riskScore()
-
-  // Hard rest: very low readiness
-  if (recoveryPct < 40) return {
-    emoji: '😴', label: 'Rest day recommended', ...ACT.skip,
-    reasons: [
-      lastWorkoutHoursAgo !== null ? `Last workout ${lastWorkoutHoursAgo}h ago` : 'Recovery too low to train',
-      ...(highLoad ? [`Training load +${Math.abs(loadPct)}% higher than last week`] : []),
-    ],
-  }
-
-  // Active recovery: low readiness or high risk
-  if (recoveryPct < 55 || rs >= 5) return {
-    emoji: '🚶', label: 'Active recovery', ...ACT.recover,
-    reasons: [
-      '20–30 min walk, easy spin or stretching — get blood flowing, no strain',
-      lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 36
-        ? `Last workout ${lastWorkoutHoursAgo}h ago — still recovering`
-        : 'Recovery lower than usual',
-      ...(highLoad ? [`Training load +${Math.abs(loadPct)}% higher than last week`] : []),
-    ].slice(0, 3),
-  }
-
-  // Muscle group advice
-  const muscleAdvice  = computeMuscleGroupAdvice(hevy)
-  const legsReady     = muscleAdvice.find(g => g.label === 'Legs')?.recommendation === 'train'
-  const chestReady    = muscleAdvice.find(g => g.label === 'Chest')?.recommendation === 'train'
-  const shoulderReady = muscleAdvice.find(g => g.label === 'Shoulders')?.recommendation === 'train'
-  const backReady     = muscleAdvice.find(g => g.label === 'Back')?.recommendation === 'train'
-  const armsReady     = muscleAdvice.find(g => g.label === 'Arms')?.recommendation === 'train'
-  const pushReady     = chestReady && shoulderReady
-  const pullReady     = backReady
-
-  const cardioReady = recoveryPct >= 65 && weekRuns + weekRides < 5
-  const strengthBalance = weekStrength < 3
-
-  // Leg day — most demanding, suggest when recovered and not overdone this week
-  if (legsReady && strengthBalance) return {
-    emoji: '🏋️', label: 'Leg day recommended', ...ACT.proceed,
-    reasons: [
-      'Legs recovered and ready to train',
-      weekStrength < 2 ? 'Low strength volume this week' : 'Good balance for the week',
-    ],
-  }
-
-  // Zone 2 cardio — aerobic base building
-  if (cardioReady && weekRuns + weekRides < 3 && !legsReady) return {
-    emoji: '🏃', label: 'Easy endurance run recommended', ...ACT.proceed,
-    reasons: [
-      `Capacity ${recoveryPct}% — good time for endurance training`,
-      'Low cardio volume this week',
-    ],
-  }
-
-  // Push day
-  if (pushReady && strengthBalance) return {
-    emoji: '💪', label: 'Push day recommended', ...ACT.proceed,
-    reasons: [
-      'Chest and shoulders recovered',
-      pullReady ? 'Push/pull alternation for optimal recovery' : 'Good time for pressing',
-    ],
-  }
-
-  // Pull day
-  if (pullReady && strengthBalance) return {
-    emoji: '💪', label: 'Pull day recommended', ...ACT.proceed,
-    reasons: [
-      'Back recovered — rows and pull-ups recommended',
-      armsReady ? 'Arms also recovered — combine with bicep work' : 'Focus on compound back movements',
-    ],
-  }
-
-  // Zone 2 cardio fallback
-  if (cardioReady) return {
-    emoji: '🚴', label: 'Easy endurance ride recommended', ...ACT.proceed,
-    reasons: [`Capacity ${recoveryPct}% — endurance or recovery ride recommended`],
-  }
-
-  // Default: check remaining weekly targets first, then fall back
-  if (recoveryPct >= 70) {
-    const remaining = cardioTargets
-      .filter(c => c.target > 0 && c.done < c.target)
-      .sort((a, b) => (b.target - b.done) - (a.target - a.done))
-    if (remaining.length > 0) {
-      const top = remaining[0]
-      return {
-        emoji: top.emoji,
-        label: `Easy ${top.label.toLowerCase()} recommended`,
-        ...ACT.easier,
-        reasons: [
-          `${top.done}/${top.target} ${top.label.toLowerCase()} sessions this week — ${top.target - top.done} to go`,
-          `Recovery ${recoveryPct}% — keep it Zone 2, light effort`,
-          'No muscle group is fully fresh — easy cardio is the right call',
-        ],
-      }
-    }
-    return {
-      emoji: '🏃', label: 'Easy session', ...ACT.easier,
-      reasons: [
-        '20–30 min easy — Zone 2 cardio or a light full-body circuit',
-        'Keep it conversational (effort you could hold while chatting)',
-        'No muscle group is fully fresh for a hard session today',
-      ],
-    }
-  }
-
+  // Otherwise: do the profile sport furthest behind its weekly goal.
+  const easy = recoveryPct < 70
   return {
-    emoji: '😴', label: 'Rest day recommended', ...ACT.skip,
+    emoji: top!.emoji,
+    label: top!.label,
+    action: easy ? 'Keep it easy' : 'Good to go',
+    actionColor: easy ? '#facc15' : '#4ade80',
     reasons: [
-      'Take the day off — light walk at most',
-      `Recovery ${recoveryPct}% — your body needs full recovery`,
+      `${top!.done}/${top!.target} ${top!.label.toLowerCase()} this week — ${top!.target - top!.done} to go`,
+      `Recovery ${recoveryPct}% — ${easy ? 'keep it easy today' : 'good to train today'}`,
     ],
   }
 }
@@ -2296,7 +2185,7 @@ function computeActivityEffort(a: Activity): number {
   return Math.min(1, intensity + Math.min(0.2, durationH * 0.1))
 }
 
-function computeRecoveryDetail(
+export function computeRecoveryDetail(
   activities: Activity[],
   hevy: HevyWorkout[]
 ): { pct: number; label: string; factors: string[] } {
@@ -2368,12 +2257,15 @@ function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub
 const GYM_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'weights', 'strength']
 const CARDIO_KW = ['run', 'long run', 'ride', 'bike', 'swim', 'swim', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo']
 
-function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = false, onSwitchTab }: {
+export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = false, onSwitchTab, label = 'Today', completedToday, simplified = false }: {
   focus: TodaysFocus
   calendarEvents: any[]
   readinessPct: number
   biasApplied?: boolean
   onSwitchTab?: (key: string) => void
+  label?: string
+  completedToday?: { name: string; sport: string }[]
+  simplified?: boolean
 }) {
   const now = new Date().toISOString()
   const next = (calendarEvents ?? [])
@@ -2387,6 +2279,22 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
       if (l.includes('swimming')) return ['Go for an easy swim →', '/training/swimming']
       return ['Go for an easy run →', '/training/running']
     }
+
+    // Route straight to the sport the recommendation points at, so the subpage
+    // shows exactly how much to do. Profile-target and muscle-group suggestions
+    // (e.g. "Easy running recommended", "Leg day") land here even with no event.
+    const l = focus.label.toLowerCase()
+    const e = focus.emoji
+    const isRest = l.includes('rest') || l.includes('recovery day') || l.includes('active recovery')
+      || l.includes('keep it light') || l.includes('light movement')
+    if (!isRest) {
+      if ((l.includes('run') || l.includes('loop')) && !l.includes('swim')) return ['View running plan →', '/training/running']
+      if (l.includes('cycl') || l.includes('ride') || l.includes('bike') || l.includes('fiet')) return ['View cycling plan →', '/training/cycling']
+      if (l.includes('swim') || l.includes('zwem')) return ['View swimming plan →', '/training/swimming']
+      if (l.includes('leg') || l.includes('push') || l.includes('pull') || l.includes('strength')
+        || l.includes('gym') || l.includes('kracht') || e === '💪' || e === '🏋️') return ['View strength plan →', '/training/strength']
+    }
+
     if (!next) return ['View training →', '/training']
     const t = (next.title ?? '').toLowerCase()
     const isGym = GYM_KW.some(k => t.includes(k))
@@ -2441,20 +2349,79 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
     return actionMap[action] ?? focus.label
   }
 
+  function toSimpleLabel(): string {
+    const l = focus.label.toLowerCase()
+    if (l.includes('rest') || l.includes('recovery day')) return 'Rest today'
+    if (l.includes('active recovery') || l.includes('keep it light') || l.includes('light movement')) return 'Active recovery'
+    if ((l.includes('run') || l.includes('loop') || focus.emoji === '🏃') && !l.includes('swim')) return 'Easy run'
+    if (l.includes('cycl') || l.includes('ride') || l.includes('bike') || l.includes('fiet') || focus.emoji === '🚴') return 'Easy ride'
+    if (l.includes('swim') || l.includes('zwem') || focus.emoji === '🏊') return 'Easy swim'
+    if (l.includes('leg')) return 'Leg day'
+    if (l.includes('push')) return 'Push day'
+    if (l.includes('pull')) return 'Pull day'
+    if (l.includes('strength') || l.includes('gym') || l.includes('kracht') || focus.emoji === '💪') return 'Strength session'
+    return focus.label.split(' · ')[0]
+  }
+
   const rc = readinessPct >= 70 ? '#4ade80' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-  const headline = toSpecificRecommendation()
+  const headline = simplified ? toSimpleLabel() : toSpecificRecommendation()
+
+  if (simplified) {
+    return (
+      <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">{label}</p>
+          <div className="flex items-center gap-2.5">
+            {biasApplied && (
+              <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalized</span>
+            )}
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} suppressHydrationWarning />
+              <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>Readiness {readinessPct}%</span>
+            </div>
+          </div>
+        </div>
+        <a href={ctaHref} className="flex items-center gap-4 mb-4 active:opacity-70 transition-opacity">
+          <span className="text-[38px] leading-none shrink-0">{focus.emoji}</span>
+          <div className="flex flex-col gap-2 flex-1 min-w-0">
+            <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
+            <span
+              className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black"
+              style={{ background: focus.actionColor }}
+            >
+              {focus.action}
+            </span>
+          </div>
+          <span className="text-white/30 text-[18px] shrink-0">›</span>
+        </a>
+        {focus.reasons.length > 0 && (
+          <div className="pt-3 border-t border-white/[0.08]">
+            <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why?</p>
+            <div className="flex flex-col gap-1.5">
+              {focus.reasons.map((r, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
+                  <span className="text-[13px] text-white/65 leading-snug">{r}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">Today</p>
+        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">{label}</p>
         <div className="flex items-center gap-2.5">
           {biasApplied && (
             <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalized</span>
           )}
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} />
-            <span className="text-[11px] font-semibold" style={{ color: rc }}>Readiness {readinessPct}%</span>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} suppressHydrationWarning />
+            <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>Readiness {readinessPct}%</span>
           </div>
         </div>
       </div>
@@ -2471,6 +2438,17 @@ function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplied = fal
           </span>
         </div>
       </div>
+
+      {completedToday && completedToday.length > 0 && (
+        <div className="flex flex-col gap-1 mb-3">
+          {completedToday.map((w, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-teal-400 text-[11px] font-bold">✓</span>
+              <span className="text-[13px] text-white/40">{w.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {focus.reasons.length > 0 && (
         <div className="pt-3 border-t border-white/[0.08] mb-3">
@@ -2651,19 +2629,20 @@ function RecoveryDetailCard({
   const unified = physiology.score !== null
     ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
     : recovery.pct
-  const label = physiology.score !== null ? physiology.label : recovery.label
-  const c = unified >= 70 ? '#4ade80' : unified >= 45 ? '#fb923c' : '#f87171'
+  // Plain-language tiers — no technical jargon for the average athlete
+  const label = unified >= 80 ? 'Fresh' : unified >= 60 ? 'Ready' : unified >= 45 ? 'Take it easy' : 'Rest day'
+  const c = unified >= 80 ? '#4ade80' : unified >= 60 ? '#2dd4bf' : unified >= 45 ? '#fb923c' : '#f87171'
 
-  // Show fatigue explanation when training load is the dominant drag
+  // Show fatigue explanation when recent training is the main thing holding you back
   const fatigueIsDominant = recovery.pct < 55 && (physiology.score === null || recovery.pct < physiology.score - 20)
   const explanation = fatigueIsDominant
-    ? 'Readiness is primarily limited by high training fatigue from recent days.'
+    ? 'Mostly held back by hard training in the last few days — give your body time to absorb it.'
     : physiology.explanation
 
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Training Load</span>
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Recovery</span>
         <div className="flex items-end justify-between">
           <span className="text-[40px] font-bold text-white leading-none">{unified}%</span>
           <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{label}</span>
@@ -2674,15 +2653,14 @@ function RecoveryDetailCard({
         <div className="flex items-center gap-2 py-1">
           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c }} />
           <span className="text-[14px] font-semibold" style={{ color: c }}>
-            {unified >= 70 ? 'Normal training' : unified >= 45 ? 'Avoid max effort' : 'Priority: recovery today'}
+            {unified >= 80 ? 'Good to go — train as planned'
+              : unified >= 60 ? 'Ready to train'
+              : unified >= 45 ? 'Keep it easy today'
+              : 'Priority: rest today'}
           </span>
         </div>
-        {explanation ? (
+        {explanation && (
           <p className="text-[12px] text-white/40 leading-relaxed pt-0.5">{explanation}</p>
-        ) : physiology.score !== null && (
-          <span className="text-[12px] text-white/35 pt-0.5">
-            Physiology {physiology.score}% · Training load {recovery.pct}%
-          </span>
         )}
         <div className="flex flex-col gap-1.5 pt-1">
           {recovery.factors.map((f, i) => (
@@ -3165,6 +3143,41 @@ function WorkoutRatingCard({ activities, hevy, coachAdvice }: {
   )
 }
 
+// Training overview "Today" card — shows only what you've actually completed
+// today. The recommendation itself lives on the Today tab, so we don't repeat it.
+function TodayDoneCard({ activities, hevy }: { activities: Activity[]; hevy: HevyWorkout[] }) {
+  const done: { name: string; emoji: string }[] = [
+    ...hevy.map(h => ({ name: h.title || 'Strength workout', emoji: '🏋️' })),
+    ...activities
+      .filter(a => !isWeightTraining(a))
+      .map(a => ({
+        name: a.name || 'Workout',
+        emoji: isRun(a) ? '🏃' : isRide(a) ? '🚴' : isSwim(a) ? '🏊' : '✅',
+      })),
+  ]
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today</span>
+        {done.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {done.map((w, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-[20px] leading-none shrink-0">{w.emoji}</span>
+                <span className="text-[15px] font-semibold text-white flex-1 min-w-0 truncate">{w.name}</span>
+                <span className="text-teal-400 text-[13px] font-bold shrink-0">✓ Done</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[14px] text-white/40">Nothing logged yet today. Check the Today tab for your recommendation.</p>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, onSwitchTab }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]
@@ -3224,7 +3237,6 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
   const avgBias = biasValues.length > 0 ? biasValues.reduce((s, v) => s + v, 0) / biasValues.length : 0
   const biasPoints = Math.round(avgBias * 100) // e.g. 0.05 bias → +5 points
   const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints))
-  const biasApplied = biasPoints !== 0
 
   const todayStr    = new Date().toISOString().slice(0, 10)
   const todayActivities = activities.filter(a => a.start_date.slice(0, 10) === todayStr)
@@ -3240,7 +3252,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
   const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
-  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets)
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0)
 
   // Detect overrides: did user train today when advice would have been rest?
   useEffect(() => {
@@ -3326,8 +3338,8 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
 
   return (
     <div className="flex flex-col gap-[18px]">
-      {/* 1. Vandaag — specific Dutch recommendation with readiness */}
-      <TodaysPlanCard focus={todaysFocus} calendarEvents={calendarEvents} readinessPct={unifiedReadinessPct} biasApplied={biasApplied} onSwitchTab={onSwitchTab} />
+      {/* 1. Today — only what you've completed (recommendation lives on the Today tab) */}
+      <TodayDoneCard activities={todayActivities} hevy={todayHevy} />
 
       {/* 2. Rate recent workout — only visible after a session */}
       <WorkoutRatingCard activities={activities} hevy={hevy} coachAdvice={todaysFocus.label} />
