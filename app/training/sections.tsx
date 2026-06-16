@@ -1761,6 +1761,7 @@ export function computeTodaysFocus(
   gymTarget: number = 0,
   sportPriority: string[] = [],
   goalPriority: string[] = [],
+  trainingIntensity: string = 'moderate',
 ): TodaysFocus {
   const todayStr    = new Date().toISOString().slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
@@ -1980,6 +1981,20 @@ export function computeTodaysFocus(
     } else if (intensity === 'zone2' && r.length < 2) {
       r.push('Low impact on recovery')
     }
+    // Always explain with at least readiness + consistency context
+    if (r.length === 0) {
+      r.push(`Recovery ${recoveryPct}% — you're good to go`)
+      r.push(consecutiveDays > 0
+        ? `${consecutiveDays} day${consecutiveDays !== 1 ? 's' : ''} in a row — stay consistent`
+        : 'Consistency is what builds fitness — stick to the plan')
+    }
+    // Add intensity context when there's room
+    const intensityCtx: Record<string, string> = {
+      easy:    'Easy mode — keep effort low, save energy',
+      hard:    'Hard mode — push beyond your comfort zone today',
+      all_out: 'Max out mode — give it everything today',
+    }
+    if (r.length < 3 && intensityCtx[trainingIntensity]) r.push(intensityCtx[trainingIntensity])
     return r.slice(0, 3)
   }
 
@@ -2162,11 +2177,22 @@ export function computeTodaysFocus(
     : primaryGoal === 'lose_weight' ? 'Losing weight — cardio keeps the deficit up'
     : primaryGoal === 'performance' ? 'Performance goal — stay consistent with your training'
     : null
+  // Action label varies by intensity so each setting is clearly distinct
+  const action = easy ? 'Keep it easy'
+    : trainingIntensity === 'easy'    ? 'Zone 2 only'
+    : trainingIntensity === 'hard'    ? 'Push hard'
+    : trainingIntensity === 'all_out' ? 'Go all out'
+    : 'Good to go'
+  const actionColor = easy ? '#facc15'
+    : trainingIntensity === 'all_out' ? '#f87171'
+    : trainingIntensity === 'hard'    ? '#fb923c'
+    : trainingIntensity === 'easy'    ? '#2dd4bf'
+    : '#4ade80'
   return {
     emoji: top!.emoji,
     label: top!.label,
-    action: easy ? 'Keep it easy' : 'Good to go',
-    actionColor: easy ? '#facc15' : '#4ade80',
+    action,
+    actionColor,
     reasons: [
       `${top!.done}/${top!.target} ${top!.label.toLowerCase()} sessions this week — ${top!.target - top!.done} to go`,
       `Recovery ${recoveryPct}% — ${easy ? 'keep it easy today' : 'good to train today'}`,
@@ -2392,6 +2418,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   const headline = simplified ? toSimpleLabel() : toSpecificRecommendation()
 
   if (simplified) {
+    const isDone = (completedToday && completedToday.length > 0) || focus.label.toLowerCase().includes(' done')
     return (
       <a href={ctaHref} className="block p-5 rounded-[24px] border border-white/[0.12] active:opacity-75 transition-opacity" style={{ background: 'rgba(45,212,191,0.07)' }}>
         <div className="flex items-center justify-between mb-3">
@@ -2407,26 +2434,40 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
           </div>
         </div>
         <div className="flex items-center gap-4 mb-4">
-          <span className="text-[38px] leading-none shrink-0">{focus.emoji}</span>
+          <div className="relative shrink-0">
+            <span className="text-[38px] leading-none">{focus.emoji}</span>
+            {isDone && (
+              <span className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-black leading-none" style={{ background: '#4ade80' }}>✓</span>
+            )}
+          </div>
           <div className="flex flex-col gap-2 flex-1 min-w-0">
             <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
-            <span
-              className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black"
-              style={{ background: focus.actionColor }}
-            >
-              {focus.action}
-            </span>
+            {isDone ? (
+              <span className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black" style={{ background: '#4ade80' }}>✓ Done</span>
+            ) : (
+              <span className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black" style={{ background: focus.actionColor }}>{focus.action}</span>
+            )}
           </div>
           <span className="text-white/40 text-[22px] shrink-0">›</span>
         </div>
+        {isDone && completedToday && completedToday.length > 0 && (
+          <div className="flex flex-col gap-1 mb-3">
+            {completedToday.map((w, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-[12px] font-bold shrink-0" style={{ color: '#4ade80' }}>✓</span>
+                <span className="text-[13px] text-white/60">{w.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {focus.reasons.length > 0 && (
           <div className="pt-3 border-t border-white/[0.08] mb-4">
-            <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why?</p>
+            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.08em] mb-2">Why?</p>
             <div className="flex flex-col gap-1.5">
               {focus.reasons.map((r, i) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
-                  <span className="text-[13px] text-white/65 leading-snug">{r}</span>
+                  <span className="text-teal-400/70 text-[12px] mt-[2px] shrink-0">•</span>
+                  <span className="text-[13px] text-white/75 leading-snug">{r}</span>
                 </div>
               ))}
             </div>
@@ -3248,13 +3289,14 @@ function TodayDoneCard({ activities, hevy, calendarEvents = [] }: { activities: 
   )
 }
 
-export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], goalPriority = [], onSwitchTab }: {
+export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], goalPriority = [], trainingIntensity = 'moderate', onSwitchTab }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]
   trainingFrequencies?: Record<string, number>
   biasBySport?: Record<string, number>
   sportPriority?: string[]
   goalPriority?: string[]
+  trainingIntensity?: string
   onSwitchTab?: (key: string) => void
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
@@ -3324,7 +3366,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
   const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
-  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority)
+  const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority, trainingIntensity)
 
   // Detect overrides: did user train today when advice would have been rest?
   useEffect(() => {
@@ -3619,8 +3661,8 @@ function SwimmingPaceTrendCard({ pace }: { pace: ReturnType<typeof computeSwimmi
 
 // ─── Running ──────────────────────────────────────────────────────────────────
 
-function RunningCoachCard({ readinessPct, suggestion, activities }: {
-  readinessPct: number; suggestion: string; activities: Activity[]
+function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntensity = 'moderate' }: {
+  readinessPct: number; suggestion: string; activities: Activity[]; trainingIntensity?: string
 }) {
   const c = readinessPct >= 85 ? '#4ade80' : readinessPct >= 70 ? '#facc15' : '#fb923c'
   const trend = computeRunning7DayTrend(activities)
@@ -3636,17 +3678,25 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   const avgDistKm = recentRuns.length > 0
     ? recentRuns.reduce((s, r) => s + r.distance!, 0) / recentRuns.length / 1000
     : null
-  const distFactor = readinessPct >= 85 ? 1.10 : readinessPct >= 70 ? 1.0 : 0.70
+  const distFactor = trainingIntensity === 'all_out' ? 1.25
+    : trainingIntensity === 'hard'    ? 1.10
+    : trainingIntensity === 'easy'    ? 0.75
+    : readinessPct >= 85 ? 1.05 : readinessPct >= 70 ? 1.0 : 0.70
   const targetKm = avgDistKm
     ? Math.max(1, Math.round(avgDistKm * distFactor * 2) / 2)
-    : (readinessPct >= 85 ? 10 : readinessPct >= 70 ? 7 : 4)
-  const targetPaceSec = avgPaceSec
-    ? (readinessPct >= 85 ? avgPaceSec * 0.93 : avgPaceSec * 1.08)
-    : null
+    : (trainingIntensity === 'all_out' ? 14 : trainingIntensity === 'hard' ? 10 : trainingIntensity === 'easy' ? 5 : readinessPct >= 85 ? 9 : readinessPct >= 70 ? 7 : 4)
+  const paceMod = trainingIntensity === 'all_out' ? 0.88
+    : trainingIntensity === 'hard' ? 0.93
+    : trainingIntensity === 'easy' ? 1.12
+    : readinessPct >= 85 ? 0.95 : 1.08
+  const targetPaceSec = avgPaceSec ? avgPaceSec * paceMod : null
   const paceStr = targetPaceSec
     ? `${Math.floor(targetPaceSec / 60)}:${Math.round(targetPaceSec % 60).toString().padStart(2, '0')}/km`
     : null
-  const zone = readinessPct >= 85 ? 'Zone 3–4' : 'Zone 2'
+  const zone = trainingIntensity === 'all_out' ? 'Zone 4–5'
+    : trainingIntensity === 'hard' ? 'Zone 3–4'
+    : trainingIntensity === 'easy' ? 'Zone 2'
+    : readinessPct >= 85 ? 'Zone 3–4' : 'Zone 2'
   const specific = paceStr ? `${targetKm} km · ${paceStr} · ${zone}` : `${targetKm} km · ${zone}`
 
   const reasons: string[] = []
@@ -3692,7 +3742,12 @@ export function RunningSection({ activities, hevy = [], todaySport = null, train
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const readinessPct = Math.min(100, Math.max(0, rawReadiness + (INTENSITY_BIAS[trainingIntensity] ?? 0)))
-  const runningSuggestion = readinessPct >= 85 ? 'Tempo run' : readinessPct >= 70 ? 'Easy run' : 'Recovery run'
+  const runningSuggestion = readinessPct < 70 ? 'Recovery run'
+    : readinessPct < 85 ? (trainingIntensity === 'easy' ? 'Zone 2 run' : 'Easy run')
+    : trainingIntensity === 'all_out' ? 'Race effort run'
+    : trainingIntensity === 'hard'    ? 'Threshold run'
+    : trainingIntensity === 'easy'    ? 'Zone 2 run'
+    : 'Tempo run'
 
   const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRun = allRuns[0] ?? null
@@ -3712,7 +3767,7 @@ export function RunningSection({ activities, hevy = [], todaySport = null, train
 
   return (
     <div className="flex flex-col gap-6">
-      <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} />
+      <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} trainingIntensity={trainingIntensity} />
 
       {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
 
@@ -3795,8 +3850,8 @@ export function RunningSection({ activities, hevy = [], todaySport = null, train
 
 // ─── Cycling ──────────────────────────────────────────────────────────────────
 
-function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
-  readinessPct: number; suggestion: string; activities: Activity[]
+function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingIntensity = 'moderate' }: {
+  readinessPct: number; suggestion: string; activities: Activity[]; trainingIntensity?: string
 }) {
   const c = readinessPct >= 85 ? '#4ade80' : readinessPct >= 70 ? '#facc15' : '#fb923c'
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
@@ -3812,14 +3867,22 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
     ? recentRides.reduce((s, r) => s + r.distance!, 0) / recentRides.length / 1000
     : null
   const avgSpeedKmh = avgSpeedMps ? avgSpeedMps * 3.6 : null
-  const distFactor = readinessPct >= 85 ? 1.10 : readinessPct >= 70 ? 1.0 : 0.70
+  const distFactor = trainingIntensity === 'all_out' ? 1.30
+    : trainingIntensity === 'hard'    ? 1.15
+    : trainingIntensity === 'easy'    ? 0.75
+    : readinessPct >= 85 ? 1.05 : readinessPct >= 70 ? 1.0 : 0.70
   const targetKm = avgDistKm
     ? Math.max(5, Math.round(avgDistKm * distFactor / 5) * 5)
-    : (readinessPct >= 85 ? 50 : readinessPct >= 70 ? 35 : 20)
-  const targetSpeedKmh = avgSpeedKmh
-    ? (readinessPct >= 85 ? avgSpeedKmh * 1.05 : readinessPct >= 70 ? avgSpeedKmh * 0.95 : avgSpeedKmh * 0.85)
-    : null
-  const zone = readinessPct >= 85 ? 'Zone 3–4' : readinessPct >= 70 ? 'Zone 2' : 'Zone 1'
+    : (trainingIntensity === 'all_out' ? 70 : trainingIntensity === 'hard' ? 55 : trainingIntensity === 'easy' ? 25 : readinessPct >= 85 ? 50 : readinessPct >= 70 ? 35 : 20)
+  const speedMod = trainingIntensity === 'all_out' ? 1.10
+    : trainingIntensity === 'hard' ? 1.05
+    : trainingIntensity === 'easy' ? 0.90
+    : readinessPct >= 85 ? 1.05 : readinessPct >= 70 ? 0.95 : 0.85
+  const targetSpeedKmh = avgSpeedKmh ? avgSpeedKmh * speedMod : null
+  const zone = trainingIntensity === 'all_out' ? 'Zone 4–5'
+    : trainingIntensity === 'hard' ? 'Zone 3–4'
+    : trainingIntensity === 'easy' ? 'Zone 2'
+    : readinessPct >= 85 ? 'Zone 3–4' : readinessPct >= 70 ? 'Zone 2' : 'Zone 1'
   const specific = targetSpeedKmh
     ? `${targetKm} km · ${targetSpeedKmh.toFixed(0)} km/h · ${zone}`
     : `${targetKm} km · ${zone}`
@@ -3864,7 +3927,12 @@ export function CyclingSection({ activities, hevy = [], todaySport = null, train
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const readinessPct = Math.min(100, Math.max(0, rawReadiness + (INTENSITY_BIAS[trainingIntensity] ?? 0)))
-  const cyclingSuggestion = readinessPct >= 85 ? 'Threshold training' : readinessPct >= 70 ? 'Zone 2 ride' : 'Recovery ride'
+  const cyclingSuggestion = readinessPct < 70 ? 'Recovery ride'
+    : readinessPct < 85 ? 'Zone 2 ride'
+    : trainingIntensity === 'all_out' ? 'All-out intervals'
+    : trainingIntensity === 'hard'    ? 'Threshold intervals'
+    : trainingIntensity === 'easy'    ? 'Zone 2 ride'
+    : 'Threshold training'
 
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRide = allRides[0] ?? null
@@ -3873,7 +3941,7 @@ export function CyclingSection({ activities, hevy = [], todaySport = null, train
 
   return (
     <div className="flex flex-col gap-6">
-      <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} />
+      <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} trainingIntensity={trainingIntensity} />
 
       {lastRide && <LastRideCard ride={lastRide} allRides={allRides} />}
 
@@ -4293,7 +4361,7 @@ function relativeDay(iso: string): string {
 
 // ─── Swimming ─────────────────────────────────────────────────────────────────
 
-function SwimmingReadinessCard({ readiness, activities }: { readiness: { pct: number; suggestion: string }; activities: Activity[] }) {
+function SwimmingReadinessCard({ readiness, activities, trainingIntensity = 'moderate' }: { readiness: { pct: number; suggestion: string }; activities: Activity[]; trainingIntensity?: string }) {
   const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
   const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready to train' : 'Slightly fatigued'
 
@@ -4302,10 +4370,13 @@ function SwimmingReadinessCard({ readiness, activities }: { readiness: { pct: nu
   const avgDistM = recentSwims.length > 0
     ? recentSwims.reduce((s, r) => s + r.distance!, 0) / recentSwims.length
     : null
-  const distFactor = readiness.pct >= 85 ? 1.10 : readiness.pct >= 70 ? 1.0 : 0.70
+  const distFactor = trainingIntensity === 'all_out' ? 1.30
+    : trainingIntensity === 'hard'    ? 1.15
+    : trainingIntensity === 'easy'    ? 0.75
+    : readiness.pct >= 85 ? 1.10 : readiness.pct >= 70 ? 1.0 : 0.70
   const targetM = avgDistM
     ? Math.max(200, Math.round(avgDistM * distFactor / 100) * 100)
-    : (readiness.pct >= 85 ? 3000 : readiness.pct >= 70 ? 2000 : 1500)
+    : (trainingIntensity === 'all_out' ? 4000 : trainingIntensity === 'hard' ? 3500 : trainingIntensity === 'easy' ? 1500 : readiness.pct >= 85 ? 3000 : readiness.pct >= 70 ? 2000 : 1500)
   const targetStr = targetM >= 1000 ? `${(targetM / 1000).toFixed(1)} km` : `${targetM} m`
 
   return (
@@ -4405,7 +4476,12 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null, trai
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
     : recoveryDetail.pct
   const readinessPct = Math.min(100, Math.max(0, rawReadiness + (INTENSITY_BIAS[trainingIntensity] ?? 0)))
-  const swimmingSuggestion = readinessPct >= 85 ? 'Sprint set' : readinessPct >= 70 ? 'Distance swim' : 'Recovery swim'
+  const swimmingSuggestion = readinessPct < 70 ? 'Recovery swim'
+    : readinessPct < 85 ? (trainingIntensity === 'easy' ? 'Zone 2 swim' : 'Distance swim')
+    : trainingIntensity === 'all_out' ? 'Max effort set'
+    : trainingIntensity === 'hard'    ? 'Race pace set'
+    : trainingIntensity === 'easy'    ? 'Zone 2 swim'
+    : 'Sprint set'
   const readiness = { pct: readinessPct, suggestion: swimmingSuggestion }
 
   const trend = computeSwimmingWeeklyTrend(activities)
@@ -4430,7 +4506,7 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null, trai
   return (
     <div className="flex flex-col gap-6">
       <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />
-      <SwimmingReadinessCard readiness={readiness} activities={activities} />
+      <SwimmingReadinessCard readiness={readiness} activities={activities} trainingIntensity={trainingIntensity} />
       {lastSwim && <LastSwimCard swim={lastSwim} />}
       <SwimmingWeeklyTrendCard trend={trend} />
       <SwimmingVolumeHistoryCard weeks={volumeHistory} />

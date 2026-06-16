@@ -422,7 +422,8 @@ export default function TodayPage() {
       { sport: 'swimming' as const, label: 'Swimming', emoji: '🏊', target: trainingFrequencies.swimming ?? 0, done: weekSwimming },
     ]
 
-    const focus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority)
+    const trainingIntensity = (effectiveData?.settings as any)?.training_intensity ?? 'moderate'
+    const focus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority, trainingIntensity)
     const biasApplied = biasPoints !== 0
     return { todaysFocus: focus, unifiedReadinessPct, biasApplied }
   }, [training, rows, effectiveData]) // eslint-disable-line react-hooks/exhaustive-deps
