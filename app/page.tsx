@@ -243,20 +243,25 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
   }
 
   const daTom = new Date(tom0()); daTom.setDate(tom0().getDate() + 1)
+  const weekEnd = new Date(tod0()); weekEnd.setDate(tod0().getDate() + 7)
 
-  function dayLabel(e: any): string {
-    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
+  function dayLabel(d: Date): string {
     if (d >= tod0() && d < tom0()) return 'Today'
     if (d >= tom0() && d < daTom) return 'Tomorrow'
-    const s = d.toLocaleDateString('en-US', { weekday: 'long' })
-    return s.charAt(0).toUpperCase() + s.slice(1)
+    const weekday = d.toLocaleDateString('en-US', { weekday: 'long' })
+    // Beyond this week, qualify with the date so different weeks don't merge
+    if (d >= weekEnd) return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
+    return weekday.charAt(0).toUpperCase() + weekday.slice(1)
   }
 
-  const groups = new Map<string, any[]>()
+  // Group by the actual calendar date (not weekday name) so events from
+  // different weeks never collapse into one group.
+  const groups = new Map<string, { label: string; evts: any[] }>()
   for (const e of events) {
-    const label = dayLabel(e)
-    if (!groups.has(label)) groups.set(label, [])
-    groups.get(label)!.push(e)
+    const d = e.start_datetime ? new Date(e.start_datetime) : new Date(e.start_date + 'T00:00:00')
+    const key = e.start_date
+    if (!groups.has(key)) groups.set(key, { label: dayLabel(d), evts: [] })
+    groups.get(key)!.evts.push(e)
   }
 
   return (
@@ -277,8 +282,8 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
         </button>
       </div>
       <div className="flex flex-col gap-4">
-        {[...groups.entries()].slice(0, 3).map(([label, evts]) => (
-          <div key={label}>
+        {[...groups.entries()].slice(0, 4).map(([key, { label, evts }]) => (
+          <div key={key}>
             <p className="text-[12px] font-semibold text-white/25 mb-2">{label}</p>
             <div className="flex flex-col gap-1.5">
               {evts.map((e: any, i: number) => {
