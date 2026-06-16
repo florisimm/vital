@@ -432,6 +432,7 @@ export function ProfileButton() {
     setDraggingKey(key)
 
     function onMove(ev: MouseEvent | TouchEvent) {
+      ev.preventDefault()
       if (!dragKeyRef.current || !dragContainerRef.current) return
       const y = 'touches' in ev ? (ev as TouchEvent).touches[0]?.clientY ?? 0 : (ev as MouseEvent).clientY
       const rows = dragContainerRef.current.querySelectorAll<HTMLElement>('[data-drag-key]')
@@ -760,7 +761,7 @@ export function ProfileButton() {
                 <div className="flex flex-col gap-2">
                   <div className="px-1">
                     <span className="text-[13px] font-medium text-white/40">Weekly frequency</span>
-                    <p className="text-[11px] text-white/25 mt-0.5">Houd het ≡ icoontje vast en sleep om prioriteit te wijzigen</p>
+                    <p className="text-[11px] text-white/25 mt-0.5">Sleep een rij om de volgorde (prioriteit) te wijzigen</p>
                   </div>
                   {(() => {
                     const SPORT_META: Record<string, { label: string; icon: string }> = {
@@ -770,7 +771,7 @@ export function ProfileButton() {
                       gym:      { label: 'Gym / Strength', icon: '🏋️' },
                     }
                     return (
-                      <div ref={dragContainerRef} className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      <div ref={dragContainerRef} className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', touchAction: 'none' }}>
                         {sportOrder.map((key, i) => {
                           const meta = SPORT_META[key]; if (!meta) return null
                           const val = trainingFrequencies[key] ?? 0
@@ -779,25 +780,21 @@ export function ProfileButton() {
                             <div
                               key={key}
                               data-drag-key={key}
+                              className="cursor-grab active:cursor-grabbing select-none"
                               style={{ opacity: isDragging ? 0.4 : 1, borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
+                              onMouseDown={e => startDrag(key, e)}
+                              onTouchStart={e => startDrag(key, e)}
                             >
                               <div className="flex items-center gap-3 px-4 py-3.5">
-                                <div
-                                  className="shrink-0 cursor-grab active:cursor-grabbing select-none px-1 py-2"
-                                  style={{ touchAction: 'none' }}
-                                  onMouseDown={e => startDrag(key, e)}
-                                  onTouchStart={e => startDrag(key, e)}
-                                >
-                                  <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="text-white/35">
-                                    <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
-                                    <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
-                                    <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
-                                  </svg>
-                                </div>
+                                <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="shrink-0 text-white/35">
+                                  <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
+                                  <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
+                                  <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
+                                </svg>
                                 <span className="text-[13px] text-teal-400/60 font-bold w-4 shrink-0">{i + 1}</span>
                                 <span className="text-[16px] shrink-0">{meta.icon}</span>
-                                <span className="flex-1 text-[15px] text-white">{meta.label}</span>
-                                <div className="flex items-center gap-2 shrink-0">
+                                <span className="flex-1 text-[15px] text-white select-none">{meta.label}</span>
+                                <div className="flex items-center gap-2 shrink-0" onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
                                   <button onClick={() => setFreq(key, -1)} disabled={val === 0}
                                     className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
                                     style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>

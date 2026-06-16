@@ -3613,26 +3613,33 @@ function RunningCoachCard({ readinessPct, suggestion, activities }: {
   const lastRun = allRuns[0]
   const hoursSince = lastRun ? Math.round((Date.now() - new Date(lastRun.start_date).getTime()) / 3600000) : null
 
-  // Compute personal pace target from recent runs
-  const recentRuns = allRuns.slice(0, 5).filter(r => r.distance && r.moving_time && r.distance > 1000)
+  // Compute personal pace + distance from recent runs
+  const recentRuns = allRuns.slice(0, 6).filter(r => r.distance && r.moving_time && r.distance > 1000)
   const avgPaceSec = recentRuns.length > 0
     ? recentRuns.reduce((s, r) => s + r.moving_time! / (r.distance! / 1000), 0) / recentRuns.length
     : null
+  const avgDistKm = recentRuns.length > 0
+    ? recentRuns.reduce((s, r) => s + r.distance!, 0) / recentRuns.length / 1000
+    : null
+  const distFactor = readinessPct >= 85 ? 1.10 : readinessPct >= 70 ? 1.0 : 0.70
+  const targetKm = avgDistKm
+    ? Math.max(1, Math.round(avgDistKm * distFactor * 2) / 2)
+    : (readinessPct >= 85 ? 10 : readinessPct >= 70 ? 7 : 4)
   const targetPaceSec = avgPaceSec
     ? (readinessPct >= 85 ? avgPaceSec * 0.93 : avgPaceSec * 1.08)
     : null
   const paceStr = targetPaceSec
     ? `${Math.floor(targetPaceSec / 60)}:${Math.round(targetPaceSec % 60).toString().padStart(2, '0')}/km`
     : null
-  const targetKm = readinessPct >= 85 ? 10 : readinessPct >= 70 ? 7 : 4
   const zone = readinessPct >= 85 ? 'Zone 3–4' : 'Zone 2'
   const specific = paceStr ? `${targetKm} km · ${paceStr} · ${zone}` : `${targetKm} km · ${zone}`
 
   const reasons: string[] = []
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Last run ${hoursSince}h ago`)
+  if (avgDistKm) reasons.push(`Based on your avg run of ${avgDistKm.toFixed(1)} km`)
   if (readinessPct >= 85) reasons.push('Well recovered — high intensity possible')
-  else if (readinessPct >= 70) reasons.push('Well recovered — easy pace recommended')
-  else reasons.push('Recovery is priority — keep it easy')
+  else if (readinessPct >= 70) reasons.push('Good form — steady pace recommended')
+  else reasons.push('Fatigue detected — keep it short and easy')
   if (trend.volPct !== null && trend.volPct > 20) reasons.push(`Volume +${trend.volPct}% vs last week — do not increase further`)
 
   return (
@@ -3781,16 +3788,22 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
   const lastRide = allRides[0]
   const hoursSince = lastRide ? Math.round((Date.now() - new Date(lastRide.start_date).getTime()) / 3600000) : null
 
-  // Compute personal speed from recent rides
-  const recentRides = allRides.slice(0, 5).filter(r => r.distance && r.moving_time && r.distance > 5000)
+  // Compute personal speed + distance from recent rides
+  const recentRides = allRides.slice(0, 6).filter(r => r.distance && r.moving_time && r.distance > 5000)
   const avgSpeedMps = recentRides.length > 0
     ? recentRides.reduce((s, r) => s + r.distance! / r.moving_time!, 0) / recentRides.length
     : null
+  const avgDistKm = recentRides.length > 0
+    ? recentRides.reduce((s, r) => s + r.distance!, 0) / recentRides.length / 1000
+    : null
   const avgSpeedKmh = avgSpeedMps ? avgSpeedMps * 3.6 : null
+  const distFactor = readinessPct >= 85 ? 1.10 : readinessPct >= 70 ? 1.0 : 0.70
+  const targetKm = avgDistKm
+    ? Math.max(5, Math.round(avgDistKm * distFactor / 5) * 5)
+    : (readinessPct >= 85 ? 50 : readinessPct >= 70 ? 35 : 20)
   const targetSpeedKmh = avgSpeedKmh
     ? (readinessPct >= 85 ? avgSpeedKmh * 1.05 : readinessPct >= 70 ? avgSpeedKmh * 0.95 : avgSpeedKmh * 0.85)
     : null
-  const targetKm = readinessPct >= 85 ? 50 : readinessPct >= 70 ? 35 : 20
   const zone = readinessPct >= 85 ? 'Zone 3–4' : readinessPct >= 70 ? 'Zone 2' : 'Zone 1'
   const specific = targetSpeedKmh
     ? `${targetKm} km · ${targetSpeedKmh.toFixed(0)} km/h · ${zone}`
@@ -3798,9 +3811,10 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities }: {
 
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Last ride ${hoursSince}h ago`)
-  if (readinessPct >= 85) reasons.push('Well recovered — threshold training possible')
-  else if (readinessPct >= 70) reasons.push('Zone 2 builds aerobic base without stress')
-  else reasons.push('Avoid high intensity — recovery priority')
+  if (avgDistKm) reasons.push(`Based on your avg ride of ${avgDistKm.toFixed(0)} km`)
+  if (readinessPct >= 85) reasons.push('Well recovered — threshold effort possible')
+  else if (readinessPct >= 70) reasons.push('Zone 2 builds aerobic base without extra fatigue')
+  else reasons.push('Fatigue detected — easy spin, avoid high intensity')
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(34,211,238,0.07)' }}>
@@ -4264,13 +4278,25 @@ function relativeDay(iso: string): string {
 
 // ─── Swimming ─────────────────────────────────────────────────────────────────
 
-function SwimmingReadinessCard({ readiness }: { readiness: { pct: number; suggestion: string } }) {
+function SwimmingReadinessCard({ readiness, activities }: { readiness: { pct: number; suggestion: string }; activities: Activity[] }) {
   const c = readiness.pct >= 85 ? '#4ade80' : readiness.pct >= 70 ? '#facc15' : '#fb923c'
   const label = readiness.pct >= 85 ? 'Optimal' : readiness.pct >= 70 ? 'Ready to train' : 'Slightly fatigued'
+
+  const recentSwims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
+    .slice(0, 6).filter(s => s.distance && s.distance > 100)
+  const avgDistM = recentSwims.length > 0
+    ? recentSwims.reduce((s, r) => s + r.distance!, 0) / recentSwims.length
+    : null
+  const distFactor = readiness.pct >= 85 ? 1.10 : readiness.pct >= 70 ? 1.0 : 0.70
+  const targetM = avgDistM
+    ? Math.max(200, Math.round(avgDistM * distFactor / 100) * 100)
+    : (readiness.pct >= 85 ? 3000 : readiness.pct >= 70 ? 2000 : 1500)
+  const targetStr = targetM >= 1000 ? `${(targetM / 1000).toFixed(1)} km` : `${targetM} m`
+
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Swimming Readiness</span>
+        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Swimming Advice</span>
         <div className="flex items-end justify-between">
           <div>
             <span className="text-[40px] font-bold text-white leading-none">{readiness.pct}%</span>
@@ -4280,8 +4306,9 @@ function SwimmingReadinessCard({ readiness }: { readiness: { pct: number; sugges
             </div>
           </div>
           <div className="flex flex-col items-end gap-0.5 pb-1">
-            <span className="text-[12px] text-white/40">Recommended today</span>
+            <span className="text-[12px] text-white/40">Today</span>
             <span className="text-[15px] font-semibold text-blue-400">{readiness.suggestion}</span>
+            <span className="text-[13px] font-semibold text-white/60">{targetStr}{avgDistM ? ` · avg ${(avgDistM / 1000).toFixed(1)} km` : ''}</span>
           </div>
         </div>
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
@@ -4388,7 +4415,7 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null, trai
   return (
     <div className="flex flex-col gap-6">
       <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />
-      <SwimmingReadinessCard readiness={readiness} />
+      <SwimmingReadinessCard readiness={readiness} activities={activities} />
       {lastSwim && <LastSwimCard swim={lastSwim} />}
       <SwimmingWeeklyTrendCard trend={trend} />
       <SwimmingVolumeHistoryCard weeks={volumeHistory} />
