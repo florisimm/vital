@@ -272,13 +272,34 @@ export async function POST(_req: NextRequest) {
     errors.push(`health ${date}: ${write.error}`)
   }
 
-  // ── Steps: separate upsert, skip 0 so we never overwrite real data ──────────
+  // ── Steps: only write if Fitbit value is higher than what's stored ──────────
   let stepsSynced = 0
   for (const [date, total] of Object.entries(stepsAgg)) {
     if (date < cutoffDate || total === 0) continue
-    const write = await updateThenInsertGezondheid(supabase, user.id, date, { stappen: total })
-    if (!write.ok) errors.push(`steps ${date}: ${write.error}`)
-    else stepsSynced++
+
+    // Update only when existing stappen is NULL or lower than what Fitbit reports
+    const { data: updated, error: updateError } = await supabase
+      .from('gezondheid')
+      .update({ stappen: total })
+      .eq('user_id', user.id)
+      .eq('datum', date)
+      .or(`stappen.is.null,stappen.lt.${total}`)
+      .select('datum')
+
+    if (updateError) { errors.push(`steps ${date}: ${updateError.message}`); continue }
+
+    if (!updated?.length) {
+      // Row doesn't exist yet — insert fresh
+      const { data: existing } = await supabase
+        .from('gezondheid').select('datum').eq('user_id', user.id).eq('datum', date).maybeSingle()
+      if (!existing) {
+        const { error: insertError } = await supabase
+          .from('gezondheid').insert({ stappen: total, datum: date, user_id: user.id })
+        if (insertError) { errors.push(`steps ${date}: ${insertError.message}`); continue }
+      }
+      // If row exists but stappen was already higher: skip (no-op is correct)
+    }
+    stepsSynced++
   }
 
   await supabase.from('fitbit_tokens')
