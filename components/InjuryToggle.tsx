@@ -24,15 +24,14 @@ export function InjuryToggle({ sport, injuries }: { sport: string; injuries: Rec
     <button
       onClick={toggle}
       disabled={saving}
-      className="flex items-center gap-2 px-3 py-2 rounded-[14px] text-[13px] font-semibold active:opacity-60 disabled:opacity-40 transition-colors"
+      aria-label={injured ? 'Clear injury' : 'Mark as injured'}
+      className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-[18px] leading-none active:opacity-60 disabled:opacity-40"
       style={{
-        background: injured ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.06)',
-        border: `1px solid ${injured ? 'rgba(251,146,60,0.30)' : 'rgba(255,255,255,0.08)'}`,
-        color: injured ? 'rgb(251,146,60)' : 'rgba(255,255,255,0.40)',
+        background: injured ? 'rgba(251,146,60,0.18)' : 'rgba(255,255,255,0.10)',
+        border: `1px solid ${injured ? 'rgba(251,146,60,0.40)' : 'rgba(255,255,255,0.18)'}`,
       }}
     >
-      <span className="text-[15px] leading-none">{injured ? '🤕' : '🩹'}</span>
-      <span>{injured ? 'Injured — tap to clear' : 'Mark as injured'}</span>
+      {injured ? '🤕' : '🩹'}
     </button>
   )
 }
