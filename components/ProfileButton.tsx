@@ -67,6 +67,10 @@ export function ProfileButton() {
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const dragKeyRef = useRef<string | null>(null)
   const dragContainerRef = useRef<HTMLDivElement | null>(null)
+  const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
+  const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
+  const dragGoalKeyRef = useRef<string | null>(null)
+  const dragGoalContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
@@ -137,7 +141,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -159,6 +163,8 @@ export function ProfileButton() {
           if (data?.training_intensity) setTrainingIntensity(data.training_intensity)
           if (Array.isArray(data?.training_sport_priority) && data.training_sport_priority.length > 0)
             setSportOrder(data.training_sport_priority)
+          if (Array.isArray(data?.training_goal_priority) && data.training_goal_priority.length > 0)
+            setGoalOrder(data.training_goal_priority)
         })
     })
   }, [open])
@@ -414,7 +420,7 @@ export function ProfileButton() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
@@ -466,6 +472,47 @@ export function ProfileButton() {
     document.addEventListener('touchend', onEnd)
   }
 
+
+  function startGoalDrag(key: string, e: React.MouseEvent | React.TouchEvent) {
+    e.stopPropagation()
+    if ('touches' in e) e.preventDefault()
+    dragGoalKeyRef.current = key
+    setDraggingGoalKey(key)
+
+    function onMove(ev: MouseEvent | TouchEvent) {
+      ev.preventDefault()
+      if (!dragGoalKeyRef.current || !dragGoalContainerRef.current) return
+      const y = 'touches' in ev ? (ev as TouchEvent).touches[0]?.clientY ?? 0 : (ev as MouseEvent).clientY
+      const rows = dragGoalContainerRef.current.querySelectorAll<HTMLElement>('[data-goal-key]')
+      for (const row of Array.from(rows)) {
+        const rect = row.getBoundingClientRect()
+        const k = row.dataset.goalKey
+        if (y >= rect.top && y <= rect.bottom && k && k !== dragGoalKeyRef.current) {
+          const fromKey = dragGoalKeyRef.current
+          setGoalOrder(prev => {
+            const from = prev.indexOf(fromKey); const to = prev.indexOf(k)
+            if (from === -1 || to === -1) return prev
+            const next = [...prev]; next.splice(from, 1); next.splice(to, 0, fromKey); return next
+          })
+          break
+        }
+      }
+    }
+
+    function onEnd() {
+      dragGoalKeyRef.current = null
+      setDraggingGoalKey(null)
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('touchmove', onMove as EventListener)
+      document.removeEventListener('mouseup', onEnd)
+      document.removeEventListener('touchend', onEnd)
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('touchmove', onMove as EventListener, { passive: false })
+    document.addEventListener('mouseup', onEnd)
+    document.addEventListener('touchend', onEnd)
+  }
 
   async function requestNotifications() {
     if (!('Notification' in window)) return
@@ -838,22 +885,63 @@ export function ProfileButton() {
                   </div>
                 </div>
 
-                {/* Goal */}
-                <div className="flex flex-col gap-3">
-                  <span className="text-[13px] font-medium text-white/40 px-1">Goal</span>
-                  <div className="flex flex-col gap-2.5">
-                    {([
-                      { key: 'lose_weight',  emoji: '🔥', title: 'Lose weight',      desc: 'Calorie deficit, preserve muscle' },
-                      { key: 'build_muscle', emoji: '💪', title: 'Build muscle',      desc: 'Progressive overload, calorie surplus' },
-                      { key: 'get_fitter',   emoji: '🏃', title: 'Get fitter',        desc: 'Improve endurance and cardiovascular fitness' },
-                      { key: 'maintain',     emoji: '⚖️', title: 'Maintain',          desc: 'Keep current weight and performance' },
-                      { key: 'performance',  emoji: '🏆', title: 'Performance',       desc: 'Train for a race or competition' },
-                    ]).map(({ key, emoji, title, desc }) => (
-                      <CalcCard key={key} emoji={emoji} title={title} desc={desc}
-                        selected={trainingGoal === key}
-                        onSelect={() => setTrainingGoal(prev => prev === key ? null : key)} />
-                    ))}
+                {/* Goal priority — drag to reorder */}
+                <div className="flex flex-col gap-2">
+                  <div className="px-1">
+                    <span className="text-[13px] font-medium text-white/40">Goals</span>
+                    <p className="text-[11px] text-white/25 mt-0.5">Sleep om prioriteit te wijzigen · tik om te selecteren</p>
                   </div>
+                  {(() => {
+                    const GOAL_META: Record<string, { emoji: string; title: string; desc: string }> = {
+                      lose_weight:  { emoji: '🔥', title: 'Lose weight',   desc: 'Calorie deficit, preserve muscle' },
+                      build_muscle: { emoji: '💪', title: 'Build muscle',  desc: 'Progressive overload, calorie surplus' },
+                      get_fitter:   { emoji: '🏃', title: 'Get fitter',    desc: 'Improve endurance and cardiovascular fitness' },
+                      maintain:     { emoji: '⚖️', title: 'Maintain',      desc: 'Keep current weight and performance' },
+                      performance:  { emoji: '🏆', title: 'Performance',   desc: 'Train for a race or competition' },
+                    }
+                    return (
+                      <div ref={dragGoalContainerRef} className="flex flex-col gap-2" style={{ touchAction: 'none' }}>
+                        {goalOrder.map((key) => {
+                          const m = GOAL_META[key]; if (!m) return null
+                          const selected = trainingGoal === key
+                          const isDragging = draggingGoalKey === key
+                          return (
+                            <div key={key} data-goal-key={key} style={{ opacity: isDragging ? 0.4 : 1 }}>
+                              <div
+                                className="flex items-center rounded-[16px] overflow-hidden"
+                                style={{ background: selected ? 'rgba(45,212,191,0.12)' : 'rgba(255,255,255,0.05)', border: `1px solid ${selected ? 'rgba(45,212,191,0.35)' : 'rgba(255,255,255,0.07)'}` }}
+                              >
+                                {/* Drag handle — left strip */}
+                                <div
+                                  className="flex items-center justify-center self-stretch px-3 cursor-grab active:cursor-grabbing"
+                                  style={{ touchAction: 'none', minWidth: 40 }}
+                                  onMouseDown={e => startGoalDrag(key, e)}
+                                  onTouchStart={e => startGoalDrag(key, e)}
+                                >
+                                  <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="text-white/30">
+                                    <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
+                                    <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
+                                    <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
+                                  </svg>
+                                </div>
+                                {/* Tappable area */}
+                                <button
+                                  className="flex items-center gap-3 flex-1 py-3 pr-4 text-left active:opacity-70"
+                                  onClick={() => setTrainingGoal(prev => prev === key ? null : key)}
+                                >
+                                  <span className="text-[20px]">{m.emoji}</span>
+                                  <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="text-[15px] font-semibold leading-tight" style={{ color: selected ? 'rgb(45,212,191)' : 'white' }}>{m.title}</span>
+                                    <span className="text-[11px] text-white/35 leading-tight">{m.desc}</span>
+                                  </div>
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
 
               </div>
