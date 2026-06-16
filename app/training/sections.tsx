@@ -2121,13 +2121,15 @@ export function computeTodaysFocus(
     .sort((a, b) => (b.target - b.done) - (a.target - a.done))
   const top = stillToDo[0] ?? null
 
-  // Rest when the body needs it, recent load was high, a hard session is coming
-  // up tomorrow, or every weekly goal is already met.
+  // Goals not yet met take priority over recovery concerns — only force rest
+  // when the body truly can't handle any load (< 35%) or risk is very high (>= 7),
+  // or when all weekly goals are already met.
+  const goalsBehind = top !== null
   let restReason: string | null = null
-  if (recoveryPct < 55)   restReason = `Recovery ${recoveryPct}% — your body needs a rest day`
-  else if (rs >= 5)       restReason = 'A lot of training in the last few days — take a recovery day'
-  else if (upcomingHard)  restReason = `${upcomingHard.title} coming up — rest today so you're fresh for it`
-  else if (!top)          restReason = "You've hit your weekly training goals — rest is earned"
+  if (recoveryPct < 35)            restReason = `Recovery ${recoveryPct}% — your body needs a rest day`
+  else if (rs >= 7)                restReason = 'Very high training load — take a full recovery day'
+  else if (upcomingHard && !goalsBehind) restReason = `${upcomingHard.title} coming up — rest today so you're fresh for it`
+  else if (!top)                   restReason = "You've hit your weekly training goals — rest is earned"
 
   if (restReason) {
     const extra = lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48
@@ -2137,7 +2139,8 @@ export function computeTodaysFocus(
   }
 
   // Otherwise: do the profile sport furthest behind its weekly goal.
-  const easy = recoveryPct < 70
+  // If recovery or risk is elevated, keep it easy — but still do the session.
+  const easy = recoveryPct < 70 || rs >= 5
   return {
     emoji: top!.emoji,
     label: top!.label,
