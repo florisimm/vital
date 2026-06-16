@@ -9,6 +9,7 @@ import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
+import { InjuryToggle } from '@/components/InjuryToggle'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3734,7 +3735,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntens
 
 const INTENSITY_BIAS: Record<string, number> = { easy: -15, moderate: 0, hard: 15, all_out: 25 }
 
-export function RunningSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate' }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string }) {
+export function RunningSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {} }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean> }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
@@ -3767,6 +3768,10 @@ export function RunningSection({ activities, hevy = [], todaySport = null, train
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <span className="text-[17px] font-semibold text-white">Running</span>
+        <InjuryToggle sport="running" injuries={injuries} />
+      </div>
       <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} trainingIntensity={trainingIntensity} />
 
       {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
@@ -3919,7 +3924,7 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingInten
   )
 }
 
-export function CyclingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate' }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string }) {
+export function CyclingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {} }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean> }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
@@ -3941,6 +3946,10 @@ export function CyclingSection({ activities, hevy = [], todaySport = null, train
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <span className="text-[17px] font-semibold text-white">Cycling</span>
+        <InjuryToggle sport="cycling" injuries={injuries} />
+      </div>
       <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} trainingIntensity={trainingIntensity} />
 
       {lastRide && <LastRideCard ride={lastRide} allRides={allRides} />}
@@ -4468,7 +4477,7 @@ function SwimmingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeSw
   )
 }
 
-export function SwimmingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate' }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string }) {
+export function SwimmingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {} }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean> }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const recoveryDetail = computeRecoveryDetail(activities, hevy)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
@@ -4505,6 +4514,10 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null, trai
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <span className="text-[17px] font-semibold text-white">Swimming</span>
+        <InjuryToggle sport="swimming" injuries={injuries} />
+      </div>
       <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />
       <SwimmingReadinessCard readiness={readiness} activities={activities} trainingIntensity={trainingIntensity} />
       {lastSwim && <LastSwimCard swim={lastSwim} />}
