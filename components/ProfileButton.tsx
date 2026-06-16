@@ -62,6 +62,7 @@ export function ProfileButton() {
   const [trainingSaving, setTrainingSaving] = useState(false)
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null)
   const [trainingFrequencies, setTrainingFrequencies] = useState<Record<string, number>>({ gym: 0, running: 0, cycling: 0, swimming: 0 })
+  const [trainingIntensities, setTrainingIntensities] = useState<Record<string, string>>({ gym: '', running: '', cycling: '', swimming: '' })
 
   // Macro calculator
   const [editingMacroMode, setEditingMacroMode] = useState(false)
@@ -132,7 +133,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensities')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -151,6 +152,8 @@ export function ProfileButton() {
           if (data?.training_goal) setTrainingGoal(data.training_goal)
           if (data?.training_frequencies && typeof data.training_frequencies === 'object')
             setTrainingFrequencies({ gym: 0, running: 0, cycling: 0, swimming: 0, ...data.training_frequencies })
+          if (data?.training_intensities && typeof data.training_intensities === 'object')
+            setTrainingIntensities({ gym: '', running: '', cycling: '', swimming: '', ...data.training_intensities })
         })
     })
   }, [open])
@@ -406,7 +409,7 @@ export function ProfileButton() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensities: trainingIntensities })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
@@ -414,6 +417,10 @@ export function ProfileButton() {
 
   function setFreq(sport: string, delta: number) {
     setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
+  }
+
+  function setIntensity(sport: string, level: string) {
+    setTrainingIntensities(prev => ({ ...prev, [sport]: prev[sport] === level ? '' : level }))
   }
 
   async function requestNotifications() {
@@ -709,8 +716,8 @@ export function ProfileButton() {
 
               <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-                {/* Weekly frequency */}
-                <ProfileSection title="Weekly frequency">
+                {/* Weekly frequency + intensity */}
+                <ProfileSection title="Weekly training">
                   {([
                     { key: 'gym',      label: 'Gym / Strength', icon: '🏋️' },
                     { key: 'running',  label: 'Running',        icon: '🏃' },
@@ -718,30 +725,57 @@ export function ProfileButton() {
                     { key: 'swimming', label: 'Swimming',       icon: '🏊' },
                   ] as const).map(({ key, label, icon }, i, arr) => {
                     const val = trainingFrequencies[key] ?? 0
+                    const intensity = trainingIntensities[key] ?? ''
+                    const LEVELS = [
+                      { id: 'easy',     label: 'Easy'    },
+                      { id: 'moderate', label: 'Moderate'},
+                      { id: 'hard',     label: 'Hard'    },
+                      { id: 'varied',   label: 'Varied'  },
+                    ]
                     return (
                       <ProfileRow key={key} separator={i < arr.length - 1}>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[18px] w-6 text-center shrink-0">{icon}</span>
-                          <span className="flex-1 text-[17px] text-white">{label}</span>
+                        <div className="flex flex-col gap-3 py-1 w-full">
+                          {/* Frequency row */}
                           <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => setFreq(key, -1)}
-                              disabled={val === 0}
-                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                              style={{ background: 'rgba(255,255,255,0.10)' }}>
-                              −
-                            </button>
-                            <span className="text-[17px] font-semibold text-white w-6 text-center">
-                              {val === 0 ? '–' : `${val}×`}
-                            </span>
-                            <button
-                              onClick={() => setFreq(key, +1)}
-                              disabled={val === 7}
-                              className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                              style={{ background: 'rgba(255,255,255,0.10)' }}>
-                              +
-                            </button>
+                            <span className="text-[18px] w-6 text-center shrink-0">{icon}</span>
+                            <span className="flex-1 text-[17px] text-white">{label}</span>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => setFreq(key, -1)}
+                                disabled={val === 0}
+                                className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                                style={{ background: 'rgba(255,255,255,0.10)' }}>
+                                −
+                              </button>
+                              <span className="text-[17px] font-semibold text-white w-6 text-center">
+                                {val === 0 ? '–' : `${val}×`}
+                              </span>
+                              <button
+                                onClick={() => setFreq(key, +1)}
+                                disabled={val === 7}
+                                className="w-[30px] h-[30px] rounded-full text-[20px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
+                                style={{ background: 'rgba(255,255,255,0.10)' }}>
+                                +
+                              </button>
+                            </div>
                           </div>
+                          {/* Intensity pills */}
+                          {val > 0 && (
+                            <div className="flex gap-2 pl-9">
+                              {LEVELS.map(l => (
+                                <button
+                                  key={l.id}
+                                  onClick={() => setIntensity(key, l.id)}
+                                  className="flex-1 py-1.5 rounded-full text-[12px] font-semibold transition-colors active:opacity-70"
+                                  style={{
+                                    background: intensity === l.id ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.08)',
+                                    color: intensity === l.id ? '#000' : 'rgba(255,255,255,0.5)',
+                                  }}>
+                                  {l.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </ProfileRow>
                     )
