@@ -27,10 +27,12 @@ async function fetchHiddenPages(): Promise<string[]> {
 export function TrainingDetailScreen({
   title,
   active,
+  action,
   children,
 }: {
   title: string
   active: string
+  action?: ReactNode
   children: ReactNode
 }) {
   const router = useRouter()
@@ -53,7 +55,7 @@ export function TrainingDetailScreen({
         <span className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-white">
           {title}
         </span>
-        <div className="w-6" />
+        {action ? <div>{action}</div> : <div className="w-6" />}
       </div>
 
       {/* Category strip */}

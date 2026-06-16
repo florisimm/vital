@@ -9,10 +9,11 @@ import { InjuryToggle } from '@/components/InjuryToggle'
 export default function CyclingPage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   return (
-    <TrainingDetailScreen title="Cycling" active="Cycling">
-      <div className="flex justify-end mb-2">
-        <InjuryToggle sport="cycling" injuries={(data as any)?.injuries ?? {}} />
-      </div>
+    <TrainingDetailScreen
+      title="Cycling"
+      active="Cycling"
+      action={<InjuryToggle sport="cycling" injuries={(data as any)?.injuries ?? {}} />}
+    >
       <CyclingSection activities={data?.activities ?? []} />
     </TrainingDetailScreen>
   )
