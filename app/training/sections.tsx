@@ -2371,7 +2371,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
 
   if (simplified) {
     return (
-      <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
+      <a href={ctaHref} className="block p-5 rounded-[24px] border border-white/[0.12] active:opacity-75 transition-opacity" style={{ background: 'rgba(45,212,191,0.07)' }}>
         <div className="flex items-center justify-between mb-3">
           <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">{label}</p>
           <div className="flex items-center gap-2.5">
@@ -2384,7 +2384,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
             </div>
           </div>
         </div>
-        <a href={ctaHref} className="flex items-center gap-4 mb-4 active:opacity-70 transition-opacity">
+        <div className="flex items-center gap-4 mb-4">
           <span className="text-[38px] leading-none shrink-0">{focus.emoji}</span>
           <div className="flex flex-col gap-2 flex-1 min-w-0">
             <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
@@ -2395,10 +2395,10 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
               {focus.action}
             </span>
           </div>
-          <span className="text-white/30 text-[18px] shrink-0">›</span>
-        </a>
+          <span className="text-white/40 text-[22px] shrink-0">›</span>
+        </div>
         {focus.reasons.length > 0 && (
-          <div className="pt-3 border-t border-white/[0.08]">
+          <div className="pt-3 border-t border-white/[0.08] mb-4">
             <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why?</p>
             <div className="flex flex-col gap-1.5">
               {focus.reasons.map((r, i) => (
@@ -2410,7 +2410,10 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
             </div>
           </div>
         )}
-      </div>
+        <div className="flex items-center justify-center py-2 rounded-[12px] text-[13px] font-semibold text-black" style={{ background: 'rgb(45,212,191)' }}>
+          {ctaLabel}
+        </div>
+      </a>
     )
   }
 
