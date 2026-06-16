@@ -305,6 +305,20 @@ export default function TodayPage() {
     if (training) mutate('today')
   }, [training])
 
+  useEffect(() => {
+    async function syncCalendar() {
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) return
+        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }
+        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-calendar-sync`, { method: 'POST', headers })
+        mutate('today')
+      } catch { /* ignore */ }
+    }
+    syncCalendar()
+  }, [])
+
   const todayStr = localDateStr()
   const todayHealthRow = rows.find(r => r.datum === todayStr)
   const effectiveData = data && todayHealthRow?.stappen != null
