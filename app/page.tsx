@@ -115,44 +115,61 @@ function buildLifestyleFocus({
 }: { rows: HealthRow[]; effectiveData: any; unifiedReadinessPct: number }): FocusTip[] {
   const tips: FocusTip[] = []
 
-  // ── Bedtime recommendation ──
+  // ── Bedtime = 07:00 − needed sleep ──
+  const WAKE_MINS = 7 * 60 // assume 07:00 wake-up
+
   const recentSleep = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
   const avgSleepMin = recentSleep.length
     ? recentSleep.reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / recentSleep.length
     : null
 
-  // Tomorrow's earliest sport event
+  let neededMin = 8 * 60 // base: 8h
+  let bedtimeSub = '8h sleep target'
+
+  if (avgSleepMin != null && avgSleepMin < 7 * 60) {
+    neededMin = Math.max(neededMin, 8.5 * 60)
+    bedtimeSub = "Sleep debt — you need extra rest"
+  }
+
+  // HRV below baseline → more recovery
+  const latestHRV = rows[0]?.hrv_rmssd
+  const recentHRVs = rows.filter(r => r.hrv_rmssd != null).slice(0, 7)
+  let hrvBelowBaseline = false
+  if (latestHRV != null && recentHRVs.length >= 3) {
+    const baseline = recentHRVs.reduce((s, r) => s + (r.hrv_rmssd ?? 0), 0) / recentHRVs.length
+    if (latestHRV < baseline * 0.85) {
+      hrvBelowBaseline = true
+      neededMin = Math.max(neededMin, 8.5 * 60)
+      bedtimeSub = 'HRV is low — extra sleep helps recovery'
+    }
+  }
+
+  if (unifiedReadinessPct < 60) {
+    neededMin = Math.max(neededMin, 8.5 * 60)
+    bedtimeSub = 'Recovery mode — aim for extra sleep'
+  }
+
+  // Early event tomorrow → keep base need but flag it
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   const tomStr = tomorrow.toISOString().split('T')[0]
   const earlyTomorrow = (effectiveData?.calendarEvents ?? []).find((e: any) => {
     if (e.start_date !== tomStr || !e.start_datetime) return false
     return new Date(e.start_datetime).getHours() < 9
   })
+  if (earlyTomorrow) bedtimeSub = 'Early session tomorrow'
 
-  let bedtimeMins = 22 * 60 + 30 // default 22:30
-  let bedtimeSub = '8h sleep before tomorrow'
-  if (earlyTomorrow) {
-    bedtimeMins = 21 * 60 + 30
-    bedtimeSub = `Early session tomorrow`
-  } else if (avgSleepMin != null && avgSleepMin < 7 * 60) {
-    bedtimeMins = 22 * 60
-    bedtimeSub = "You've been sleeping under 7h"
-  } else if (unifiedReadinessPct < 60) {
-    bedtimeMins = 22 * 60
-    bedtimeSub = 'Extra sleep speeds up recovery'
-  }
+  // bedtime = 07:00 − needed sleep (normalize to 0–1440 to handle pre-midnight)
+  const rawBedtime = WAKE_MINS - neededMin
+  const bedtimeMins = ((rawBedtime % 1440) + 1440) % 1440
   const bh = Math.floor(bedtimeMins / 60)
   const bm = bedtimeMins % 60
-  tips.push({ emoji: '🌙', label: `Go to sleep by ${bh}:${bm.toString().padStart(2, '0')}`, sub: bedtimeSub })
+  const neededHours = neededMin / 60
+  const neededLabel = Number.isInteger(neededHours) ? `${neededHours}h` : `${neededHours.toFixed(1).replace('.0', '')}h`
+  tips.push({ emoji: '🌙', label: `Go to sleep by ${bh}:${bm.toString().padStart(2, '0')}`, sub: `${neededLabel} — ${bedtimeSub}` })
 
   // ── HRV warning ──
-  const latestHRV = rows[0]?.hrv_rmssd
-  const recentHRVs = rows.filter(r => r.hrv_rmssd != null).slice(0, 7)
-  if (latestHRV != null && recentHRVs.length >= 3) {
-    const baseline = recentHRVs.reduce((s, r) => s + (r.hrv_rmssd ?? 0), 0) / recentHRVs.length
-    if (latestHRV < baseline * 0.85) {
-      tips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
-    }
+  if (hrvBelowBaseline) {
+    tips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
   }
 
   // ── Readiness advice ──
