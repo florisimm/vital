@@ -65,7 +65,7 @@ export function ProfileButton() {
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
   const [activeSport, setActiveSport] = useState<string | null>(null)
-  const [weeklyDone, setWeeklyDone] = useState<Record<string, number>>({})
+  const [weeklyDoneIdx, setWeeklyDoneIdx] = useState<Record<string, number[]>>({})
   const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
   const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
   const dragGoalKeyRef = useRef<string | null>(null)
@@ -435,28 +435,80 @@ export function ProfileButton() {
     if (!activeSport || !userId) return
     const supabase = createClient()
     const now = new Date()
-    const day = now.getDay() // 0=Sun
-    const diffToMon = (day === 0 ? -6 : 1 - day)
+    const day = now.getDay()
+    const diffToMon = day === 0 ? -6 : 1 - day
     const weekStart = new Date(now)
     weekStart.setDate(now.getDate() + diffToMon)
     weekStart.setHours(0, 0, 0, 0)
     const weekStartStr = weekStart.toISOString()
 
-    const done: Record<string, number> = { running: 0, cycling: 0, swimming: 0, gym: 0 }
+    // Classify a running activity to a template index (0=Easy, 1=Intervals, 2=Long, 3=Tempo, 4=Hill)
+    function classifyRun(dist: number, speed: number, dur: number): number {
+      if (dist >= 12000) return 2                          // Long run: 12km+
+      if (speed >= 3.5 && dur <= 4200) return 1           // Intervals: fast (<4:45/km) + under 70 min
+      if (speed >= 3.0 && dist >= 7000) return 3          // Tempo: 5:33/km+ and 7-12km
+      return 0                                              // Easy run: default
+    }
+
+    // Classify a cycling activity to a template index (0=Endurance, 1=FTP, 2=Recovery, 3=VO2, 4=Long)
+    function classifyRide(speed: number, dur: number): number {
+      if (dur >= 5400) return 4                            // Long ride: 90+ min
+      if (dur < 2700) return 2                             // Recovery: under 45 min
+      if (speed * 3.6 >= 32) return 3                     // VO2max: 32km/h+
+      if (speed * 3.6 >= 26 && dur < 4500) return 1      // FTP: 26km/h+ and under 75 min
+      return 0                                              // Endurance: default
+    }
+
+    // Classify a swim to a template index (0=Endurance, 1=Speed, 2=Technique, 3=Mixed)
+    function classifySwim(dist: number, dur: number): number {
+      if (dist >= 2500) return 0                           // Endurance: 2500m+
+      if (dur < 2700) return 1                             // Speed: under 45 min
+      return 3                                              // Mixed: default
+    }
+
+    const sportOf = (t: string) => {
+      const s = t.toLowerCase().replace(/_/g, '')
+      if (['run', 'virtualrun', 'trailrun'].includes(s)) return 'running'
+      if (['ride', 'virtualride', 'ebikeride', 'gravelride', 'mountainbikeride'].includes(s)) return 'cycling'
+      if (['swim'].includes(s)) return 'swimming'
+      if (['weighttraining', 'workout', 'crossfit', 'elliptical'].includes(s)) return 'gym'
+      return null
+    }
 
     Promise.all([
-      supabase.from('strava_activities').select('sport_type').eq('user_id', userId).gte('start_date', weekStartStr),
-      supabase.from('hevy_workouts').select('id').eq('user_id', userId).gte('start_time', weekStartStr),
+      supabase.from('strava_activities')
+        .select('sport_type, distance, moving_time, average_speed')
+        .eq('user_id', userId).gte('start_date', weekStartStr),
+      supabase.from('hevy_workouts')
+        .select('id').eq('user_id', userId).gte('start_time', weekStartStr),
     ]).then(([strava, hevy]) => {
+      const usedIdx = new Set<number>()
+      const doneIndices: number[] = []
+
       for (const a of strava.data ?? []) {
-        const t = (a.sport_type ?? '').toLowerCase().replace(/_/g, '')
-        if (['run', 'virtualrun', 'trailrun'].includes(t)) done.running++
-        else if (['ride', 'virtualride', 'ebikeride', 'gravelride', 'mountainbikeride'].includes(t)) done.cycling++
-        else if (['swim'].includes(t)) done.swimming++
-        else if (['weighttraining', 'workout', 'crossfit', 'elliptical', 'rockclimbing'].includes(t)) done.gym++
+        if (sportOf(a.sport_type ?? '') !== activeSport) continue
+        let idx: number
+        if (activeSport === 'running') {
+          idx = classifyRun(a.distance ?? 0, a.average_speed ?? 0, a.moving_time ?? 0)
+        } else if (activeSport === 'cycling') {
+          idx = classifyRide(a.average_speed ?? 0, a.moving_time ?? 0)
+        } else if (activeSport === 'swimming') {
+          idx = classifySwim(a.distance ?? 0, a.moving_time ?? 0)
+        } else {
+          idx = doneIndices.length // gym: sequential
+        }
+        if (!usedIdx.has(idx)) { usedIdx.add(idx); doneIndices.push(idx) }
       }
-      done.gym += hevy.data?.length ?? 0
-      setWeeklyDone({ ...done })
+
+      if (activeSport === 'gym') {
+        const hevyCount = hevy.data?.length ?? 0
+        for (let i = 0; i < hevyCount; i++) {
+          const idx = doneIndices.length
+          if (!usedIdx.has(idx)) { usedIdx.add(idx); doneIndices.push(idx) }
+        }
+      }
+
+      setWeeklyDoneIdx(prev => ({ ...prev, [activeSport]: doneIndices }))
     })
   }, [activeSport, userId])
 
@@ -865,7 +917,8 @@ export function ProfileButton() {
                     <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
                       <div className="px-1">
                         {(() => {
-                          const done = weeklyDone[activeSport] ?? 0
+                          const doneList = weeklyDoneIdx[activeSport] ?? []
+                          const done = doneList.filter(i => i < freq).length
                           const remaining = Math.max(0, freq - done)
                           return (
                             <p className="text-[13px] text-white/35">
@@ -880,8 +933,10 @@ export function ProfileButton() {
                       </div>
                       <div className="flex flex-col gap-3">
                         {templates.map((t, i) => {
-                          const done = i < (weeklyDone[activeSport] ?? 0)
-                          const isNext = !done && i === (weeklyDone[activeSport] ?? 0)
+                          const doneList = weeklyDoneIdx[activeSport] ?? []
+                          const done = doneList.includes(i)
+                          const firstOpen = templates.findIndex((_, j) => !doneList.includes(j))
+                          const isNext = !done && i === firstOpen
                           return (
                             <button
                               key={i}
