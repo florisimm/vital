@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/coaching-analysis",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
