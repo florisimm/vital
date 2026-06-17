@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import useSWR from 'swr'
-import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity, Calendar } from 'lucide-react'
+import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity, Calendar, Check, ArrowRight } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
@@ -2442,33 +2442,28 @@ export function computeRecoveryDetail(
   return { pct, label, factors }
 }
 
-function FocusIcon({ emoji, size = 54 }: { emoji: string; size?: number }) {
+// Maps a focus emoji to a Lucide icon + accent colour. The accent is reused
+// across the whole recommendation card (icon tile, action chip, CTA) so the
+// card reads as one cohesive, sport-themed unit instead of a generic emoji.
+function focusVisual(emoji: string): { Icon: typeof Moon; accent: string; soft: string } {
   const e = emoji
-  let icon: React.ReactNode
-  let bg: string
-  let color: string
-  if (e === '😴' || e === '🛌' || e === '💤' || e === '✅') {
-    icon = <Moon size={22} />; bg = 'rgba(99,102,241,0.18)'; color = '#818cf8'
-  } else if (e === '🏃' || e === '🏃‍♂️' || e === '👟') {
-    icon = <Activity size={22} />; bg = 'rgba(45,212,191,0.18)'; color = '#2dd4bf'
-  } else if (e === '🚴' || e === '🚴‍♂️' || e === '🚵') {
-    icon = <Bike size={22} />; bg = 'rgba(34,211,238,0.18)'; color = '#22d3ee'
-  } else if (e === '🏊' || e === '🏊‍♂️') {
-    icon = <Waves size={22} />; bg = 'rgba(96,165,250,0.18)'; color = '#60a5fa'
-  } else if (e === '💪' || e === '🏋️' || e === '🏋️‍♂️') {
-    icon = <Dumbbell size={22} />; bg = 'rgba(251,146,60,0.18)'; color = '#fb923c'
-  } else if (e === '📅' || e === '🗓️') {
-    icon = <Calendar size={22} />; bg = 'rgba(251,146,60,0.18)'; color = '#fb923c'
-  } else if (e === '⚡' || e === '🔥') {
-    icon = <TrendingUp size={22} />; bg = 'rgba(250,204,21,0.18)'; color = '#facc15'
-  } else if (e === '🧘' || e === '🧘‍♂️') {
-    icon = <PersonStanding size={22} />; bg = 'rgba(45,212,191,0.12)'; color = '#5eead4'
-  } else {
-    icon = <Timer size={22} />; bg = 'rgba(255,255,255,0.10)'; color = 'rgba(255,255,255,0.7)'
-  }
+  if (e === '😴' || e === '🛌' || e === '💤' || e === '✅')   return { Icon: Moon,           accent: '#818cf8', soft: 'rgba(129,140,248,0.16)' }
+  if (e === '🏃' || e === '🏃‍♂️' || e === '👟')              return { Icon: Activity,       accent: '#2dd4bf', soft: 'rgba(45,212,191,0.16)' }
+  if (e === '🚴' || e === '🚴‍♂️' || e === '🚵')              return { Icon: Bike,           accent: '#22d3ee', soft: 'rgba(34,211,238,0.16)' }
+  if (e === '🏊' || e === '🏊‍♂️')                            return { Icon: Waves,          accent: '#60a5fa', soft: 'rgba(96,165,250,0.16)' }
+  if (e === '💪' || e === '🏋️' || e === '🏋️‍♂️')            return { Icon: Dumbbell,       accent: '#fb923c', soft: 'rgba(251,146,60,0.16)' }
+  if (e === '📅' || e === '🗓️')                              return { Icon: Calendar,       accent: '#fb923c', soft: 'rgba(251,146,60,0.16)' }
+  if (e === '⚡' || e === '🔥')                               return { Icon: TrendingUp,     accent: '#facc15', soft: 'rgba(250,204,21,0.16)' }
+  if (e === '🧘' || e === '🧘‍♂️')                            return { Icon: PersonStanding, accent: '#5eead4', soft: 'rgba(94,234,212,0.16)' }
+  return { Icon: Timer, accent: 'rgb(45,212,191)', soft: 'rgba(45,212,191,0.14)' }
+}
+
+function FocusIcon({ emoji, size = 54 }: { emoji: string; size?: number }) {
+  const { Icon, accent, soft } = focusVisual(emoji)
   return (
-    <div className="rounded-[16px] flex items-center justify-center shrink-0" style={{ width: size, height: size, background: bg, color }}>
-      {icon}
+    <div className="rounded-[16px] flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, background: `linear-gradient(145deg, ${soft}, rgba(255,255,255,0.03))`, border: `1px solid ${accent}33`, color: accent }}>
+      <Icon size={Math.round(size * 0.42)} strokeWidth={2.2} />
     </div>
   )
 }
@@ -2618,88 +2613,110 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     : toSpecificRecommendation()
 
   if (simplified) {
+    const v = focusVisual(focus.emoji)
+    const accent = v.accent
+    const ctaText = ctaLabel.replace(/\s*→\s*$/, '')
     return (
-      <a href={ctaHref} className="block p-5 rounded-[24px] border border-white/[0.12] active:opacity-75 transition-opacity" style={{ background: 'rgba(45,212,191,0.07)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">{label}</p>
-          <div className="flex items-center gap-2.5">
-            {biasApplied && (
-              <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalized</span>
-            )}
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} suppressHydrationWarning />
-              <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>Readiness {readinessPct}%</span>
+      <a href={ctaHref} className="block rounded-[26px] border overflow-hidden active:opacity-90 transition-opacity"
+        style={{ borderColor: `${accent}26`, background: `linear-gradient(165deg, ${v.soft}, rgba(255,255,255,0.02) 60%)` }}>
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.12em]">{label}</p>
+            <div className="flex items-center gap-2">
+              {biasApplied && (
+                <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalized</span>
+              )}
+              <div className="flex items-center gap-1.5 pl-2 pr-2.5 py-[3px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} suppressHydrationWarning />
+                <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>{readinessPct}%</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative shrink-0">
-            <FocusIcon emoji={focus.emoji} size={54} />
-            {isDone && (
-              <span className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-black leading-none" style={{ background: '#4ade80' }}>✓</span>
-            )}
+
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative shrink-0">
+              <FocusIcon emoji={focus.emoji} size={60} />
+              {isDone && (
+                <span className="absolute -bottom-1.5 -right-1.5 w-[24px] h-[24px] rounded-full flex items-center justify-center border-[2.5px]"
+                  style={{ background: '#4ade80', borderColor: 'rgb(7,9,11)' }}>
+                  <Check size={13} strokeWidth={3.5} className="text-black" />
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 flex-1 min-w-0">
+              <span className="text-[22px] font-bold text-white leading-[1.12] tracking-[-0.01em]">{headline}</span>
+              {isDone ? (
+                <span className="self-start inline-flex items-center gap-1 pl-2 pr-2.5 py-[3px] rounded-full text-[11px] font-bold"
+                  style={{ background: 'rgba(74,222,128,0.16)', color: '#4ade80' }}>
+                  <Check size={11} strokeWidth={3.5} /> Done
+                </span>
+              ) : (
+                <span className="self-start px-2.5 py-[3px] rounded-full text-[11px] font-bold text-black" style={{ background: focus.actionColor }}>{focus.action}</span>
+              )}
+            </div>
           </div>
-          <div className="flex flex-col gap-2 flex-1 min-w-0">
-            <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
-            {isDone ? (
-              <span className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black" style={{ background: '#4ade80' }}>✓ Done</span>
-            ) : (
-              <span className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black" style={{ background: focus.actionColor }}>{focus.action}</span>
-            )}
-          </div>
-          <span className="text-white/40 text-[22px] shrink-0">›</span>
-        </div>
-        {isDone && completedToday && completedToday.length > 0 && (
-          <div className="flex flex-col gap-1 mb-3">
-            {completedToday.map((w, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="text-[12px] font-bold shrink-0" style={{ color: '#4ade80' }}>✓</span>
-                <span className="text-[13px] text-white/60">{w.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {focus.reasons.length > 0 && (
-          <div className="pt-3 border-t border-white/[0.08] mb-4">
-            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.08em] mb-2">Why?</p>
-            <div className="flex flex-col gap-1.5">
-              {focus.reasons.map((r, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="text-teal-400/70 text-[12px] mt-[2px] shrink-0">•</span>
-                  <span className="text-[13px] text-white/75 leading-snug">{r}</span>
-                </div>
+
+          {isDone && completedToday && completedToday.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {completedToday.map((w, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[12px] text-white/70"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <Check size={11} strokeWidth={3} style={{ color: '#4ade80' }} />
+                  {w.name}
+                </span>
               ))}
             </div>
+          )}
+
+          {focus.reasons.length > 0 && (
+            <div className="rounded-[16px] p-3.5 mb-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <p className="text-[10px] font-semibold text-white/35 uppercase tracking-[0.1em] mb-2">Why</p>
+              <div className="flex flex-col gap-2">
+                {focus.reasons.map((r, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <span className="w-1 h-1 rounded-full mt-[7px] shrink-0" style={{ background: accent }} />
+                    <span className="text-[13px] text-white/75 leading-snug">{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-1.5 py-3 rounded-[15px] text-[14px] font-bold text-black" style={{ background: accent }}>
+            {ctaText}
+            <ArrowRight size={16} strokeWidth={2.75} />
           </div>
-        )}
-        <div className="flex items-center justify-center py-2 rounded-[12px] text-[13px] font-semibold text-black" style={{ background: 'rgb(45,212,191)' }}>
-          {ctaLabel}
         </div>
       </a>
     )
   }
 
+  const fv = focusVisual(focus.emoji)
+  const fAccent = fv.accent
+  const fCtaText = ctaLabel.replace(/\s*→\s*$/, '')
+
   return (
-    <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(45,212,191,0.07)' }}>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.1em]">{label}</p>
-        <div className="flex items-center gap-2.5">
+    <div className="p-5 rounded-[26px] border overflow-hidden"
+      style={{ borderColor: `${fAccent}26`, background: `linear-gradient(165deg, ${fv.soft}, rgba(255,255,255,0.02) 60%)` }}>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.12em]">{label}</p>
+        <div className="flex items-center gap-2">
           {biasApplied && (
             <span className="text-[10px] font-semibold text-teal-400/70 uppercase tracking-[0.08em]">✦ Personalized</span>
           )}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 pl-2 pr-2.5 py-[3px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} suppressHydrationWarning />
-            <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>Readiness {readinessPct}%</span>
+            <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>{readinessPct}%</span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-start gap-4 mb-4">
-        <FocusIcon emoji={focus.emoji} size={54} />
-        <div className="flex flex-col gap-2">
-          <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
+      <div className="flex items-center gap-4 mb-4">
+        <FocusIcon emoji={focus.emoji} size={60} />
+        <div className="flex flex-col gap-2 flex-1 min-w-0">
+          <span className="text-[22px] font-bold text-white leading-[1.12] tracking-[-0.01em]">{headline}</span>
           <span
-            className="self-start px-2.5 py-0.5 rounded-full text-[11px] font-bold text-black"
+            className="self-start px-2.5 py-[3px] rounded-full text-[11px] font-bold text-black"
             style={{ background: focus.actionColor }}
           >
             {focus.action}
@@ -2708,24 +2725,25 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
       </div>
 
       {completedToday && completedToday.length > 0 && (
-        <div className="flex flex-col gap-1 mb-3">
+        <div className="flex flex-wrap gap-1.5 mb-4">
           {completedToday.map((w, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-teal-400 text-[11px] font-bold">✓</span>
-              <span className="text-[13px] text-white/40">{w.name}</span>
-            </div>
+            <span key={i} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[12px] text-white/70"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <Check size={11} strokeWidth={3} style={{ color: '#4ade80' }} />
+              {w.name}
+            </span>
           ))}
         </div>
       )}
 
       {focus.reasons.length > 0 && (
-        <div className="pt-3 border-t border-white/[0.08] mb-3">
-          <p className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em] mb-2">Why?</p>
-          <div className="flex flex-col gap-1.5">
+        <div className="rounded-[16px] p-3.5 mb-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <p className="text-[10px] font-semibold text-white/35 uppercase tracking-[0.1em] mb-2">Why</p>
+          <div className="flex flex-col gap-2">
             {focus.reasons.map((r, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="text-teal-400/60 text-[12px] mt-[2px] shrink-0">•</span>
-                <span className="text-[13px] text-white/65 leading-snug">{r}</span>
+              <div key={i} className="flex items-start gap-2.5">
+                <span className="w-1 h-1 rounded-full mt-[7px] shrink-0" style={{ background: fAccent }} />
+                <span className="text-[13px] text-white/75 leading-snug">{r}</span>
               </div>
             ))}
           </div>
@@ -2744,17 +2762,19 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
           return (
             <button
               onClick={() => onSwitchTab(sportKey!)}
-              className="w-full flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black active:scale-95 transition-transform"
-              style={{ background: 'rgb(45,212,191)' }}>
-              {ctaLabel}
+              className="w-full flex items-center justify-center gap-1.5 py-3 rounded-[15px] text-[14px] font-bold text-black active:scale-[0.98] transition-transform"
+              style={{ background: fAccent }}>
+              {fCtaText}
+              <ArrowRight size={16} strokeWidth={2.75} />
             </button>
           )
         }
         return (
           <a href={ctaHref}
-            className="flex items-center justify-center py-2 rounded-[14px] text-[13px] font-semibold text-black"
-            style={{ background: 'rgb(45,212,191)' }}>
-            {ctaLabel}
+            className="flex items-center justify-center gap-1.5 py-3 rounded-[15px] text-[14px] font-bold text-black"
+            style={{ background: fAccent }}>
+            {fCtaText}
+            <ArrowRight size={16} strokeWidth={2.75} />
           </a>
         )
       })()}
