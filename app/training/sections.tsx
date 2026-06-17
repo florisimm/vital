@@ -2089,37 +2089,61 @@ export function computeTodaysFocus(
     return recoveryPct >= 80 && weightedACWRRisk() < 0.18 ? 'proceed' : 'easier'
   }
 
-  function buildReasons(intensity: Intensity): string[] {
+  function buildReasons(intensity: Intensity, actKey: keyof typeof ACT): string[] {
     const r: string[] = []
-    if (highLoad)     r.push(`Training load +${Math.abs(loadPct)}% higher than last week`)
-    else if (medLoad) r.push(`Training load +${Math.abs(loadPct)}% higher than last week`)
-    if (recoveryPct < 70) {
-      if (lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48) {
-        r.push(`Last workout ${lastWorkoutHoursAgo}h ago`)
-      } else {
-        r.push('Recovery lower than usual')
-      }
+    let recoveryExplained = false
+
+    // 1. Lead reason — explains the decision itself in plain language, so the
+    //    headline advice never appears without a clear "because…".
+    if (actKey === 'proceed') {
+      r.push(`Recovery ${recoveryPct}% — you're recovered and ready to train as planned`)
+    } else if (actKey === 'easier') {
+      r.push('A few early fatigue signals — easing the intensity keeps you from overreaching')
+    } else if (actKey === 'shorten') {
+      r.push('Fatigue is starting to build — a shorter session gives the stimulus without the extra cost')
+    } else if (actKey === 'lessVol') {
+      r.push(`Recovery ${recoveryPct}% isn't full yet — trimming a set or two keeps the load manageable`)
+      recoveryExplained = true
+    } else if (actKey === 'recover') {
+      r.push(`Recovery ${recoveryPct}% is low — easy active recovery does more for you than a hard session today`)
+      recoveryExplained = true
+    } else if (actKey === 'moveTmr') {
+      r.push('Fatigue is high today — moving this to tomorrow lets you hit it fresh instead of flat')
+    } else { // skip
+      r.push('Your body needs rest more than load right now — one recovery day protects the whole week')
     }
-    if (consecutiveDays >= 3) r.push(`${consecutiveDays} training days in a row`)
+
+    // 2. Supporting factors — each names the signal AND why it matters.
+    if (highLoad || medLoad)
+      r.push(`Training load is +${Math.abs(loadPct)}% vs last week — more strain than your body has adapted to`)
+    if (!recoveryExplained && recoveryPct < 70) {
+      if (lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48)
+        r.push(`Last workout was only ${lastWorkoutHoursAgo}h ago — muscles and nervous system are still recovering`)
+      else
+        r.push("Recovery is below your norm — sleep and HRV say you're not fully charged yet")
+    }
+    if (consecutiveDays >= 3)
+      r.push(`${consecutiveDays} training days in a row — fatigue keeps stacking until you take a rest day`)
     if (upcomingHard) {
       const d = evtDate(upcomingHard)
-      const dayLbl = d === tomorrowStr ? 'tomorrow' : d === day2Str ? 'day after tomorrow' : 'soon'
-      r.push(`${upcomingHard.title} planned ${dayLbl}`)
+      const dayLbl = d === tomorrowStr ? 'tomorrow' : d === day2Str ? 'the day after' : 'soon'
+      r.push(`${upcomingHard.title} is planned ${dayLbl} — going easy today means a stronger session then`)
     } else if (intensity === 'zone2' && r.length < 2) {
-      r.push('Low impact on recovery')
+      r.push('A Zone 2 effort barely dents recovery — safe to do even on a tired day')
     }
-    // Always explain with at least readiness + consistency context
-    if (r.length === 0) {
-      r.push(`Recovery ${recoveryPct}% — you're good to go`)
+
+    // Positive fallback so there are always at least two clear reasons.
+    if (r.length < 2) {
       r.push(consecutiveDays > 0
-        ? `${consecutiveDays} day${consecutiveDays !== 1 ? 's' : ''} in a row — stay consistent`
-        : 'Consistency is what builds fitness — stick to the plan')
+        ? `${consecutiveDays} day${consecutiveDays !== 1 ? 's' : ''} in a row — staying consistent is what drives progress`
+        : 'Recovery, training load and HRV all look fine — nothing is holding you back')
     }
-    // Add intensity context when there's room
+
+    // 3. Your intensity preference, explained — so the setting's effect is clear.
     const intensityCtx: Record<string, string> = {
-      easy:    'Easy mode — keep effort low, save energy',
-      hard:    'Hard mode — push beyond your comfort zone today',
-      all_out: 'Max out mode — give it everything today',
+      easy:    "You've set intensity to Easy — effort stays in Zone 2 to protect recovery",
+      hard:    "You've set intensity to Hard — the plan leans into harder efforts when you're fresh",
+      all_out: "You've set intensity to All Out — sessions push to the limit when recovery allows",
     }
     if (r.length < 3 && intensityCtx[trainingIntensity]) r.push(intensityCtx[trainingIntensity])
     return r.slice(0, 3)
@@ -2155,9 +2179,9 @@ export function computeTodaysFocus(
         action: 'Optional Zone 2',
         actionColor: '#2dd4bf',
         reasons: [
-          `You set ${top.target}× ${top.label.toLowerCase()} this week — ${top.done}/${top.target} so far`,
-          `An easy ${top.label.toLowerCase()}${orList} fits — keep it Zone 2, low fatigue cost`,
-          tomorrowNext ? `${tomorrowNext.title} planned tomorrow — keep it light` : 'Or simply rest — both are good choices',
+          `You planned ${top.target}× ${top.label.toLowerCase()} this week and you're at ${top.done} — one more keeps you on track`,
+          `An easy Zone 2 ${top.label.toLowerCase()}${orList} adds aerobic volume with very little fatigue cost`,
+          tomorrowNext ? `${tomorrowNext.title} is planned tomorrow — keeping today easy protects that session` : 'Totally optional though — resting is just as valid today',
         ],
       }
     }
@@ -2171,11 +2195,11 @@ export function computeTodaysFocus(
       action: 'Rest & recover',
       actionColor: '#4ade80',
       reasons: [
-        doneWasCardio ? 'Cardio done — let your body absorb it'
-          : allCardioTargetsMet ? "You've hit your weekly training targets — rest is earned"
-          : 'Enough training for today — no extra cardio needed',
-        recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition` : `Recovery ${recoveryPct}% — looking good`,
-        tomorrowNext ? `${tomorrowNext.title} planned tomorrow — recover well` : 'Hydrate and get quality sleep tonight',
+        doneWasCardio ? "Today's cardio is logged — fitness is built while you recover, not by piling on more"
+          : allCardioTargetsMet ? "You've hit every training target this week — extra load now just adds fatigue"
+          : "You've trained enough today — more volume wouldn't add much beyond fatigue",
+        recoveryPct < 60 ? `Recovery is at ${recoveryPct}% — prioritise sleep and nutrition so you bounce back` : `Recovery ${recoveryPct}% — you're in good shape, no need to push further`,
+        tomorrowNext ? `${tomorrowNext.title} is planned tomorrow — rest today so you're fresh for it` : 'Hydrate and get solid sleep tonight to lock in the gains',
       ],
     }
   }
@@ -2205,9 +2229,9 @@ export function computeTodaysFocus(
           action: 'Optional Zone 2',
           actionColor: '#2dd4bf',
           reasons: [
-            `${top.done}/${top.target} ${top.label.toLowerCase()} sessions this week — ${top.target - top.done} to go`,
-            `An easy ${top.label.toLowerCase()}${orList} fits — keep it Zone 2`,
-            tomorrowEvts[0] ? `${tomorrowEvts[0].title} planned tomorrow — keep it light` : 'Or simply rest — both work',
+            `${top.done} of ${top.target} ${top.label.toLowerCase()} sessions done this week — ${top.target - top.done} still to go`,
+            `An easy Zone 2 ${top.label.toLowerCase()}${orList} fits well after strength — low fatigue, extra aerobic base`,
+            tomorrowEvts[0] ? `${tomorrowEvts[0].title} is planned tomorrow — keep today light to stay fresh` : 'Optional though — a rest day works just as well',
           ],
         }
       }
@@ -2219,9 +2243,9 @@ export function computeTodaysFocus(
           action: 'Optional Zone 2',
           actionColor: '#2dd4bf',
           reasons: [
-            `Recovery ${recoveryPct}% — room for an easy aerobic session`,
-            '20–30 min Zone 2 ride or run fits well after strength',
-            'Or rest — both are good choices',
+            `Recovery ${recoveryPct}% — you've got headroom for an easy aerobic session on top of today's work`,
+            '20–30 min in Zone 2 builds your aerobic base without adding much fatigue',
+            'Skipping it is fine too — listen to how your legs feel',
           ],
         }
       }
@@ -2234,9 +2258,9 @@ export function computeTodaysFocus(
       action: 'Rest & recover',
       actionColor: '#4ade80',
       reasons: [
-        doneWasCardio ? 'Cardio done — let your body absorb it' : 'Strength done — recovery is priority',
-        recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition` : `Recovery ${recoveryPct}% — looking good`,
-        upcomingHard ? `${upcomingHard.title} coming up — recover well` : 'Hydrate and get quality sleep tonight',
+        doneWasCardio ? "Cardio's logged — adaptation happens during recovery, so more today gives little back" : "Strength is logged — your muscles rebuild during rest, that's where the gains come from",
+        recoveryPct < 60 ? `Recovery ${recoveryPct}% — prioritise sleep and nutrition to recover faster` : `Recovery ${recoveryPct}% — looking good, no need to add more`,
+        upcomingHard ? `${upcomingHard.title} is coming up — recover well so you can attack it` : 'Hydrate and get quality sleep tonight to lock in the gains',
       ],
     }
   }
@@ -2277,7 +2301,7 @@ export function computeTodaysFocus(
       emoji: sportEmoji(ev.title),
       label: `${ev.title}${evtTime(ev)}`,
       ...act,
-      reasons: buildReasons(intensity),
+      reasons: buildReasons(intensity, actKey),
     }
   }
 
@@ -2309,15 +2333,15 @@ export function computeTodaysFocus(
   // or when all weekly goals are already met.
   const goalsBehind = top !== null
   let restReason: string | null = null
-  if (recoveryPct < 35)            restReason = `Recovery ${recoveryPct}% — your body needs a rest day`
-  else if (rs >= 7)                restReason = 'Very high training load — take a full recovery day'
-  else if (upcomingHard && !goalsBehind) restReason = `${upcomingHard.title} coming up — rest today so you're fresh for it`
-  else if (!top)                   restReason = "You've hit your weekly training goals — rest is earned"
+  if (recoveryPct < 35)            restReason = `Recovery is only ${recoveryPct}% — training now would dig a deeper hole than it's worth`
+  else if (rs >= 7)                restReason = 'Your training load has spiked this week — a full recovery day prevents overtraining and injury'
+  else if (upcomingHard && !goalsBehind) restReason = `${upcomingHard.title} is coming up — resting today means you'll be fresh and strong for it`
+  else if (!top)                   restReason = "You've already hit every weekly training goal — rest is what turns that work into fitness"
 
   if (restReason) {
     const extra = lastWorkoutHoursAgo !== null && lastWorkoutHoursAgo <= 48
-      ? `Last workout ${lastWorkoutHoursAgo}h ago`
-      : 'A light walk at most — let your body recover'
+      ? `Last workout was only ${lastWorkoutHoursAgo}h ago — your body is still repairing from it`
+      : 'A light walk is fine, but keep it easy so your body can fully recover'
     return { emoji: '😴', label: 'Rest day', ...ACT.skip, reasons: [restReason, extra] }
   }
 
@@ -2325,9 +2349,9 @@ export function computeTodaysFocus(
   // If recovery or risk is elevated, keep it easy — but still do the session.
   const easy = recoveryPct < 70 || rs >= 5
   const goalReason = primaryGoal === 'build_muscle' && gymBehind
-    ? 'Building muscle is your top goal — hit the weights'
-    : primaryGoal === 'lose_weight' ? 'Losing weight — cardio keeps the deficit up'
-    : primaryGoal === 'performance' ? 'Performance goal — stay consistent with your training'
+    ? 'Building muscle is your top goal — strength sessions are what drive that, so the weights come first'
+    : primaryGoal === 'lose_weight' ? 'Losing weight is your goal — regular cardio keeps your energy deficit going'
+    : primaryGoal === 'performance' ? 'Performance is your goal — consistent sessions are what move the needle'
     : null
   // Action label varies by intensity so each setting is clearly distinct
   const action = easy ? 'Keep it easy'
@@ -2346,8 +2370,8 @@ export function computeTodaysFocus(
     action,
     actionColor,
     reasons: [
-      `${top!.done}/${top!.target} ${top!.label.toLowerCase()} sessions this week — ${top!.target - top!.done} to go`,
-      `Recovery ${recoveryPct}% — ${easy ? 'keep it easy today' : 'good to train today'}`,
+      `You're at ${top!.done} of ${top!.target} ${top!.label.toLowerCase()} sessions this week — today's session closes the gap`,
+      `Recovery ${recoveryPct}% — ${easy ? "enough to train, but keep the effort easy so you don't overreach" : "you're recovered and good to push today"}`,
       ...(goalReason ? [goalReason] : []),
     ],
   }
