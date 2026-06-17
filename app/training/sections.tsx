@@ -2162,10 +2162,12 @@ export function computeTodaysFocus(
 
     // After the planned (usually strength) session: is there still room for an
     // easy aerobic session today, or is it better to just rest?
+    const recovThresh1 = trainingIntensity === 'all_out' ? 45 : trainingIntensity === 'hard' ? 50 : 60
+    const rsThresh1    = trainingIntensity === 'all_out' ? 5  : trainingIntensity === 'hard' ? 4  : 3
     const canAddCardio = !doneWasCardio
       && cardioStillToDo.length > 0
-      && recoveryPct >= 60
-      && rs <= 3
+      && recoveryPct >= recovThresh1
+      && rs <= rsThresh1
       && weightedACWRRisk() < 0.35
       && !upcomingHard
 
@@ -2212,9 +2214,11 @@ export function computeTodaysFocus(
     const rs = riskScore()
 
     const cardioStillToDo = cardioTargets.filter(c => c.target > 0 && c.done < c.target)
+    const recovThresh2 = trainingIntensity === 'all_out' ? 45 : trainingIntensity === 'hard' ? 50 : 60
+    const rsThresh2    = trainingIntensity === 'all_out' ? 5  : trainingIntensity === 'hard' ? 4  : 3
     const canAddCardio = !doneWasCardio
-      && recoveryPct >= 60
-      && rs <= 3
+      && recoveryPct >= recovThresh2
+      && rs <= rsThresh2
       && weightedACWRRisk() < 0.35
       && !upcomingHard
 
@@ -2334,7 +2338,7 @@ export function computeTodaysFocus(
   const goalsBehind = top !== null
   let restReason: string | null = null
   if (recoveryPct < 35)            restReason = `Recovery is only ${recoveryPct}% — training now would dig a deeper hole than it's worth`
-  else if (rs >= 7)                restReason = 'Your training load has spiked this week — a full recovery day prevents overtraining and injury'
+  else if (rs >= (trainingIntensity === 'all_out' ? 9 : trainingIntensity === 'hard' ? 8 : 7)) restReason = 'Your training load has spiked this week — a full recovery day prevents overtraining and injury'
   else if (upcomingHard && !goalsBehind) restReason = `${upcomingHard.title} is coming up — resting today means you'll be fresh and strong for it`
   else if (!top)                   restReason = "You've already hit every weekly training goal — rest is what turns that work into fitness"
 
