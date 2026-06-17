@@ -2616,6 +2616,8 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     const v = focusVisual(focus.emoji)
     const accent = v.accent
     const ctaText = ctaLabel.replace(/\s*→\s*$/, '')
+    // Rest is advice, not a completed task — don't slap a "Done" badge on it.
+    const isRestAdvice = isDone && headline.toLowerCase().startsWith('rest')
     return (
       <a href={ctaHref} className="block rounded-[26px] border overflow-hidden active:opacity-90 transition-opacity"
         style={{ borderColor: `${accent}26`, background: `linear-gradient(165deg, ${v.soft}, rgba(255,255,255,0.02) 60%)` }}>
@@ -2636,7 +2638,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
           <div className="flex items-center gap-4 mb-4">
             <div className="relative shrink-0">
               <FocusIcon emoji={focus.emoji} size={60} />
-              {isDone && (
+              {isDone && !isRestAdvice && (
                 <span className="absolute -bottom-1.5 -right-1.5 w-[24px] h-[24px] rounded-full flex items-center justify-center border-[2.5px]"
                   style={{ background: '#4ade80', borderColor: 'rgb(7,9,11)' }}>
                   <Check size={13} strokeWidth={3.5} className="text-black" />
@@ -2645,7 +2647,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
             </div>
             <div className="flex flex-col gap-2 flex-1 min-w-0">
               <span className="text-[22px] font-bold text-white leading-[1.12] tracking-[-0.01em]">{headline}</span>
-              {isDone ? (
+              {isRestAdvice ? null : isDone ? (
                 <span className="self-start inline-flex items-center gap-1 pl-2 pr-2.5 py-[3px] rounded-full text-[11px] font-bold"
                   style={{ background: 'rgba(74,222,128,0.16)', color: '#4ade80' }}>
                   <Check size={11} strokeWidth={3.5} /> Done
