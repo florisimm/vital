@@ -29,8 +29,12 @@ export function computeSleepScore(r: HealthRow): number | null {
   const deep      = r.slaap_diep ?? 0
   const rem       = r.slaap_rem ?? 0
   const hasStages = deep + rem > 0
-  const duration    = Math.min(asleep / 480, 1) ** 2
-  const composition = hasStages ? Math.min((deep + rem) / asleep / 0.55, 1) : null
+  // Duration: target ~7.75 h. Gentle convex penalty (exp 1.3) — a short night
+  // still hurts but isn't crushed the way a square penalty does (6 h → 0.70, not 0.56).
+  const duration    = Math.min(asleep / 465, 1) ** 1.3
+  // Composition: deep+REM share. Target 0.45 matches healthy norms (~40–50%),
+  // so a good night actually reaches 1.0 instead of being capped below it.
+  const composition = hasStages ? Math.min((deep + rem) / asleep / 0.45, 1) : null
   const efficiency  = Math.max(0, Math.min((asleep / (asleep + awake) - 0.75) / 0.25, 1))
   const parts: [number, number][] = hasStages
     ? [[duration, 0.50], [composition!, 0.35], [efficiency, 0.15]]

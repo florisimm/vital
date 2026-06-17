@@ -6,6 +6,13 @@ import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity, Calendar, Check, ArrowRight } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
+import {
+  type Activity, type HevyWorkout,
+  isRun, isRide, isSwim, isWeightTraining, isCycling,
+  cardioZoneMultiplier, effectiveLoad, hevyLoad,
+  setIntensityFactor, sessionLoadFactor, sessionLoadBreakdown, isAccessorySession,
+  epley1RM, COMPOUND_KEYWORDS,
+} from '@/lib/training-load'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
@@ -13,18 +20,9 @@ import { InjuryToggle } from '@/components/InjuryToggle'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type Activity = {
-  id: number; name: string; sport_type: string; start_date: string
-  distance: number | null; moving_time: number | null; elapsed_time: number | null
-  total_elevation_gain: number | null; average_speed: number | null
-  average_heartrate: number | null; average_cadence: number | null; kilojoules: number | null
-}
-
-export type HevyWorkout = {
-  id: string; title: string; start_time: string; end_time: string | null
-  duration: number | null; volume_kg: number | null; sets: number | null
-  exercises: Array<{ title: string; sets: Array<{ weight_kg: number; reps: number }> }> | null
-}
+// Activity / HevyWorkout live in lib/training-load.ts (single source of truth);
+// re-exported here so existing importers of these types keep working.
+export type { Activity, HevyWorkout }
 
 type SportBreakdown = {
   key: string; label: string; acwr: number | null
@@ -72,153 +70,6 @@ export function formatTime(secs: number): string {
   const s = Math.round(secs % 60)
   if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function epley1RM(weight_kg: number, reps: number): number {
-  if (weight_kg <= 0 || reps <= 0) return 0
-  return reps === 1 ? weight_kg : weight_kg * (1 + reps / 30)
-}
-
-function isRide(a: Activity) {
-  const t = a.sport_type?.toLowerCase() ?? ''
-  return t.includes('ride') || t.includes('cycl')
-}
-
-function isRun(a: Activity) {
-  return a.sport_type?.toLowerCase().includes('run')
-}
-
-function isSwim(a: Activity) {
-  return a.sport_type?.toLowerCase().includes('swim')
-}
-
-function isWeightTraining(a: Activity) {
-  return a.sport_type?.toLowerCase() === 'weighttraining'
-}
-
-function isCycling(a: Activity) {
-  return a.sport_type?.toLowerCase().includes('ride')
-}
-
-// Consistent load unit (minutes) with zone-2 dampening.
-// Avoids mixing real kilojoules (available on recent Strava syncs) with the
-// moving_time fallback on older records, which would inflate acute:chronic ratios.
-function cardioZoneMultiplier(hr: number): number {
-  if (hr < 130) return 0.25  // Zone 1: recovery
-  if (hr < 150) return 0.50  // Zone 2: aerobic base
-  if (hr < 165) return 0.75  // Zone 3: aerobic threshold
-  if (hr < 175) return 1.00  // Zone 4: lactate threshold
-  return 1.25                 // Zone 5: VO2max / race effort
-}
-
-function effectiveLoad(a: Activity): number {
-  const mins = (a.moving_time ?? 0) / 60
-  if (mins === 0) return 0
-  if (a.average_heartrate) return mins * cardioZoneMultiplier(a.average_heartrate)
-  if (isRun(a) && a.average_speed) {
-    const mps = a.average_speed
-    return mins * (mps > 4.0 ? 1.00 : mps > 3.2 ? 0.75 : 0.50)
-  }
-  if (isRide(a) && a.average_speed) {
-    const kmh = a.average_speed * 3.6
-    return mins * (kmh > 30 ? 1.00 : kmh > 22 ? 0.75 : 0.50)
-  }
-  return mins * 0.75
-}
-
-const COMPOUND_KEYWORDS = [
-  'squat', 'deadlift', 'rdl', 'bench', 'incline', 'overhead press', 'ohp',
-  'shoulder press', 'military press', 'row', 'pull-up', 'pullup', 'pull up',
-  'chin-up', 'chinup', 'chin up', 'lunge', 'hip thrust',
-]
-const ISOLATION_KEYWORDS = [
-  'curl', 'tricep', 'lateral raise', 'rear delt', 'face pull',
-  'calf', 'leg extension', 'leg curl', 'fly', 'flye', 'shrug', 'kickback',
-]
-const RECOVERY_TITLE_KEYWORDS = [
-  'stretch', 'mobility', 'foam', 'recover', 'recovery',
-  'warm up', 'warm-up', 'warmup', 'cooldown', 'cool down', 'cool-down',
-]
-const ACCESSORY_TITLE_KEYWORDS = ['abs', 'core', 'yoga']
-
-// Per-set intensity factor using Epley %1RM estimate combined with rep-range modifier.
-// Normalised so that 8 reps at typical working weight ≈ 1.0.
-function setIntensityFactor(sets: Array<{ weight_kg: number; reps: number }>): number {
-  const valid = (sets ?? []).filter(s => s.reps > 0)
-  if (!valid.length) return 1.0
-  const avg = valid.reduce((sum, s) => {
-    if (s.weight_kg <= 0) return sum + (s.reps <= 10 ? 0.85 : 0.65)  // bodyweight
-    const pct1rm = s.reps <= 1 ? 1.0 : 30 / (30 + s.reps)
-    const repMod = s.reps <= 3 ? 1.35 : s.reps <= 6 ? 1.15 : s.reps <= 12 ? 1.0 : 0.7
-    return sum + Math.min(1.5, pct1rm * repMod)
-  }, 0) / valid.length
-  return Math.max(0.4, avg)
-}
-
-// Returns a 0.10–1.0 load factor for a Hevy workout based on exercise composition.
-// With exercise data: compound × 1.0 + isolation × 0.6 + other × 0.25 (weighted by set counts).
-// Without exercise data: title-based — recovery → 0.10, accessory → 0.25, primary → 1.0.
-function sessionLoadFactor(h: HevyWorkout): number {
-  if (h.exercises && h.exercises.length > 0) {
-    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
-    if (totalSets > 0) {
-      let compEff = 0, isoEff = 0, otherEff = 0
-      for (const ex of h.exercises) {
-        const t = (ex.title ?? '').toLowerCase()
-        const n = ex.sets?.length ?? 0
-        const intensity = setIntensityFactor(ex.sets ?? [])
-        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
-        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
-        else                                                    otherEff += n * 0.25 * intensity
-      }
-      return (compEff + isoEff + otherEff) / totalSets
-    }
-  }
-  const t = (h.title ?? '').toLowerCase()
-  if (RECOVERY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.10
-  if (ACCESSORY_TITLE_KEYWORDS.some(k => t.includes(k))) return 0.25
-  return 1.0
-}
-
-// Splits hevyLoad(h) into compound / isolation / accessory components (sum = hevyLoad(h)).
-function sessionLoadBreakdown(h: HevyWorkout): { compound: number; isolation: number; accessory: number } {
-  const mins = (h.duration ?? 3600) / 60
-  if (h.exercises && h.exercises.length > 0) {
-    const totalSets = h.exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0)
-    if (totalSets > 0) {
-      let compEff = 0, isoEff = 0, otherEff = 0
-      for (const ex of h.exercises) {
-        const t = (ex.title ?? '').toLowerCase()
-        const n = ex.sets?.length ?? 0
-        const intensity = setIntensityFactor(ex.sets ?? [])
-        if (COMPOUND_KEYWORDS.some(k => t.includes(k)))       compEff  += n * 1.0 * intensity
-        else if (ISOLATION_KEYWORDS.some(k => t.includes(k))) isoEff   += n * 0.6 * intensity
-        else                                                    otherEff += n * 0.25 * intensity
-      }
-      const totalEff = compEff + isoEff + otherEff
-      if (totalEff === 0) return { compound: 0, isolation: 0, accessory: mins * 0.25 }
-      const load = hevyLoad(h)
-      return {
-        compound:  (compEff / totalEff) * load,
-        isolation: (isoEff / totalEff) * load,
-        accessory: (otherEff / totalEff) * load,
-      }
-    }
-  }
-  const load = hevyLoad(h)
-  return sessionLoadFactor(h) > 0.30
-    ? { compound: load, isolation: 0, accessory: 0 }
-    : { compound: 0,    isolation: 0, accessory: load }
-}
-
-// A session is treated as accessory/recovery (excluded from primary-load detection and ramp rate)
-// when its load factor is ≤ 0.30 — i.e. recovery (0.10) or accessory (0.25) sessions.
-function isAccessorySession(h: HevyWorkout): boolean {
-  return sessionLoadFactor(h) <= 0.30
-}
-
-function hevyLoad(h: HevyWorkout): number {
-  return (h.duration ?? 3600) / 60 * sessionLoadFactor(h)
 }
 
 export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
@@ -352,7 +203,16 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
     + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
   const loadRatio = kj14to7 > 0 ? kj7 / kj14to7 : 1
-  const loadScore = loadRatio > 1.4 ? 0.2 : loadRatio > 1.2 ? 0.7 : loadRatio > 0.7 ? 1 : 0.5
+  // Smooth load-balance score. Steady load (0.8–1.1) is ideal; a planned down-week
+  // (0.6–0.8) is still good rather than punished; only big spikes or near-zero
+  // weeks score low. Removes the old hard cliff at 0.7 that penalised deloads.
+  const loadScore =
+      loadRatio > 1.5  ? 0.15
+    : loadRatio > 1.3  ? 0.45
+    : loadRatio > 1.1  ? 0.80
+    : loadRatio >= 0.8 ? 1.00
+    : loadRatio >= 0.6 ? 0.90
+    : 0.60
 
   const recentRuns = activities.filter(a => isRun(a) && a.start_date >= sevenDaysAgo && a.average_speed)
   const olderRuns = activities.filter(a => isRun(a) && a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo && a.average_speed)
@@ -375,9 +235,16 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   }
 }
 
-function computeRunningReadiness(activities: Activity[]) {
+// Blend the whole-body physiology readiness (sleep/HRV/RHR, when available) with
+// the sport-specific recency/volume signal so the per-sport number never diverges
+// from the headline readiness. Physiology dominates (60/40) when present.
+function blendReadiness(base: number, physiologyPct?: number): number {
+  return physiologyPct != null ? Math.round(physiologyPct * 0.6 + base * 0.4) : base
+}
+
+function computeRunningReadiness(activities: Activity[], physiologyPct?: number) {
   const runs = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
-  if (runs.length === 0) return { pct: 90, suggestion: 'Easy Run' }
+  if (runs.length === 0) return { pct: blendReadiness(90, physiologyPct), suggestion: 'Easy Run' }
 
   const hoursSince = (Date.now() - new Date(runs[0].start_date).getTime()) / 3600000
   let base = hoursSince < 12 ? 55 : hoursSince < 24 ? 70 : hoursSince < 48 ? 82 : 92
@@ -388,30 +255,62 @@ function computeRunningReadiness(activities: Activity[]) {
   const vol14to7 = activities.filter(a => isRun(a) && a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + (a.distance ?? 0), 0)
   if (vol14to7 > 0 && vol7 > vol14to7 * 1.3) base = Math.round(base * 0.85)
 
-  const suggestion = base >= 85 ? 'Tempo Run' : base >= 70 ? 'Easy Run' : 'Rest Day'
-  return { pct: base, suggestion }
+  const pct = blendReadiness(base, physiologyPct)
+  const suggestion = pct >= 85 ? 'Tempo Run' : pct >= 70 ? 'Easy Run' : 'Rest Day'
+  return { pct, suggestion }
 }
 
 function riegelPredict(baseDistM: number, baseTimeSec: number, targetDistM: number): number {
   return baseTimeSec * Math.pow(targetDistM / baseDistM, 1.06)
 }
 
+// Daniels–Gilbert VDOT model pieces (v in m/min, t in minutes) — same equations
+// used by estimateVO2max. Oxygen cost of running velocity v, and the fraction of
+// VO2max that can be sustained for a race of duration t.
+function danielsOxygenCost(v: number): number {
+  return -4.60 + 0.182258 * v + 0.000104 * v * v
+}
+function danielsPctVO2max(t: number): number {
+  return 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t)
+}
+
+// Predict finishing time (seconds) for a race distance from a known VDOT, by
+// solving oc(D/t) = VDOT · pct(t) for t. f(t) is positive at small t (too fast)
+// and negative at large t, so a single root exists — found by bisection.
+// Valid across 1500 m–marathon, unlike Riegel extrapolation from a short effort.
+function predictTimeFromVDOT(vdot: number, distM: number): number {
+  const f = (tMin: number) => danielsOxygenCost(distM / tMin) - vdot * danielsPctVO2max(tMin)
+  let lo = 1, hi = 600 // minutes (1 min … 10 h brackets every realistic finish)
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2
+    if (f(mid) > 0) lo = mid
+    else hi = mid
+  }
+  return ((lo + hi) / 2) * 60
+}
+
 export function computeRaceProjections(activities: Activity[]) {
+  // Primary: invert the Daniels VDOT model — accurate from 5K to marathon.
+  const vdot = estimateVO2max(activities)
+  if (vdot !== null) {
+    return {
+      '5K':       formatTime(predictTimeFromVDOT(vdot, 5000)),
+      '10K':      formatTime(predictTimeFromVDOT(vdot, 10000)),
+      'Half':     formatTime(predictTimeFromVDOT(vdot, 21097)),
+      'Marathon': formatTime(predictTimeFromVDOT(vdot, 42195)),
+    }
+  }
+
+  // Fallback (no VDOT-eligible run): Riegel from the LONGEST run — far more
+  // reliable for endurance extrapolation than the single fastest (often short) one.
   const runs = activities.filter(a => isRun(a) && (a.distance ?? 0) >= 1000 && (a.moving_time ?? 0) > 0)
   if (runs.length === 0) return null
-
-  const bestRun = runs.reduce((best, a) => {
-    const spd = (a.distance ?? 0) / (a.moving_time ?? 1)
-    return spd > (best.distance ?? 0) / (best.moving_time ?? 1) ? a : best
-  }, runs[0])
-
-  const d = bestRun.distance!
-  const t = bestRun.moving_time!
-
+  const base = runs.reduce((b, a) => (a.distance ?? 0) > (b.distance ?? 0) ? a : b, runs[0])
+  const d = base.distance!, t = base.moving_time!
   return {
-    '5K': formatTime(riegelPredict(d, t, 5000)),
-    '10K': formatTime(riegelPredict(d, t, 10000)),
-    'Half': formatTime(riegelPredict(d, t, 21097)),
+    '5K':       formatTime(riegelPredict(d, t, 5000)),
+    '10K':      formatTime(riegelPredict(d, t, 10000)),
+    'Half':     formatTime(riegelPredict(d, t, 21097)),
     'Marathon': formatTime(riegelPredict(d, t, 42195)),
   }
 }
@@ -473,22 +372,24 @@ function computeCyclingEnduranceTrend(activities: Activity[]): number | null {
   return ((lateAvg - earlyAvg) / earlyAvg) * 100
 }
 
-function computeCyclingReadiness(activities: Activity[]) {
+function computeCyclingReadiness(activities: Activity[], physiologyPct?: number) {
   const rides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
-  if (rides.length === 0) return { pct: 90, suggestion: 'Zone 2' }
+  if (rides.length === 0) return { pct: blendReadiness(90, physiologyPct), suggestion: 'Zone 2' }
   const hoursSince = (Date.now() - new Date(rides[0].start_date).getTime()) / 3600000
   const base = hoursSince < 12 ? 55 : hoursSince < 24 ? 70 : hoursSince < 48 ? 82 : 92
-  const suggestion = base >= 85 ? 'Threshold Session' : base >= 70 ? 'Zone 2' : 'Recovery Ride'
-  return { pct: base, suggestion }
+  const pct = blendReadiness(base, physiologyPct)
+  const suggestion = pct >= 85 ? 'Threshold Session' : pct >= 70 ? 'Zone 2' : 'Recovery Ride'
+  return { pct, suggestion }
 }
 
-function computeSwimmingReadiness(activities: Activity[]) {
+function computeSwimmingReadiness(activities: Activity[], physiologyPct?: number) {
   const swims = activities.filter(isSwim).sort((a, b) => b.start_date.localeCompare(a.start_date))
-  if (swims.length === 0) return { pct: 90, suggestion: 'Endurance Swim' }
+  if (swims.length === 0) return { pct: blendReadiness(90, physiologyPct), suggestion: 'Endurance Swim' }
   const hoursSince = (Date.now() - new Date(swims[0].start_date).getTime()) / 3600000
   const base = hoursSince < 12 ? 55 : hoursSince < 24 ? 70 : hoursSince < 48 ? 82 : 92
-  const suggestion = base >= 85 ? 'Sprint Set' : base >= 70 ? 'Endurance Swim' : 'Recovery Swim'
-  return { pct: base, suggestion }
+  const pct = blendReadiness(base, physiologyPct)
+  const suggestion = pct >= 85 ? 'Sprint Set' : pct >= 70 ? 'Endurance Swim' : 'Recovery Swim'
+  return { pct, suggestion }
 }
 
 function computeSwimmingWeeklyTrend(activities: Activity[]) {
@@ -679,14 +580,41 @@ function muscleMatchesWorkout(w: HevyWorkout, keywords: string[], titleKeywords:
   return titleKeywords.some(k => (w.title ?? '').toLowerCase().includes(k))
 }
 
+// Load a single session placed on one muscle group: sets × type-weight × intensity
+// over the matching exercises (compound 1.0, isolation 0.6). Title-only sessions
+// fall back to a flat estimate.
+function muscleSessionLoad(w: HevyWorkout, keywords: string[], titleKeywords: string[]): number {
+  if (w.exercises) {
+    let load = 0
+    for (const ex of w.exercises) {
+      const t = (ex.title ?? '').toLowerCase()
+      if (!keywords.some(k => t.includes(k))) continue
+      const intensity = setIntensityFactor(ex.sets ?? [])
+      const base = COMPOUND_KEYWORDS.some(k => t.includes(k)) ? 1.0 : 0.6
+      load += (ex.sets?.length ?? 0) * base * intensity
+    }
+    return load
+  }
+  return titleKeywords.some(k => (w.title ?? '').toLowerCase().includes(k)) ? (w.sets ?? 8) * 0.7 : 0
+}
+
+// Recovery % (0–100) for a muscle group. The recovery window scales with how
+// hard the last session hit that muscle: a light 2-set pump clears in ~36 h, a
+// heavy multi-compound day takes up to ~96 h — so volume/intensity matter, not
+// just hours-since.
+function muscleRecoveryPct(lastW: HevyWorkout | undefined, keywords: string[], titleKeywords: string[]): number {
+  if (!lastW) return 100
+  const hoursSince = (Date.now() - new Date(lastW.start_time).getTime()) / 3600000
+  const load = muscleSessionLoad(lastW, keywords, titleKeywords)
+  const windowH = Math.min(96, Math.max(36, 30 + load * 5))
+  return Math.min(100, Math.max(8, Math.round((hoursSince / windowH) * 100)))
+}
+
 export function computeMuscleRecovery(hevy: HevyWorkout[]) {
   const sorted = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))
   return MUSCLE_GROUPS.map(({ label, keywords, titleKeywords }) => {
     const lastW = sorted.find(w => muscleMatchesWorkout(w, keywords, titleKeywords))
-    if (!lastW) return { label, recovery: 100 }
-    const hoursSince = (Date.now() - new Date(lastW.start_time).getTime()) / 3600000
-    const recovery = hoursSince < 24 ? 20 : hoursSince < 48 ? 55 : hoursSince < 72 ? 80 : 100
-    return { label, recovery }
+    return { label, recovery: muscleRecoveryPct(lastW, keywords, titleKeywords) }
   })
 }
 
@@ -700,23 +628,9 @@ export function computeMuscleGroupAdvice(hevy: HevyWorkout[]): {
 
   return MUSCLE_GROUPS.map(({ label, keywords, titleKeywords }) => {
     const lastW = sorted.find(w => muscleMatchesWorkout(w, keywords, titleKeywords))
-    const hoursSince = lastW ? (Date.now() - new Date(lastW.start_time).getTime()) / 3600000 : Infinity
-    const recovery   = hoursSince < 24 ? 20 : hoursSince < 48 ? 55 : hoursSince < 72 ? 80 : 100
+    const recovery = muscleRecoveryPct(lastW, keywords, titleKeywords)
 
-    let weekLoad = 0
-    weekHevy.forEach(w => {
-      if (w.exercises) {
-        w.exercises.forEach(ex => {
-          const t = (ex.title ?? '').toLowerCase()
-          if (!keywords.some(k => t.includes(k))) return
-          const intensity = setIntensityFactor(ex.sets ?? [])
-          const base = COMPOUND_KEYWORDS.some(k => t.includes(k)) ? 1.0 : 0.6
-          weekLoad += (ex.sets?.length ?? 0) * base * intensity
-        })
-      } else if (titleKeywords.some(k => (w.title ?? '').toLowerCase().includes(k))) {
-        weekLoad += (w.sets ?? 8) * 0.7
-      }
-    })
+    const weekLoad = weekHevy.reduce((s, w) => s + muscleSessionLoad(w, keywords, titleKeywords), 0)
 
     const recommendation = recovery >= 80 ? 'train' : recovery >= 55 ? 'possible' : 'rest'
     return { label, recovery, weekLoad: Math.round(weekLoad * 10) / 10, recommendation }

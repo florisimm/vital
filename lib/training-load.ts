@@ -76,6 +76,12 @@ const RECOVERY_TITLE_KEYWORDS = [
 ]
 const ACCESSORY_TITLE_KEYWORDS = ['abs', 'core', 'yoga']
 
+// Estimated 1-rep max (Epley). Single rep returns the weight as-is.
+export function epley1RM(weight_kg: number, reps: number): number {
+  if (weight_kg <= 0 || reps <= 0) return 0
+  return reps === 1 ? weight_kg : weight_kg * (1 + reps / 30)
+}
+
 // Intensity factor (0.4–1.5) normalized to 8 reps at typical working weight ≈ 1.0
 export function setIntensityFactor(sets: Array<{ weight_kg: number; reps: number }>): number {
   const valid = (sets ?? []).filter(s => s.reps > 0)
