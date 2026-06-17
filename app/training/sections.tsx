@@ -2435,15 +2435,15 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
 
   function toDoneHeadline(): string {
     const l = focus.label.toLowerCase()
-    if (l.includes('room for easy')) {
-      if (l.includes('cycling')) return 'Done — optional easy ride'
-      if (l.includes('run'))     return 'Done — optional easy run'
-      if (l.includes('swim'))    return 'Done — optional easy swim'
-      return 'Done — optional session'
-    }
-    if (readinessPct < 50) return 'Done — rest & recover'
-    if (readinessPct < 70) return 'Done — take it easy today'
-    return 'Great session today'
+    // computeTodaysFocus already generated the right advice — surface the actionable part
+    if (l.includes('room for easy') && (l.includes('run') || l.includes('loop'))) return 'Room for an easy run'
+    if (l.includes('room for easy') && (l.includes('cycl') || l.includes('ride') || l.includes('bike'))) return 'Room for an easy ride'
+    if (l.includes('room for easy') && (l.includes('swim') || l.includes('zwem'))) return 'Room for an easy swim'
+    if (l.includes('room for easy')) return 'Room for an optional session'
+    if (focus.action === 'Rest & recover' || focus.action === 'Recovery day') return 'Rest & recover'
+    if (readinessPct < 50) return 'Rest — prioritise recovery'
+    if (readinessPct < 65) return 'Take it easy today'
+    return 'Good work — you\'re on track'
   }
 
   const headline = simplified
