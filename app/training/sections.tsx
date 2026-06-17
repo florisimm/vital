@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import useSWR from 'swr'
-import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity, Calendar } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
@@ -1177,15 +1177,139 @@ function RunningReadinessCard({ readiness }: { readiness: { pct: number; suggest
   )
 }
 
-function RunListItem({ a, isLast }: { a: Activity; isLast: boolean }) {
+function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
+  const t = (a.sport_type ?? '').toLowerCase()
+  const isRide = t.includes('ride') || t.includes('cycl')
+  const isSwimA = t.includes('swim')
+  const distKm = a.distance ? a.distance / 1000 : null
+  const dist = a.distance
+    ? isSwimA ? `${Math.round(a.distance)} m` : `${distKm!.toFixed(2)} km`
+    : null
+  const pace = !isRide && !isSwimA && a.average_speed ? formatPace(a.average_speed) : null
+  const speed = isRide && a.average_speed ? `${(a.average_speed * 3.6).toFixed(1)} km/h` : null
+  const swimPace = isSwimA && a.distance && a.moving_time
+    ? (() => { const s = a.moving_time / a.distance * 100; return `${Math.floor(s / 60)}:${Math.round(s % 60).toString().padStart(2, '0')}` })()
+    : null
+  const dur = a.moving_time ? formatDuration(a.moving_time) : null
+  const elev = a.total_elevation_gain && a.total_elevation_gain > 0 ? `${Math.round(a.total_elevation_gain)} m` : null
+  const hr = a.average_heartrate ? `${Math.round(a.average_heartrate)} bpm` : null
+  const cadence = a.average_cadence
+    ? isRide ? `${Math.round(a.average_cadence)} rpm` : `${Math.round(a.average_cadence * 2)} spm`
+    : null
+  const kj = a.kilojoules && a.kilojoules > 0 ? `${Math.round(a.kilojoules)} kJ` : null
+  const accentColor = isSwimA ? '#60a5fa' : isRide ? '#22d3ee' : '#2dd4bf'
+
+  const tiles = [
+    dist    && { label: 'Distance',  value: dist,           color: 'text-white' },
+    pace    && { label: 'Pace',      value: `${pace} /km`,  color: 'text-teal-400' },
+    speed   && { label: 'Avg Speed', value: speed,          color: 'text-cyan-400' },
+    swimPace && { label: 'Pace',     value: `${swimPace} /100m`, color: 'text-blue-400' },
+    dur     && { label: 'Duration',  value: dur,            color: 'text-white' },
+    elev    && { label: 'Elevation', value: `↑ ${elev}`,   color: 'text-orange-400' },
+    hr      && { label: 'Avg HR',    value: hr,             color: 'text-red-400' },
+    cadence && { label: 'Cadence',   value: cadence,        color: 'text-white/70' },
+    kj      && { label: 'Energy',    value: kj,             color: 'text-yellow-400' },
+  ].filter(Boolean) as { label: string; value: string; color: string }[]
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
+      <div className="flex items-center justify-between px-5 py-4 shrink-0">
+        <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
+        <span className="text-[17px] font-semibold text-white">{isSwimA ? '🏊 Swim' : isRide ? '🚴 Ride' : '🏃 Run'}</span>
+        <div className="w-[70px]" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex flex-col gap-5">
+          <div>
+            <span className="text-[22px] font-bold text-white leading-snug">{a.name}</span>
+            <p className="text-[13px] text-white/40 mt-0.5">{formatDate(a.start_date)}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {tiles.map((m, i) => (
+              <div key={i} className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">{m.label}</span>
+                <span className={`text-[22px] font-bold leading-none ${m.color}`}>{m.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StrengthDetailScreen({ workout: w, onBack }: { workout: HevyWorkout; onBack: () => void }) {
+  const exList = w.exercises ?? []
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
+      <div className="flex items-center justify-between px-5 py-4 shrink-0">
+        <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
+        <span className="text-[17px] font-semibold text-white">Workout</span>
+        <div className="w-[70px]" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex flex-col gap-5">
+          <div>
+            <span className="text-[22px] font-bold text-white leading-snug">{w.title}</span>
+            <p className="text-[13px] text-white/40 mt-0.5">{formatDate(w.start_time)}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {(w.duration ?? 0) > 0 && (
+              <div className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">Duration</span>
+                <span className="text-[18px] font-bold text-white leading-none">{formatDuration(w.duration!)}</span>
+              </div>
+            )}
+            {(w.volume_kg ?? 0) > 0 && (
+              <div className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">Volume</span>
+                <span className="text-[18px] font-bold text-orange-400 leading-none">{Math.round(w.volume_kg!).toLocaleString('en-US')} kg</span>
+              </div>
+            )}
+            {(w.sets ?? 0) > 0 && (
+              <div className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">Sets</span>
+                <span className="text-[18px] font-bold text-white leading-none">{w.sets}</span>
+              </div>
+            )}
+          </div>
+          {exList.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {exList.map(ex => (
+                <div key={ex.title} className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <span className="text-[15px] font-semibold text-white">{ex.title}</span>
+                  <div className="flex flex-wrap gap-2">
+                    {ex.sets.map((s, i) => (
+                      <span key={i} className="text-[13px] font-semibold px-3 py-1 rounded-full"
+                        style={{ background: 'rgba(251,146,60,0.12)', color: 'rgb(251,146,60)', border: '1px solid rgba(251,146,60,0.25)' }}>
+                        {s.weight_kg > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[13px] text-white/30 text-center pt-4">No exercise detail available from Hevy</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RunListItem({ a, isLast, onTap }: { a: Activity; isLast: boolean; onTap?: () => void }) {
   const pace = a.average_speed ? formatPace(a.average_speed) : null
   const dist = a.distance ? `${(a.distance / 1000).toFixed(2)} km` : null
   const dur = a.moving_time ? formatDuration(a.moving_time) : null
-  return (
-    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
-        <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+  const inner = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
+          <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+        </div>
+        {onTap && <span className="text-white/30 text-[18px] shrink-0">›</span>}
       </div>
       <div className="flex gap-4 flex-wrap">
         {dist && <span className="text-[13px] text-white/70">{dist}</span>}
@@ -1193,18 +1317,32 @@ function RunListItem({ a, isLast }: { a: Activity; isLast: boolean }) {
         {dur && <span className="text-[13px] text-white/60">{dur}</span>}
         {a.average_heartrate && <span className="text-[13px] font-semibold text-red-400">{Math.round(a.average_heartrate)} bpm</span>}
       </div>
+    </>
+  )
+  if (onTap) {
+    return (
+      <button className="w-full text-left py-4 flex flex-col gap-1.5 active:opacity-70" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }} onClick={onTap}>
+        {inner}
+      </button>
+    )
+  }
+  return (
+    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+      {inner}
     </div>
   )
 }
 
 function LastRunCard({ run, allRuns }: { run: Activity; allRuns: Activity[] }) {
   const [showAll, setShowAll] = useState(false)
+  const [selected, setSelected] = useState<Activity | null>(null)
   const pace = run.average_speed ? formatPace(run.average_speed) : null
   const dist = run.distance ? `${(run.distance / 1000).toFixed(2)} km` : null
   const dur = run.moving_time ? formatDuration(run.moving_time) : null
   return (
     <>
-      {showAll && (
+      {selected && <CardioDetailScreen activity={selected} onBack={() => setSelected(null)} />}
+      {showAll && !selected && (
         <div className="fixed inset-0 z-50 flex flex-col"
           style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center justify-between px-5 py-4 shrink-0">
@@ -1217,7 +1355,7 @@ function LastRunCard({ run, allRuns }: { run: Activity; allRuns: Activity[] }) {
             <div className="w-[70px]" />
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
-            {allRuns.map((a, i) => <RunListItem key={a.id} a={a} isLast={i === allRuns.length - 1} />)}
+            {allRuns.map((a, i) => <RunListItem key={a.id} a={a} isLast={i === allRuns.length - 1} onTap={() => setSelected(a)} />)}
           </div>
         </div>
       )}
@@ -1307,16 +1445,19 @@ function CyclingReadinessCard({ readiness }: { readiness: { pct: number; suggest
   )
 }
 
-function RideListItem({ a, isLast }: { a: Activity; isLast: boolean }) {
+function RideListItem({ a, isLast, onTap }: { a: Activity; isLast: boolean; onTap?: () => void }) {
   const speed = a.average_speed ? `${(a.average_speed * 3.6).toFixed(1)} km/h` : null
   const dist = a.distance ? `${(a.distance / 1000).toFixed(1)} km` : null
   const dur = a.moving_time ? formatDuration(a.moving_time) : null
   const elev = a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)} m ↑` : null
-  return (
-    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
-        <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+  const inner = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
+          <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+        </div>
+        {onTap && <span className="text-white/30 text-[18px] shrink-0">›</span>}
       </div>
       <div className="flex gap-4 flex-wrap">
         {dist && <span className="text-[13px] text-white/70">{dist}</span>}
@@ -1325,19 +1466,33 @@ function RideListItem({ a, isLast }: { a: Activity; isLast: boolean }) {
         {elev && <span className="text-[13px] text-white/50">{elev}</span>}
         {a.average_heartrate && <span className="text-[13px] font-semibold text-red-400">{Math.round(a.average_heartrate)} bpm</span>}
       </div>
+    </>
+  )
+  if (onTap) {
+    return (
+      <button className="w-full text-left py-4 flex flex-col gap-1.5 active:opacity-70" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }} onClick={onTap}>
+        {inner}
+      </button>
+    )
+  }
+  return (
+    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+      {inner}
     </div>
   )
 }
 
 function LastRideCard({ ride, allRides }: { ride: Activity; allRides: Activity[] }) {
   const [showAll, setShowAll] = useState(false)
+  const [selected, setSelected] = useState<Activity | null>(null)
   const speed = ride.average_speed ? `${(ride.average_speed * 3.6).toFixed(1)} km/h` : null
   const dist = ride.distance ? `${(ride.distance / 1000).toFixed(1)} km` : null
   const dur = ride.moving_time ? formatDuration(ride.moving_time) : null
   const elev = ride.total_elevation_gain ? `${Math.round(ride.total_elevation_gain)} m` : null
   return (
     <>
-      {showAll && (
+      {selected && <CardioDetailScreen activity={selected} onBack={() => setSelected(null)} />}
+      {showAll && !selected && (
         <div className="fixed inset-0 z-50 flex flex-col"
           style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center justify-between px-5 py-4 shrink-0">
@@ -1350,7 +1505,7 @@ function LastRideCard({ ride, allRides }: { ride: Activity; allRides: Activity[]
             <div className="w-[70px]" />
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
-            {allRides.map((a, i) => <RideListItem key={a.id} a={a} isLast={i === allRides.length - 1} />)}
+            {allRides.map((a, i) => <RideListItem key={a.id} a={a} isLast={i === allRides.length - 1} onTap={() => setSelected(a)} />)}
           </div>
         </div>
       )}
@@ -1475,55 +1630,36 @@ function MuscleDistributionCard({ distribution }: { distribution: { label: strin
   )
 }
 
-function WorkoutListItem({ w, isLast }: { w: HevyWorkout; isLast: boolean }) {
-  const [open, setOpen] = useState(false)
-  const exList = w.exercises ?? []
+function WorkoutListItem({ w, isLast, onTap }: { w: HevyWorkout; isLast: boolean; onTap?: () => void }) {
   return (
-    <div style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
-      <button className="w-full text-left py-4 flex flex-col gap-2" onClick={() => exList.length > 0 && setOpen(o => !o)}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-            <span className="text-[16px] font-semibold text-white leading-tight truncate">{w.title}</span>
-            <span className="text-[12px] text-white/40">{formatDate(w.start_time)}</span>
-          </div>
-          {exList.length > 0 && (
-            <span className="text-white/30 text-[13px] shrink-0 mt-0.5">{open ? '▲' : '▼'}</span>
-          )}
+    <button className="w-full text-left py-4 flex flex-col gap-2 active:opacity-70"
+      style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}
+      onClick={onTap}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <span className="text-[16px] font-semibold text-white leading-tight truncate">{w.title}</span>
+          <span className="text-[12px] text-white/40">{formatDate(w.start_time)}</span>
         </div>
-        <div className="flex gap-4">
-          {(w.duration ?? 0) > 0 && <span className="text-[13px] text-white/60">{formatDuration(w.duration!)}</span>}
-          {(w.volume_kg ?? 0) > 0 && <span className="text-[13px] font-semibold text-orange-400">{Math.round(w.volume_kg!).toLocaleString('en-US')} kg</span>}
-          {(w.sets ?? 0) > 0 && <span className="text-[13px] text-white/60">{w.sets} sets</span>}
-        </div>
-      </button>
-      {open && exList.length > 0 && (
-        <div className="pb-4 flex flex-col gap-3">
-          {exList.map(ex => (
-            <div key={ex.title} className="flex flex-col gap-1">
-              <span className="text-[13px] font-semibold text-white/80">{ex.title}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {ex.sets.map((s, i) => (
-                  <span key={i} className="text-[12px] px-2 py-0.5 rounded-full"
-                    style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}>
-                    {s.weight_kg > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+        {onTap && <span className="text-white/30 text-[18px] shrink-0">›</span>}
+      </div>
+      <div className="flex gap-4">
+        {(w.duration ?? 0) > 0 && <span className="text-[13px] text-white/60">{formatDuration(w.duration!)}</span>}
+        {(w.volume_kg ?? 0) > 0 && <span className="text-[13px] font-semibold text-orange-400">{Math.round(w.volume_kg!).toLocaleString('en-US')} kg</span>}
+        {(w.sets ?? 0) > 0 && <span className="text-[13px] text-white/60">{w.sets} sets</span>}
+      </div>
+    </button>
   )
 }
 
 function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkout; allWorkouts: HevyWorkout[] }) {
   const [showAll, setShowAll] = useState(false)
+  const [selected, setSelected] = useState<HevyWorkout | null>(null)
   const exList = (workout.exercises ?? []).slice(0, 5)
 
   return (
     <>
-      {showAll && (
+      {selected && <StrengthDetailScreen workout={selected} onBack={() => setSelected(null)} />}
+      {showAll && !selected && (
         <div className="fixed inset-0 z-50 flex flex-col"
           style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center justify-between px-5 py-4 shrink-0">
@@ -1537,7 +1673,7 @@ function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkou
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
             {allWorkouts.map((w, i) => (
-              <WorkoutListItem key={w.id} w={w} isLast={i === allWorkouts.length - 1} />
+              <WorkoutListItem key={w.id} w={w} isLast={i === allWorkouts.length - 1} onTap={() => setSelected(w)} />
             ))}
           </div>
         </div>
@@ -2306,11 +2442,42 @@ export function computeRecoveryDetail(
   return { pct, label, factors }
 }
 
+function FocusIcon({ emoji, size = 54 }: { emoji: string; size?: number }) {
+  const e = emoji
+  let icon: React.ReactNode
+  let bg: string
+  let color: string
+  if (e === '😴' || e === '🛌' || e === '💤') {
+    icon = <Moon size={22} />; bg = 'rgba(99,102,241,0.18)'; color = '#818cf8'
+  } else if (e === '🏃' || e === '🏃‍♂️' || e === '👟') {
+    icon = <Activity size={22} />; bg = 'rgba(45,212,191,0.18)'; color = '#2dd4bf'
+  } else if (e === '🚴' || e === '🚴‍♂️' || e === '🚵') {
+    icon = <Bike size={22} />; bg = 'rgba(34,211,238,0.18)'; color = '#22d3ee'
+  } else if (e === '🏊' || e === '🏊‍♂️') {
+    icon = <Waves size={22} />; bg = 'rgba(96,165,250,0.18)'; color = '#60a5fa'
+  } else if (e === '💪' || e === '🏋️' || e === '🏋️‍♂️') {
+    icon = <Dumbbell size={22} />; bg = 'rgba(251,146,60,0.18)'; color = '#fb923c'
+  } else if (e === '📅' || e === '🗓️') {
+    icon = <Calendar size={22} />; bg = 'rgba(251,146,60,0.18)'; color = '#fb923c'
+  } else if (e === '⚡' || e === '🔥') {
+    icon = <TrendingUp size={22} />; bg = 'rgba(250,204,21,0.18)'; color = '#facc15'
+  } else if (e === '🧘' || e === '🧘‍♂️') {
+    icon = <PersonStanding size={22} />; bg = 'rgba(45,212,191,0.12)'; color = '#5eead4'
+  } else {
+    icon = <Timer size={22} />; bg = 'rgba(255,255,255,0.10)'; color = 'rgba(255,255,255,0.7)'
+  }
+  return (
+    <div className="rounded-[16px] flex items-center justify-center shrink-0" style={{ width: size, height: size, background: bg, color }}>
+      {icon}
+    </div>
+  )
+}
+
 function TodaysFocusCard({ focus }: { focus: { emoji: string; label: string; sub: string } }) {
   return (
     <Card>
       <div className="flex items-center gap-4">
-        <span className="text-[36px] leading-none">{focus.emoji}</span>
+        <FocusIcon emoji={focus.emoji} size={48} />
         <div className="flex flex-col gap-0.5">
           <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Today's Focus</span>
           <span className="text-[17px] font-semibold text-white leading-snug">{focus.label}</span>
@@ -2467,7 +2634,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
         </div>
         <div className="flex items-center gap-4 mb-4">
           <div className="relative shrink-0">
-            <span className="text-[38px] leading-none">{focus.emoji}</span>
+            <FocusIcon emoji={focus.emoji} size={54} />
             {isDone && (
               <span className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-black leading-none" style={{ background: '#4ade80' }}>✓</span>
             )}
@@ -2528,7 +2695,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
       </div>
 
       <div className="flex items-start gap-4 mb-4">
-        <span className="text-[38px] leading-none mt-1 shrink-0">{focus.emoji}</span>
+        <FocusIcon emoji={focus.emoji} size={54} />
         <div className="flex flex-col gap-2">
           <span className="text-[21px] font-bold text-white leading-tight">{headline}</span>
           <span
@@ -4445,33 +4612,96 @@ function SwimmingReadinessCard({ readiness, activities, trainingIntensity = 'mod
   )
 }
 
-function LastSwimCard({ swim }: { swim: Activity }) {
+function SwimListItem({ a, isLast, onTap }: { a: Activity; isLast: boolean; onTap?: () => void }) {
+  const pace = a.average_speed ? formatPace100m(a.average_speed) : null
+  const dist = a.distance ? `${(a.distance / 1000).toFixed(2)} km` : null
+  const dur = a.moving_time ? formatDuration(a.moving_time) : null
+  const inner = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <span className="text-[16px] font-semibold text-white leading-tight">{a.name}</span>
+          <span className="text-[12px] text-white/40">{formatDate(a.start_date)}</span>
+        </div>
+        {onTap && <span className="text-white/30 text-[18px] shrink-0">›</span>}
+      </div>
+      <div className="flex gap-4 flex-wrap">
+        {dist && <span className="text-[13px] text-white/70">{dist}</span>}
+        {pace && <span className="text-[13px] font-semibold text-blue-400">{pace} /100m</span>}
+        {dur && <span className="text-[13px] text-white/60">{dur}</span>}
+        {a.average_heartrate && <span className="text-[13px] font-semibold text-red-400">{Math.round(a.average_heartrate)} bpm</span>}
+      </div>
+    </>
+  )
+  if (onTap) {
+    return (
+      <button className="w-full text-left py-4 flex flex-col gap-1.5 active:opacity-70" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }} onClick={onTap}>
+        {inner}
+      </button>
+    )
+  }
+  return (
+    <div className="py-4 flex flex-col gap-1.5" style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+      {inner}
+    </div>
+  )
+}
+
+function LastSwimCard({ swim, allSwims }: { swim: Activity; allSwims?: Activity[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const [selected, setSelected] = useState<Activity | null>(null)
   const pace = swim.average_speed ? formatPace100m(swim.average_speed) : null
   const dist = swim.distance ? `${(swim.distance / 1000).toFixed(2)} km` : null
   const dur = swim.moving_time ? formatDuration(swim.moving_time) : null
   const openWater = swim.sport_type?.toLowerCase().includes('open')
+  const swims = allSwims ?? [swim]
   return (
-    <Card>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Swim</span>
-          {openWater && <span className="text-[11px] font-semibold text-cyan-400 px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,211,238,0.12)' }}>Open Water</span>}
-        </div>
-        <span className="text-[17px] font-semibold text-white leading-snug">{swim.name}</span>
-        <span className="text-[12px] text-white/40">{formatDate(swim.start_date)}</span>
-        <div className="flex gap-5 mt-1">
-          {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
-          {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-blue-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">/100m</span></div>}
-          {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
-        </div>
-        {swim.average_heartrate && (
-          <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
-            <span className="text-[13px] text-white/40">Avg HR</span>
-            <span className="text-[13px] font-semibold text-red-400">{Math.round(swim.average_heartrate)} bpm</span>
+    <>
+      {selected && <CardioDetailScreen activity={selected} onBack={() => setSelected(null)} />}
+      {showAll && !selected && (
+        <div className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
+            <button onClick={() => setShowAll(false)}
+              className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+              style={{ background: 'rgba(255,255,255,0.10)' }}>
+              Back
+            </button>
+            <span className="text-[17px] font-semibold text-white">Swims</span>
+            <div className="w-[70px]" />
           </div>
-        )}
-      </div>
-    </Card>
+          <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+            {swims.map((a, i) => <SwimListItem key={a.id} a={a} isLast={i === swims.length - 1} onTap={() => setSelected(a)} />)}
+          </div>
+        </div>
+      )}
+      <button className="w-full text-left" onClick={() => setShowAll(true)}>
+        <Card>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Last Swim</span>
+              <div className="flex items-center gap-2">
+                {openWater && <span className="text-[11px] font-semibold text-cyan-400 px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,211,238,0.12)' }}>Open Water</span>}
+                {swims.length > 1 && <span className="text-[12px] text-white/30">View all →</span>}
+              </div>
+            </div>
+            <span className="text-[17px] font-semibold text-white leading-snug">{swim.name}</span>
+            <span className="text-[12px] text-white/40">{formatDate(swim.start_date)}</span>
+            <div className="flex gap-5 mt-1">
+              {dist && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dist}</span><span className="text-[11px] text-white/40">Distance</span></div>}
+              {pace && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-blue-400 leading-none">{pace}</span><span className="text-[11px] text-white/40">/100m</span></div>}
+              {dur && <div className="flex flex-col gap-0.5"><span className="text-[20px] font-bold text-white leading-none">{dur}</span><span className="text-[11px] text-white/40">Duration</span></div>}
+            </div>
+            {swim.average_heartrate && (
+              <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2">
+                <span className="text-[13px] text-white/40">Avg HR</span>
+                <span className="text-[13px] font-semibold text-red-400">{Math.round(swim.average_heartrate)} bpm</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      </button>
+    </>
   )
 }
 
@@ -4551,7 +4781,7 @@ export function SwimmingSection({ activities, hevy = [], todaySport = null, trai
       </div>
       <AiInsight text={buildSwimmingInsight(activities, readinessPct)} />
       <SwimmingReadinessCard readiness={readiness} activities={activities} trainingIntensity={trainingIntensity} />
-      {lastSwim && <LastSwimCard swim={lastSwim} />}
+      {lastSwim && <LastSwimCard swim={lastSwim} allSwims={allSwims} />}
       <SwimmingWeeklyTrendCard trend={trend} />
       <SwimmingVolumeHistoryCard weeks={volumeHistory} />
       <SwimmingPaceTrendCard pace={paceTrend} />
