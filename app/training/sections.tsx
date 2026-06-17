@@ -1763,6 +1763,7 @@ export function computeTodaysFocus(
     proceed:  { action: 'Stay the course',   actionColor: '#4ade80' },
     easier:   { action: 'Train lighter',     actionColor: '#facc15' },
     shorten:  { action: 'Train shorter',     actionColor: '#fb923c' },
+    lessVol:  { action: 'Reduce volume',     actionColor: '#facc15' },
     recover:  { action: 'Recovery day',      actionColor: '#2dd4bf' },
     moveTmr:  { action: 'Move to tomorrow',  actionColor: '#fb923c' },
     skip:     { action: 'Recovery day',      actionColor: '#2dd4bf' },
@@ -1772,7 +1773,7 @@ export function computeTodaysFocus(
   const EFFORT: Record<Intensity, number> = { zone2: 0.20, easy: 0.35, moderate: 0.55, hard: 0.75, very_hard: 0.95 }
   // Effort multiplier per action — drives action-aware tomorrow prediction
   const ACT_MOD: Record<keyof typeof ACT, number> = {
-    proceed: 1.0, easier: 0.50, shorten: 0.35, recover: 0.20, moveTmr: 0.05, skip: 0.0,
+    proceed: 1.0, easier: 0.50, shorten: 0.35, lessVol: 0.65, recover: 0.20, moveTmr: 0.05, skip: 0.0,
   }
 
   const rampHigh     = rampRate !== null && rampRate > 30
@@ -2104,11 +2105,21 @@ export function computeTodaysFocus(
     }
   }
 
+  // Gym-specific decision: always go full effort unless recovery is genuinely low
+  function decideGym(): keyof typeof ACT {
+    const rs = riskScore()
+    if (recoveryPct < 30 || rs >= 8) return 'skip'
+    if (recoveryPct < 45 || rs >= 6) return 'recover'
+    if (recoveryPct < 60 || rs >= 4) return 'lessVol'
+    return 'proceed'
+  }
+
   // ── Today has planned sessions ──────────────────────────────────────────────
   if (todayEvts.length > 0) {
     const ev        = todayEvts[0]
     const intensity = classify(ev.title)
-    const actKey    = decide(intensity)
+    const isGymEvt  = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox','upper','lower'].some(k => (ev.title ?? '').toLowerCase().includes(k))
+    const actKey    = isGymEvt ? decideGym() : decide(intensity)
     const act = ACT[actKey]
 
     return {
