@@ -2447,7 +2447,7 @@ function FocusIcon({ emoji, size = 54 }: { emoji: string; size?: number }) {
   let icon: React.ReactNode
   let bg: string
   let color: string
-  if (e === '😴' || e === '🛌' || e === '💤') {
+  if (e === '😴' || e === '🛌' || e === '💤' || e === '✅') {
     icon = <Moon size={22} />; bg = 'rgba(99,102,241,0.18)'; color = '#818cf8'
   } else if (e === '🏃' || e === '🏃‍♂️' || e === '👟') {
     icon = <Activity size={22} />; bg = 'rgba(45,212,191,0.18)'; color = '#2dd4bf'
