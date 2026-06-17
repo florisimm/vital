@@ -6,6 +6,7 @@ export type Activity = {
   distance: number | null; moving_time: number | null; elapsed_time: number | null
   total_elevation_gain: number | null; average_speed: number | null
   average_heartrate: number | null; average_cadence: number | null; kilojoules: number | null
+  average_watts?: number | null; weighted_average_watts?: number | null
 }
 
 export type HevyWorkout = {

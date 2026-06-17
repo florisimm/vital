@@ -351,11 +351,39 @@ function computeRunningEfficiencyTrend(activities: Activity[]): string {
   return 'Efficiency stable over last 30 days'
 }
 
+// FTP estimate, best signal first:
+//  1. Normalized Power (weighted_average_watts) — NP of a hard ~40–70 min effort
+//     is, by definition, close to FTP. Take the max across qualifying rides with a
+//     small duration factor. This is the accurate path when a power meter is present.
+//  2. Average power (average_watts) on a hard effort — a rough floor (whole-ride
+//     average understates FTP, so no down-scaling).
+//  3. kJ-derived average power — legacy fallback, gated to a real ~45–120 min
+//     effort. Dropped the old ×0.95 that made the underestimate worse.
+// Returns null when there's no power/energy data at all (e.g. rider without a meter).
 export function computeFTP(activities: Activity[]): number | null {
-  const rides = activities.filter(a => isRide(a) && (a.kilojoules ?? 0) > 0 && (a.moving_time ?? 0) > 2700)
-  if (rides.length === 0) return null
-  const maxAvgWatts = Math.max(...rides.map(a => (a.kilojoules! * 1000) / a.moving_time!))
-  return Math.round(maxAvgWatts * 0.95)
+  const rides = activities.filter(isRide)
+
+  // 1. Normalized Power
+  const npRides = rides.filter(a => (a.weighted_average_watts ?? 0) > 0 && (a.moving_time ?? 0) >= 1200)
+  if (npRides.length > 0) {
+    const est = npRides.map(a => {
+      const t = a.moving_time!
+      const factor = t <= 2400 ? 0.97 : 1.0 // sub-40 min NP sits slightly above FTP
+      return a.weighted_average_watts! * factor
+    })
+    return Math.round(Math.max(...est))
+  }
+
+  // 2. Average power on a sustained effort (20–120 min)
+  const awRides = rides.filter(a => (a.average_watts ?? 0) > 0 && (a.moving_time ?? 0) >= 1200 && (a.moving_time ?? 0) <= 7200)
+  if (awRides.length > 0) {
+    return Math.round(Math.max(...awRides.map(a => a.average_watts!)))
+  }
+
+  // 3. kJ-derived average power, real ~45–120 min effort only
+  const kjRides = rides.filter(a => (a.kilojoules ?? 0) > 0 && (a.moving_time ?? 0) > 2700 && (a.moving_time ?? 0) <= 7200)
+  if (kjRides.length === 0) return null
+  return Math.round(Math.max(...kjRides.map(a => (a.kilojoules! * 1000) / a.moving_time!)))
 }
 
 function computeCyclingEnduranceTrend(activities: Activity[]): number | null {

@@ -22,7 +22,7 @@ export async function trainingFetcher() {
   const [{ data: activities }, { data: hevy }, { data: calendarEvents, error: calendarError }, { data: settings }, { data: biasRows }] = await Promise.all([
     supabase
       .from('strava_activities')
-      .select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules')
+      .select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules,average_watts,weighted_average_watts')
       .eq('user_id', user.id).gte('start_date', thirtyDaysAgo).order('start_date', { ascending: false }),
     supabase
       .from('hevy_workouts')
