@@ -665,28 +665,25 @@ export function extractKeyLifts(hevy: HevyWorkout[]) {
   }).filter((l): l is NonNullable<typeof l> => l !== null)
 }
 
+const MUSCLE_GROUPS = [
+  { label: 'Legs',      keywords: ['squat', 'deadlift', 'leg press', 'lunge', 'rdl', 'hip thrust', 'calf', 'hamstring', 'quad', 'leg curl', 'leg extension'], titleKeywords: ['leg', 'lower', 'squat', 'deadlift', 'lunge', 'hyrox'] },
+  { label: 'Chest',     keywords: ['bench', 'push', 'fly', 'dip', 'chest'],                                                                                    titleKeywords: ['push', 'chest', 'bench', 'upper', 'full'] },
+  { label: 'Back',      keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'],                                                        titleKeywords: ['pull', 'back', 'row', 'lat', 'upper', 'full'] },
+  { label: 'Shoulders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'],                      titleKeywords: ['push', 'shoulder', 'upper', 'full'] },
+  { label: 'Arms',      keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'],                                                              titleKeywords: ['push', 'pull', 'arm', 'upper', 'full', 'bicep', 'tricep', 'curl'] },
+]
+
+function muscleMatchesWorkout(w: HevyWorkout, keywords: string[], titleKeywords: string[]): boolean {
+  if (w.exercises) return w.exercises.some(ex => keywords.some(k => (ex.title ?? '').toLowerCase().includes(k)))
+  return titleKeywords.some(k => (w.title ?? '').toLowerCase().includes(k))
+}
+
 export function computeMuscleRecovery(hevy: HevyWorkout[]) {
-  const groups = [
-    { label: 'Legs', keywords: ['squat', 'deadlift', 'leg press', 'lunge', 'rdl', 'hip thrust', 'calf', 'hamstring', 'quad', 'leg curl', 'leg extension'] },
-    { label: 'Chest', keywords: ['bench', 'push', 'fly', 'dip', 'chest'] },
-    { label: 'Back', keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'] },
-    { label: 'Shoulders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'] },
-    { label: 'Arms', keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'] },
-  ]
-
   const sorted = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))
-
-  return groups.map(({ label, keywords }) => {
-    let lastTrained: string | null = null
-    for (const w of sorted) {
-      if (!w.exercises) continue
-      if (w.exercises.some(ex => keywords.some(k => (ex.title ?? '').toLowerCase().includes(k)))) {
-        lastTrained = w.start_time
-        break
-      }
-    }
-    if (!lastTrained) return { label, recovery: 100 }
-    const hoursSince = (Date.now() - new Date(lastTrained).getTime()) / 3600000
+  return MUSCLE_GROUPS.map(({ label, keywords, titleKeywords }) => {
+    const lastW = sorted.find(w => muscleMatchesWorkout(w, keywords, titleKeywords))
+    if (!lastW) return { label, recovery: 100 }
+    const hoursSince = (Date.now() - new Date(lastW.start_time).getTime()) / 3600000
     const recovery = hoursSince < 24 ? 20 : hoursSince < 48 ? 55 : hoursSince < 72 ? 80 : 100
     return { label, recovery }
   })
@@ -696,37 +693,28 @@ export function computeMuscleGroupAdvice(hevy: HevyWorkout[]): {
   label: string; recovery: number; weekLoad: number
   recommendation: 'train' | 'possible' | 'rest'
 }[] {
-  const groups = [
-    { label: 'Legs',      keywords: ['squat', 'deadlift', 'leg press', 'lunge', 'rdl', 'hip thrust', 'calf', 'hamstring', 'quad', 'leg curl', 'leg extension'] },
-    { label: 'Chest',     keywords: ['bench', 'push', 'fly', 'dip', 'chest'] },
-    { label: 'Back',      keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'] },
-    { label: 'Shoulders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'] },
-    { label: 'Arms',      keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'] },
-  ]
   const weekStart = startOfWeek()
   const weekHevy  = hevy.filter(h => h.start_time >= weekStart && !isAccessorySession(h))
   const sorted    = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))
 
-  return groups.map(({ label, keywords }) => {
-    let lastTrained: string | null = null
-    for (const w of sorted) {
-      if (!w.exercises) continue
-      if (w.exercises.some(ex => keywords.some(k => (ex.title ?? '').toLowerCase().includes(k)))) {
-        lastTrained = w.start_time; break
-      }
-    }
-    const hoursSince = lastTrained ? (Date.now() - new Date(lastTrained).getTime()) / 3600000 : Infinity
+  return MUSCLE_GROUPS.map(({ label, keywords, titleKeywords }) => {
+    const lastW = sorted.find(w => muscleMatchesWorkout(w, keywords, titleKeywords))
+    const hoursSince = lastW ? (Date.now() - new Date(lastW.start_time).getTime()) / 3600000 : Infinity
     const recovery   = hoursSince < 24 ? 20 : hoursSince < 48 ? 55 : hoursSince < 72 ? 80 : 100
 
     let weekLoad = 0
     weekHevy.forEach(w => {
-      ;(w.exercises ?? []).forEach(ex => {
-        const t = (ex.title ?? '').toLowerCase()
-        if (!keywords.some(k => t.includes(k))) return
-        const intensity = setIntensityFactor(ex.sets ?? [])
-        const base = COMPOUND_KEYWORDS.some(k => t.includes(k)) ? 1.0 : 0.6
-        weekLoad += (ex.sets?.length ?? 0) * base * intensity
-      })
+      if (w.exercises) {
+        w.exercises.forEach(ex => {
+          const t = (ex.title ?? '').toLowerCase()
+          if (!keywords.some(k => t.includes(k))) return
+          const intensity = setIntensityFactor(ex.sets ?? [])
+          const base = COMPOUND_KEYWORDS.some(k => t.includes(k)) ? 1.0 : 0.6
+          weekLoad += (ex.sets?.length ?? 0) * base * intensity
+        })
+      } else if (titleKeywords.some(k => (w.title ?? '').toLowerCase().includes(k))) {
+        weekLoad += (w.sets ?? 8) * 0.7
+      }
     })
 
     const recommendation = recovery >= 80 ? 'train' : recovery >= 55 ? 'possible' : 'rest'
