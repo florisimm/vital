@@ -4398,6 +4398,8 @@ type LogFilter = 'all' | 'run' | 'ride' | 'strength'
 export function HistorySection({ activities, hevy }: { activities: Activity[]; hevy: HevyWorkout[] }) {
   const [monthOffset, setMonthOffset] = useState(0)
   const [filter, setFilter] = useState<LogFilter>('all')
+  const [selectedCardio, setSelectedCardio] = useState<Activity | null>(null)
+  const [selectedStrength, setSelectedStrength] = useState<HevyWorkout | null>(null)
   const now = new Date()
   const displayMonth = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
   const monthName = displayMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -4429,11 +4431,13 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
       date: a.start_date, label: a.name,
       detail: [a.distance ? `${(a.distance / 1000).toFixed(1)} km` : null, a.moving_time ? formatDuration(a.moving_time) : null].filter(Boolean).join(' · '),
       type: sportIcon(a.sport_type) as LogFilter, relDate: relativeDay(a.start_date),
+      source: a as Activity | HevyWorkout,
     })),
     ...hevy.filter(h => (h.duration ?? 0) >= 60).map(h => ({
       date: h.start_time, label: h.title ?? 'Strength',
       detail: [h.duration ? formatDuration(h.duration) : null, h.volume_kg ? `${Math.round(h.volume_kg).toLocaleString('en-US')} kg` : null].filter(Boolean).join(' · '),
       type: 'strength' as LogFilter, relDate: relativeDay(h.start_time),
+      source: h as Activity | HevyWorkout,
     })),
   ].sort((a, b) => b.date.localeCompare(a.date))
 
@@ -4536,6 +4540,9 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
         </div>
       </Card>
 
+      {selectedCardio && <CardioDetailScreen activity={selectedCardio} onBack={() => setSelectedCardio(null)} />}
+      {selectedStrength && <StrengthDetailScreen workout={selectedStrength} onBack={() => setSelectedStrength(null)} />}
+
       {/* 4. Filter + All workouts */}
       <Card>
         <div className="flex flex-col gap-4">
@@ -4555,8 +4562,12 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
           {filtered.length === 0 ? (
             <p className="text-white/40 text-[15px] py-4 text-center">Geen activiteiten gevonden</p>
           ) : filtered.slice(0, 15).map((w, i) => (
-            <div key={i} className="flex items-center gap-3"
-              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none', paddingTop: i > 0 ? 12 : 0 }}>
+            <button key={i} className="w-full flex items-center gap-3 text-left active:opacity-70"
+              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none', paddingTop: i > 0 ? 12 : 0 }}
+              onClick={() => {
+                if (w.type === 'strength') setSelectedStrength(w.source as HevyWorkout)
+                else setSelectedCardio(w.source as Activity)
+              }}>
               <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
                 style={{ background: 'rgba(255,255,255,0.06)' }}>
                 <WorkoutIcon type={w.type as 'run' | 'ride' | 'strength'} />
@@ -4565,8 +4576,11 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
                 <p className="text-[15px] font-medium text-white truncate">{w.label}</p>
                 <p className="text-[12px] text-white/40">{w.relDate}</p>
               </div>
-              <span className="text-[12px] text-white/40 shrink-0 text-right max-w-[90px] truncate">{w.detail}</span>
-            </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[12px] text-white/40 text-right max-w-[80px] truncate">{w.detail}</span>
+                <span className="text-white/25 text-[18px]">›</span>
+              </div>
+            </button>
           ))}
         </div>
       </Card>
