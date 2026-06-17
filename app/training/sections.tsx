@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import useSWR from 'swr'
-import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity, Calendar, Check, ArrowRight } from 'lucide-react'
+import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity as ActivityIcon, Calendar, Check, ArrowRight } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import {
@@ -2425,7 +2425,7 @@ export function computeRecoveryDetail(
 function focusVisual(emoji: string): { Icon: typeof Moon; accent: string; soft: string } {
   const e = emoji
   if (e === '😴' || e === '🛌' || e === '💤' || e === '✅')   return { Icon: Moon,           accent: '#818cf8', soft: 'rgba(129,140,248,0.16)' }
-  if (e === '🏃' || e === '🏃‍♂️' || e === '👟')              return { Icon: Activity,       accent: '#2dd4bf', soft: 'rgba(45,212,191,0.16)' }
+  if (e === '🏃' || e === '🏃‍♂️' || e === '👟')              return { Icon: ActivityIcon,   accent: '#2dd4bf', soft: 'rgba(45,212,191,0.16)' }
   if (e === '🚴' || e === '🚴‍♂️' || e === '🚵')              return { Icon: Bike,           accent: '#22d3ee', soft: 'rgba(34,211,238,0.16)' }
   if (e === '🏊' || e === '🏊‍♂️')                            return { Icon: Waves,          accent: '#60a5fa', soft: 'rgba(96,165,250,0.16)' }
   if (e === '💪' || e === '🏋️' || e === '🏋️‍♂️')            return { Icon: Dumbbell,       accent: '#fb923c', soft: 'rgba(251,146,60,0.16)' }
