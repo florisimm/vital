@@ -183,18 +183,51 @@ export { COMPOUND_KEYWORDS, ISOLATION_KEYWORDS, RECOVERY_TITLE_KEYWORDS, ACCESSO
 // Ramp rate: % change in intensity-weighted load, last 7 days vs prior 7 days.
 // Accessory/recovery strength sessions are excluded (same rule as the Training tab).
 // Returns null when the prior week's load is too low to be meaningful.
-export function computeRampRate(activities: Activity[], hevy: HevyWorkout[]): number | null {
+export function computeRampRate(activities: Activity[], hevy: HevyWorkout[], hrMax?: number | null): number | null {
   const now = Date.now()
   const t7  = new Date(now - 7  * 86400000).toISOString()
   const t14 = new Date(now - 14 * 86400000).toISOString()
 
-  const acute7 = activities.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
+  const acute7 = activities.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
     + hevy.filter(h => h.start_time >= t7 && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
-  const prev7  = activities.filter(a => a.start_date >= t14 && a.start_date < t7).reduce((s, a) => s + effectiveLoad(a), 0)
+  const prev7  = activities.filter(a => a.start_date >= t14 && a.start_date < t7).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
     + hevy.filter(h => h.start_time >= t14 && h.start_time < t7 && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
 
   if (prev7 <= 5) return null
   return Math.max(-100, Math.min(200, Math.round((acute7 - prev7) / prev7 * 100)))
+}
+
+// Banister-style fitness / fatigue / form from a daily training-load series.
+//  CTL (fitness)  = 42-day EWMA of daily load
+//  ATL (fatigue)  =  7-day EWMA of daily load
+//  TSB (form)     = CTL − ATL  (positive = fresh/tapered, negative = loaded)
+// Adds the chronic-fitness context the acute-only recovery % can't capture — it
+// distinguishes a fit athlete carrying fatigue from a detrained one. Additive:
+// nothing else depends on it.
+export function computeTrainingForm(activities: Activity[], hevy: HevyWorkout[], hrMax?: number | null): {
+  ctl: number; atl: number; tsb: number; label: string
+} {
+  const dayMs = 86400000
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const todayMs = today.getTime()
+  const DAYS = 56
+  const daily = new Array(DAYS).fill(0)
+  const idxOf = (iso: string) => {
+    const d = Math.floor((todayMs - new Date(iso.slice(0, 10)).getTime()) / dayMs)
+    return d >= 0 && d < DAYS ? DAYS - 1 - d : -1 // oldest → newest
+  }
+  for (const a of activities) { const i = idxOf(a.start_date); if (i >= 0) daily[i] += effectiveLoad(a, hrMax) }
+  for (const h of hevy)       { const i = idxOf(h.start_time); if (i >= 0) daily[i] += hevyLoad(h) }
+
+  const kCtl = 2 / (42 + 1), kAtl = 2 / (7 + 1)
+  let ctl = 0, atl = 0
+  for (let i = 0; i < DAYS; i++) {
+    ctl += kCtl * (daily[i] - ctl)
+    atl += kAtl * (daily[i] - atl)
+  }
+  const tsb = ctl - atl
+  const label = tsb > 5 ? 'Fresh' : tsb > -10 ? 'Balanced' : tsb > -25 ? 'Building' : 'Overreaching'
+  return { ctl: Math.round(ctl), atl: Math.round(atl), tsb: Math.round(tsb), label }
 }
 
 // Training load score (0–100) for readiness calculation.

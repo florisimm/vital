@@ -11,7 +11,7 @@ import {
   isRun, isRide, isSwim, isWeightTraining, isCycling,
   cardioZoneMultiplier, effectiveLoad, hevyLoad,
   setIntensityFactor, sessionLoadFactor, sessionLoadBreakdown, isAccessorySession,
-  epley1RM, COMPOUND_KEYWORDS,
+  epley1RM, COMPOUND_KEYWORDS, computeRampRate, computeTrainingForm,
 } from '@/lib/training-load'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
@@ -2889,9 +2889,11 @@ function PerformanceHeroCard({ perf }: { perf: ReturnType<typeof computePerforma
 function RecoveryDetailCard({
   recovery,
   physiology,
+  form,
 }: {
   recovery: { pct: number; label: string; factors: string[] }
   physiology: { score: number | null; label: string; color: string; explanation: string }
+  form?: { ctl: number; atl: number; tsb: number; label: string }
 }) {
   const unified = physiology.score !== null
     ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
@@ -2929,6 +2931,20 @@ function RecoveryDetailCard({
         {explanation && (
           <p className="text-[12px] text-white/40 leading-relaxed pt-0.5">{explanation}</p>
         )}
+        {form && form.ctl > 0 && (() => {
+          const fc = form.label === 'Fresh' ? '#4ade80' : form.label === 'Balanced' ? '#2dd4bf' : form.label === 'Building' ? '#fb923c' : '#f87171'
+          return (
+            <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/[0.06]">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.08em]">Form</span>
+                <span className="text-[12px] text-white/40">Fitness {form.ctl} · Fatigue {form.atl}</span>
+              </div>
+              <span className="text-[14px] font-semibold" style={{ color: fc }}>
+                {form.label} ({form.tsb > 0 ? '+' : ''}{form.tsb})
+              </span>
+            </div>
+          )
+        })()}
         <div className="flex flex-col gap-1.5 pt-1">
           {recovery.factors.map((f, i) => (
             <span key={i} className="text-[13px] text-white/50">· {f}</span>
@@ -3504,6 +3520,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
 
   const perf = computePerformanceScore(activities, hevy, maxHeartRate)
   const recoveryDetail = computeRecoveryDetail(activities, hevy, maxHeartRate)
+  const trainingForm = computeTrainingForm(activities, hevy, maxHeartRate)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
 
   const now = Date.now()
@@ -3555,15 +3572,8 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
   const todayActivities = activities.filter(a => a.start_date.slice(0, 10) === todayStr)
   const todayHevy       = hevy.filter(h => h.start_time.slice(0, 10) === todayStr)
 
-  const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
-  const fourteenDaysAgo  = new Date(now - 14 * 86400000).toISOString()
-  const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, maxHeartRate), 0)
-    + hevy.filter(h => h.start_time >= sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
-  const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, maxHeartRate), 0)
-    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
-  const rampRate = prev7kj > 5
-    ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
-    : null
+  // Single source of truth for ramp rate (shared with Today/Coach via lib).
+  const rampRate = computeRampRate(activities, hevy, maxHeartRate)
   const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate, maxHeartRate)
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority, trainingIntensity)
 
@@ -3665,7 +3675,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
       />
 
       {/* 5. Readiness detail */}
-      <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} />
+      <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} form={trainingForm} />
 
       {/* 6. What Kern learned about you */}
       <LearnedAboutYouCard profile={personalProfile} />
