@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import useSWR from 'swr'
+import { useState, useRef } from 'react'
+import useSWR, { mutate } from 'swr'
+import { createClient } from '@/lib/supabase'
 import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight } from 'lucide-react'
 import { Card, SectionHeader, MetricTile } from '@/components/ui'
 import { healthFetcher } from './fetcher'
@@ -937,32 +938,80 @@ export function HeartSection() {
 
 export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
   const [period, setPeriod] = useState<7 | 14 | 30>(14)
+  const [showList, setShowList] = useState(false)
+  const [editDate, setEditDate] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { data: nutrition } = useSWR('food-weekly-nutrition', fetchWeeklyNutrition)
   const avgProtein = nutrition?.avgProtein ?? 0
   const proteinTarget = nutrition?.proteinTarget ?? 0
+
+  const today = localDateStr(new Date())
+  const allWeightRows = [...rows].filter(r => r.gewicht != null).sort((a, b) => b.datum.localeCompare(a.datum))
+  const todayHasWeight = rows.some(r => r.datum === today && r.gewicht != null)
 
   const weightRows = rows.filter(r => r.gewicht != null).slice(0, period).reverse()
   const weights = weightRows.map(r => Number(r.gewicht))
   const latest = weights[weights.length - 1]
   const oldest = weights[0]
-  const avg = weights.length ? weights.reduce((a, b) => a + b, 0) / weights.length : 0
-  const min = weights.length ? Math.min(...weights) : 0
-  const max = weights.length ? Math.max(...weights) : 0
+  const wavg = weights.length ? weights.reduce((a, b) => a + b, 0) / weights.length : 0
+  const wmin = weights.length ? Math.min(...weights) : 0
+  const wmax = weights.length ? Math.max(...weights) : 0
   const change = latest && oldest ? latest - oldest : 0
-
   const displayWeight = latest ?? null
-
   const daysDiff = weightRows.length > 1
     ? (new Date(weightRows[weightRows.length - 1].datum).getTime() - new Date(weightRows[0].datum).getTime()) / 86400000
     : 0
   const weeklyRate = daysDiff >= 3 && latest && oldest ? ((latest - oldest) / daysDiff) * 7 : null
-
-  const chartWeights = weights
   const chartMin = weights.length ? Math.min(...weights) : 0
   const chartMax = weights.length ? Math.max(...weights) : 0
 
+  function fmtDate(datum: string) {
+    if (datum === today) return 'Today'
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    if (datum === localDateStr(yesterday)) return 'Yesterday'
+    return new Date(datum + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  }
+
+  function openEdit(datum: string, current: number | null) {
+    setEditDate(datum)
+    setEditValue(current != null ? current.toFixed(1) : '')
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  async function saveWeight() {
+    if (!editDate) return
+    const kg = parseFloat(editValue.replace(',', '.'))
+    if (isNaN(kg) || kg < 20 || kg > 300) return
+    setSaving(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('gezondheid').upsert({ user_id: user.id, datum: editDate, gewicht: kg }, { onConflict: 'user_id,datum' })
+      mutate('health-gezondheid')
+    }
+    setSaving(false)
+    setEditDate(null)
+  }
+
+  function openLogToday() {
+    const existing = rows.find(r => r.datum === today)
+    setShowList(true)
+    openEdit(today, existing?.gewicht ?? null)
+  }
+
   return (
     <div className="flex flex-col gap-6">
+
+      {/* Log today button */}
+      <button
+        onClick={openLogToday}
+        className="w-full py-3.5 rounded-2xl text-[15px] font-semibold text-black active:opacity-80"
+        style={{ background: '#2dd4bf' }}
+      >
+        {todayHasWeight ? `Update today's weight` : `Log today's weight`}
+      </button>
 
       <AiInsight text={buildWeightInsight(weights, weeklyRate, change, avgProtein, proteinTarget)} />
 
@@ -985,20 +1034,20 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
         </div>
       </div>
 
-      {/* Trend Chart */}
+      {/* Trend Chart — tap title to open full list */}
       <Card>
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <span className="text-[15px] font-semibold text-white/50">Weight Trend</span>
+            <button onClick={() => setShowList(true)} className="text-[15px] font-semibold text-white/50 active:opacity-60 flex items-center gap-1">
+              Weight Trend <span className="text-white/30">›</span>
+            </button>
             <div className="flex gap-2">
               {([7, 14, 30] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
                   className={`px-3 py-1 rounded-full text-[13px] font-semibold transition-all ${
-                    period === p
-                      ? 'bg-white text-black'
-                      : 'bg-white/10 text-white/70 hover:bg-white/15'
+                    period === p ? 'bg-white text-black' : 'bg-white/10 text-white/70'
                   }`}
                 >
                   {p}d
@@ -1008,17 +1057,14 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
           </div>
 
           <div className="flex items-end justify-between gap-1 h-32">
-            {chartWeights.map((v, i) => {
+            {weights.map((v, i) => {
               const h = chartMax === chartMin ? 0.5 : (v - chartMin) / (chartMax - chartMin)
-              const isLast = i === chartWeights.length - 1
+              const isLast = i === weights.length - 1
               return (
                 <div
                   key={i}
                   className="flex-1 rounded-sm transition-all hover:opacity-80 group relative"
-                  style={{
-                    height: `${h * 96 + 16}px`,
-                    background: isLast ? '#2dd4bf' : 'rgba(255,255,255,0.2)',
-                  }}
+                  style={{ height: `${h * 96 + 16}px`, background: isLast ? '#2dd4bf' : 'rgba(255,255,255,0.2)' }}
                 >
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-[11px] text-white opacity-0 group-hover:opacity-100 whitespace-nowrap">
                     {v.toFixed(1)} kg
@@ -1029,11 +1075,101 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
           </div>
 
           <div className="flex justify-between text-[13px] text-white/50 pt-2">
-            <span>Avg: {avg ? avg.toFixed(1) : '–'} kg</span>
-            <span>Range: {min && max ? `${min.toFixed(1)}–${max.toFixed(1)} kg` : '–'}</span>
+            <span>Avg: {wavg ? wavg.toFixed(1) : '–'} kg</span>
+            <span>Range: {wmin && wmax ? `${wmin.toFixed(1)}–${wmax.toFixed(1)} kg` : '–'}</span>
           </div>
         </div>
       </Card>
+
+      {/* Fullscreen weight log */}
+      {showList && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgb(5,6,8)' }}>
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-5 border-b border-white/10 shrink-0"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', paddingBottom: '14px' }}
+          >
+            <span className="text-[17px] font-semibold text-white">Weight log</span>
+            <button
+              onClick={() => { setShowList(false); setEditDate(null) }}
+              className="text-[15px] font-semibold text-cyan-400"
+            >
+              Done
+            </button>
+          </div>
+
+          {/* List */}
+          <div className="flex-1 overflow-y-auto px-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+            {/* Today row — always at top */}
+            <div className="py-4 border-b border-white/[0.07]">
+              {editDate === today ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-[15px] font-semibold text-white w-28 shrink-0">Today</span>
+                  <input
+                    ref={inputRef}
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
+                    className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
+                    placeholder="kg"
+                  />
+                  <button onClick={saveWeight} disabled={saving} className="text-cyan-400 font-semibold text-[14px] disabled:opacity-40 shrink-0">
+                    {saving ? '…' : 'Save'}
+                  </button>
+                  <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-[15px] font-semibold text-white">Today</span>
+                  <button onClick={() => openEdit(today, rows.find(r => r.datum === today)?.gewicht ?? null)} className="flex items-center gap-2">
+                    {todayHasWeight
+                      ? <><span className="text-[15px] font-semibold text-white">{rows.find(r => r.datum === today)?.gewicht?.toFixed(1)} kg</span><span className="text-[12px] text-white/30">edit</span></>
+                      : <span className="text-[14px] font-semibold text-cyan-400">+ Log</span>
+                    }
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Past entries */}
+            {allWeightRows.filter(r => r.datum !== today).map(r => (
+              <div key={r.datum} className="py-4 border-b border-white/[0.07]">
+                {editDate === r.datum ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-[15px] font-medium text-white w-28 shrink-0">{fmtDate(r.datum)}</span>
+                    <input
+                      ref={inputRef}
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      value={editValue}
+                      onChange={e => setEditValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
+                      className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
+                      placeholder="kg"
+                    />
+                    <button onClick={saveWeight} disabled={saving} className="text-cyan-400 font-semibold text-[14px] disabled:opacity-40 shrink-0">
+                      {saving ? '…' : 'Save'}
+                    </button>
+                    <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[15px] font-medium text-white">{fmtDate(r.datum)}</span>
+                    <button onClick={() => openEdit(r.datum, r.gewicht)} className="flex items-center gap-2">
+                      <span className="text-[15px] font-semibold text-white">{r.gewicht?.toFixed(1)} kg</span>
+                      <span className="text-[12px] text-white/30">edit</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
