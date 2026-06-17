@@ -78,6 +78,7 @@ export default function TrainingPage() {
   const trainingIntensity: string = (data as any)?.trainingIntensity ?? 'moderate'
   const goalPriority: string[] = (data as any)?.goalPriority ?? []
   const injuries: Record<string, boolean> = (data as any)?.injuries ?? {}
+  const maxHeartRate: number | null = (data as any)?.maxHeartRate ?? null
 
   // Derive which sport today's plan recommends, to gate advice in sport tabs
   const todaySport = useMemo(() => {
@@ -124,10 +125,10 @@ export default function TrainingPage() {
 
       {/* Tab content — only after mount so SSR and first client render match */}
       <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} sportPriority={sportPriority} goalPriority={goalPriority} trainingIntensity={trainingIntensity} onSwitchTab={switchTab} />}
-        {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} />}
-        {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} />}
-        {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} />}
+        {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} sportPriority={sportPriority} goalPriority={goalPriority} trainingIntensity={trainingIntensity} maxHeartRate={maxHeartRate} onSwitchTab={switchTab} />}
+        {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />}
+        {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />}
+        {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />}
         {mounted && activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
         {mounted && activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'performance' && <PerformanceSection />}

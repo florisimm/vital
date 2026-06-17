@@ -34,7 +34,7 @@ export async function trainingFetcher() {
       .eq('user_id', user.id).gte('start_date', thirtyDaysAgoDate).order('start_date', { ascending: true }),
     supabase
       .from('user_settings')
-      .select('training_frequencies,training_goal,training_sport_priority,training_intensity,training_injuries,training_self_planned')
+      .select('training_frequencies,training_goal,training_sport_priority,training_goal_priority,training_intensity,training_injuries,training_self_planned,age,max_hr')
       .eq('user_id', user.id)
       .single(),
     supabase
@@ -69,6 +69,12 @@ export async function trainingFetcher() {
   const injuries: Record<string, boolean> = (settings as any)?.training_injuries ?? {}
   const selfPlanned: Record<string, boolean> = (settings as any)?.training_self_planned ?? {}
 
+  // Personalized max heart rate: explicit override wins, else Tanaka (208 − 0.7·age).
+  // null → calculations fall back to the legacy absolute HR zones (HRmax ≈ 190).
+  const age: number | null = (settings as any)?.age ?? null
+  const maxHrOverride: number | null = (settings as any)?.max_hr ?? null
+  const maxHeartRate: number | null = maxHrOverride ?? (age ? Math.round(208 - 0.7 * age) : null)
+
   // bias_adjustment per sport: positive = user handles more load than model thinks
   const biasBySport: Record<string, number> = {}
   for (const row of (biasRows ?? []) as any[]) {
@@ -88,5 +94,6 @@ export async function trainingFetcher() {
     biasBySport,
     injuries,
     selfPlanned,
+    maxHeartRate,
   }
 }

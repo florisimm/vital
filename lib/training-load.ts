@@ -37,20 +37,37 @@ export function isCycling(a: Activity) {
   return a.sport_type?.toLowerCase().includes('ride')
 }
 
-// HR zone multiplier for effective load calculation
-export function cardioZoneMultiplier(hr: number): number {
-  if (hr < 130) return 0.25  // Zone 1: recovery
-  if (hr < 150) return 0.50  // Zone 2: aerobic base
-  if (hr < 165) return 0.75  // Zone 3: aerobic threshold
-  if (hr < 175) return 1.00  // Zone 4: lactate threshold
-  return 1.25                 // Zone 5: VO2max / race effort
+// Max heart rate from age (Tanaka 2001): more accurate than the old 220−age.
+export function tanakaHRMax(age: number): number {
+  return Math.round(208 - 0.7 * age)
+}
+
+// HR zone multiplier for effective load. When a personal hrMax is supplied the
+// zones are %HRmax-relative (so a 50-yr-old and a 20-yr-old are scored on their
+// own ranges); the fraction boundaries (0.684/0.789/0.868/0.921) reproduce the
+// legacy absolute thresholds 130/150/165/175 exactly at hrMax ≈ 190. Without an
+// hrMax the legacy absolute thresholds are used unchanged.
+export function cardioZoneMultiplier(hr: number, hrMax?: number | null): number {
+  if (hrMax && hrMax > 0) {
+    const f = hr / hrMax
+    if (f < 0.684) return 0.25  // Zone 1: recovery
+    if (f < 0.789) return 0.50  // Zone 2: aerobic base
+    if (f < 0.868) return 0.75  // Zone 3: aerobic threshold
+    if (f < 0.921) return 1.00  // Zone 4: lactate threshold
+    return 1.25                 // Zone 5: VO2max / race effort
+  }
+  if (hr < 130) return 0.25
+  if (hr < 150) return 0.50
+  if (hr < 165) return 0.75
+  if (hr < 175) return 1.00
+  return 1.25
 }
 
 // Effective load from cardio activity (minutes adjusted for intensity)
-export function effectiveLoad(a: Activity): number {
+export function effectiveLoad(a: Activity, hrMax?: number | null): number {
   const mins = (a.moving_time ?? 0) / 60
   if (mins === 0) return 0
-  if (a.average_heartrate) return mins * cardioZoneMultiplier(a.average_heartrate)
+  if (a.average_heartrate) return mins * cardioZoneMultiplier(a.average_heartrate, hrMax)
   if (isRun(a) && a.average_speed) {
     const mps = a.average_speed
     return mins * (mps > 4.0 ? 1.00 : mps > 3.2 ? 0.75 : 0.50)

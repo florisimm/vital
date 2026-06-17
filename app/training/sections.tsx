@@ -72,7 +72,7 @@ export function formatTime(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null): ACWRDetail {
+export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], now: number, rampRate: number | null, hrMax?: number | null): ACWRDetail {
   const t7  = new Date(now - 7  * 86400000).toISOString()
   const t28 = new Date(now - 28 * 86400000).toISOString()
   const dy  = (iso: string) => iso.slice(0, 10)
@@ -82,9 +82,9 @@ export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], n
     const h28 = hevyW.filter(h => h.start_time >= t28)
     if (!a28.length && !h28.length) return { acwr: null, confidence: 'low' as const, daysWithData: 0, acuteLoad: 0 }
 
-    const acute    = a28.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a), 0)
+    const acute    = a28.filter(a => a.start_date >= t7).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
                    + h28.filter(h => h.start_time >= t7).reduce((s, h) => s + hevyLoad(h), 0)
-    const chronic28 = a28.reduce((s, a) => s + effectiveLoad(a), 0)
+    const chronic28 = a28.reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
                     + h28.reduce((s, h) => s + hevyLoad(h), 0)
 
     const dySet    = new Set([...a28.map(a => dy(a.start_date)), ...h28.map(h => dy(h.start_time))])
@@ -119,16 +119,16 @@ export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], n
       // recentN counts only primary sessions (ignores accessory/recovery) for isNew detection
       const recentN    = acts.filter(a => a.start_date >= t28).length
                        + hevyW.filter(h => h.start_time >= t28 && !isAccessorySession(h)).length
-      const recentLoad = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a), 0)
+      const recentLoad = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
                        + hevyW.filter(h => h.start_time >= t28).reduce((s, h) => s + hevyLoad(h), 0)
-      const priorLoad  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).reduce((s, a) => s + effectiveLoad(a), 0)
+      const priorLoad  = acts.filter(a => a.start_date >= t56 && a.start_date < t28).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
                        + hevyW.filter(h => h.start_time >= t56 && h.start_time < t28).reduce((s, h) => s + hevyLoad(h), 0)
       // Primary load: at least one non-accessory session in the last 28 days
       const hasPrimaryLoad = acts.filter(a => a.start_date >= t28).length > 0
         || hevyW.filter(h => h.start_time >= t28 && !isAccessorySession(h)).length > 0
       // Load composition (weighted, 28-day window): primary / isolation / accessory %
       const recent28hevy = hevyW.filter(h => h.start_time >= t28)
-      const compLoad  = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a), 0)
+      const compLoad  = acts.filter(a => a.start_date >= t28).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
                       + recent28hevy.reduce((s, h) => s + sessionLoadBreakdown(h).compound, 0)
       const isoLoad   = recent28hevy.reduce((s, h) => s + sessionLoadBreakdown(h).isolation, 0)
       const accLoad   = recent28hevy.reduce((s, h) => s + sessionLoadBreakdown(h).accessory, 0)
@@ -188,7 +188,7 @@ function formatPace100m(speedMs: number): string {
 
 // ─── Computation ──────────────────────────────────────────────────────────────
 
-export function computePerformanceScore(activities: Activity[], hevy: HevyWorkout[]) {
+export function computePerformanceScore(activities: Activity[], hevy: HevyWorkout[], hrMax?: number | null) {
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
 
@@ -198,9 +198,9 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   ]
   const consistency = Math.min(recent14.length / 6, 1)
 
-  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
     + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
     + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
   const loadRatio = kj14to7 > 0 ? kj7 / kj14to7 : 1
   // Smooth load-balance score. Steady load (0.8–1.1) is ideal; a planned down-week
@@ -2333,13 +2333,19 @@ function computeStrengthEffort(h: HevyWorkout): number {
   return 0.5 + ((setsFactor + volFactor) / 2) * 0.45
 }
 
-function computeActivityEffort(a: Activity): number {
+function computeActivityEffort(a: Activity, hrMax?: number | null): number {
   const durationH = (a.moving_time ?? 0) / 3600
   let intensity = 0.4 // default lean easy when no data
 
   if (a.average_heartrate && a.average_heartrate > 0) {
-    // Zone 1 ~<130bpm=0, Zone 2 ~135bpm=0.2, Zone 3 ~155bpm=0.5, Zone 4 ~170bpm=0.7, Zone 5 ~185bpm=1.0
-    intensity = Math.min(1, Math.max(0, (a.average_heartrate - 120) / 70))
+    if (hrMax && hrMax > 0) {
+      // %HRmax effort: 63% HRmax = easy (0) → 100% HRmax = max (1). At hrMax≈190
+      // this reproduces the legacy (hr−120)/70 curve, but scales to the athlete.
+      intensity = Math.min(1, Math.max(0, (a.average_heartrate / hrMax - 0.6316) / 0.3684))
+    } else {
+      // Legacy absolute mapping: <130bpm=0 → 190bpm=1.0
+      intensity = Math.min(1, Math.max(0, (a.average_heartrate - 120) / 70))
+    }
   } else {
     const sport = (a.sport_type ?? '').toLowerCase()
     if (sport.includes('run')) {
@@ -2360,7 +2366,8 @@ function computeActivityEffort(a: Activity): number {
 
 export function computeRecoveryDetail(
   activities: Activity[],
-  hevy: HevyWorkout[]
+  hevy: HevyWorkout[],
+  hrMax?: number | null
 ): { pct: number; label: string; factors: string[] } {
   const now = Date.now()
   const sevenDaysAgo = now - 7 * 86400000
@@ -2370,7 +2377,7 @@ export function computeRecoveryDetail(
   const workouts = [
     ...activities
       .filter(a => new Date(a.start_date).getTime() >= sevenDaysAgo)
-      .map(a => ({ time: new Date(a.start_date).getTime(), effort: computeActivityEffort(a), type: 'cardio' as const })),
+      .map(a => ({ time: new Date(a.start_date).getTime(), effort: computeActivityEffort(a, hrMax), type: 'cardio' as const })),
     ...hevy
       .filter(h => new Date(h.start_time).getTime() >= sevenDaysAgo)
       .map(h => ({ time: new Date(h.start_time).getTime(), effort: computeStrengthEffort(h), type: 'strength' as const })),
@@ -3480,7 +3487,7 @@ function TodayDoneCard({ activities, hevy, calendarEvents = [] }: { activities: 
   )
 }
 
-export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], goalPriority = [], trainingIntensity = 'moderate', onSwitchTab }: {
+export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], goalPriority = [], trainingIntensity = 'moderate', maxHeartRate = null, onSwitchTab }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]
   trainingFrequencies?: Record<string, number>
@@ -3488,14 +3495,15 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
   sportPriority?: string[]
   goalPriority?: string[]
   trainingIntensity?: string
+  maxHeartRate?: number | null
   onSwitchTab?: (key: string) => void
 }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const supabase = useMemo(() => createClient(), [])
   const overrideLoggedRef = useRef(false)
 
-  const perf = computePerformanceScore(activities, hevy)
-  const recoveryDetail = computeRecoveryDetail(activities, hevy)
+  const perf = computePerformanceScore(activities, hevy, maxHeartRate)
+  const recoveryDetail = computeRecoveryDetail(activities, hevy, maxHeartRate)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
 
   const now = Date.now()
@@ -3549,14 +3557,14 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
 
   const sevenDaysAgo     = new Date(now - 7  * 86400000).toISOString()
   const fourteenDaysAgo  = new Date(now - 14 * 86400000).toISOString()
-  const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+  const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, maxHeartRate), 0)
     + hevy.filter(h => h.start_time >= sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
-  const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
+  const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, maxHeartRate), 0)
     + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
   const rampRate = prev7kj > 5
     ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
     : null
-  const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
+  const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate, maxHeartRate)
   const todaysFocus = computeTodaysFocus(activities, hevy, calendarEvents, unifiedReadinessPct, perf, acwrDetail, rampRate, cardioTargets, trainingFrequencies.gym ?? 0, sportPriority, goalPriority, trainingIntensity)
 
   // Detect overrides: did user train today when advice would have been rest?
@@ -3925,9 +3933,9 @@ function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntens
 
 const INTENSITY_BIAS: Record<string, number> = { easy: -15, moderate: 0, hard: 15, all_out: 25 }
 
-export function RunningSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {} }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean> }) {
+export function RunningSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {}, maxHeartRate = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean>; maxHeartRate?: number | null }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
-  const recoveryDetail = computeRecoveryDetail(activities, hevy)
+  const recoveryDetail = computeRecoveryDetail(activities, hevy, maxHeartRate)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
   const rawReadiness = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
@@ -4114,9 +4122,9 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingInten
   )
 }
 
-export function CyclingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {} }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean> }) {
+export function CyclingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {}, maxHeartRate = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean>; maxHeartRate?: number | null }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
-  const recoveryDetail = computeRecoveryDetail(activities, hevy)
+  const recoveryDetail = computeRecoveryDetail(activities, hevy, maxHeartRate)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
   const rawReadiness = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)
@@ -4744,9 +4752,9 @@ function SwimmingWeeklyTrendCard({ trend }: { trend: ReturnType<typeof computeSw
   )
 }
 
-export function SwimmingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {} }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean> }) {
+export function SwimmingSection({ activities, hevy = [], todaySport = null, trainingIntensity = 'moderate', injuries = {}, maxHeartRate = null }: { activities: Activity[]; hevy?: HevyWorkout[]; todaySport?: string | null; trainingIntensity?: string; injuries?: Record<string, boolean>; maxHeartRate?: number | null }) {
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
-  const recoveryDetail = computeRecoveryDetail(activities, hevy)
+  const recoveryDetail = computeRecoveryDetail(activities, hevy, maxHeartRate)
   const physiologyReadiness = computePhysiologyReadiness(gezondheid ?? [])
   const rawReadiness = physiologyReadiness.score !== null
     ? Math.round(physiologyReadiness.score * 0.70 + recoveryDetail.pct * 0.30)

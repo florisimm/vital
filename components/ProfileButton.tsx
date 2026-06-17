@@ -396,6 +396,10 @@ export function ProfileButton() {
     const today = new Date().toISOString().split('T')[0]
     mutate('food-log', (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
     mutate(`food-log-${today}`, (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
+    // Age feeds the personalized HR-zone model — refresh training/today so the
+    // readiness, recovery and load calculations recompute with the new max HR.
+    mutate('training')
+    mutate('today')
     setCalcSaving(false)
     setCalcSaved(true)
     setTimeout(() => { setEditingMacroCalc(false); setOpen(false); router.push('/food') }, 800)
