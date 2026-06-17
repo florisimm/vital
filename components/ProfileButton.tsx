@@ -1137,47 +1137,6 @@ export function ProfileButton() {
                   })()}
                 </div>
 
-                {/* Self-planned sports */}
-                {sportOrder.some(key => (trainingFrequencies[key] ?? 0) > 0) && (() => {
-                  const SPORT_META: Record<string, { label: string; icon: string }> = {
-                    running:  { label: 'Running',        icon: '🏃' },
-                    cycling:  { label: 'Cycling',        icon: '🚴' },
-                    swimming: { label: 'Swimming',       icon: '🏊' },
-                    gym:      { label: 'Gym / Strength', icon: '🏋️' },
-                  }
-                  const activeSports = sportOrder.filter(key => (trainingFrequencies[key] ?? 0) > 0)
-                  return (
-                    <div className="flex flex-col gap-2">
-                      <div className="px-1">
-                        <span className="text-[13px] font-medium text-white/40">Plan yourself</span>
-                        <p className="text-[11px] text-white/25 mt-0.5">No coach advice for sports you schedule yourself</p>
-                      </div>
-                      <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                        {activeSports.map((key, i) => {
-                          const meta = SPORT_META[key]; if (!meta) return null
-                          const active = !!selfPlanned[key]
-                          return (
-                            <button
-                              key={key}
-                              onClick={() => setSelfPlanned(p => ({ ...p, [key]: !p[key] }))}
-                              className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-60"
-                              style={{ borderBottom: i < activeSports.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
-                            >
-                              <div className="w-[20px] h-[20px] rounded-[6px] flex items-center justify-center shrink-0"
-                                style={{ background: active ? 'rgba(45,212,191,0.20)' : 'rgba(255,255,255,0.08)', border: `1px solid ${active ? 'rgba(45,212,191,0.45)' : 'rgba(255,255,255,0.14)'}` }}>
-                                {active && <span className="text-[12px] text-teal-400">✓</span>}
-                              </div>
-                              <span className="text-[15px]" style={{ color: active ? 'rgb(45,212,191)' : 'white' }}>
-                                {meta.icon} {meta.label}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })()}
-
                 {/* Intensity preference */}
                 <div className="flex flex-col gap-3">
                   <div className="px-1">
