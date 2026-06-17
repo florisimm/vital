@@ -4451,10 +4451,10 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
   ]).size
 
   const filters: { key: LogFilter; label: string; color: string }[] = [
-    { key: 'all', label: 'Alles', color: 'rgba(255,255,255,0.15)' },
-    { key: 'run', label: 'Hardlopen', color: 'rgba(45,212,191,0.25)' },
-    { key: 'ride', label: 'Fietsen', color: 'rgba(34,211,238,0.25)' },
-    { key: 'strength', label: 'Kracht', color: 'rgba(251,146,60,0.25)' },
+    { key: 'all', label: 'All', color: 'rgba(255,255,255,0.15)' },
+    { key: 'run', label: 'Running', color: 'rgba(45,212,191,0.25)' },
+    { key: 'ride', label: 'Cycling', color: 'rgba(34,211,238,0.25)' },
+    { key: 'strength', label: 'Strength', color: 'rgba(251,146,60,0.25)' },
   ]
 
   const insight = buildMonthlyInsight(activities, hevy, displayMonth)
@@ -4466,7 +4466,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="text-orange-400 text-[14px]">✦</span>
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Patroon</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.10em]">Pattern</span>
           </div>
           <p className="text-[16px] text-white/85 leading-relaxed">{insight}</p>
         </div>
@@ -4526,16 +4526,16 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistentie</span>
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Consistency</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[36px] font-bold text-teal-400 leading-none">{activeDays}</span>
-              <span className="text-[15px] text-white/50">actieve dagen</span>
+              <span className="text-[15px] text-white/50">active days</span>
             </div>
-            <span className="text-[12px] text-white/30">Afgelopen 28 dagen</span>
+            <span className="text-[12px] text-white/30">Last 28 days</span>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <span className="text-[13px] font-semibold text-white/60">{allItems.length} sessies totaal</span>
-            <span className="text-[12px] text-white/30">{(activeDays / 4).toFixed(1)}× per week gem.</span>
+            <span className="text-[13px] font-semibold text-white/60">{allItems.length} sessions total</span>
+            <span className="text-[12px] text-white/30">{(activeDays / 4).toFixed(1)}× per week avg.</span>
           </div>
         </div>
       </Card>
@@ -4560,7 +4560,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
           </div>
 
           {filtered.length === 0 ? (
-            <p className="text-white/40 text-[15px] py-4 text-center">Geen activiteiten gevonden</p>
+            <p className="text-white/40 text-[15px] py-4 text-center">No activities found</p>
           ) : filtered.slice(0, 15).map((w, i) => (
             <button key={i} className="w-full flex items-center gap-3 text-left active:opacity-70"
               style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none', paddingTop: i > 0 ? 12 : 0 }}
