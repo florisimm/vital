@@ -2105,9 +2105,24 @@ export function computeTodaysFocus(
     }
   }
 
-  // Gym-specific decision: always go full effort unless recovery is genuinely low
+  // Gym-specific decision: respects the user's intensity setting from profile
   function decideGym(): keyof typeof ACT {
     const rs = riskScore()
+    // hard / all_out: only back off when truly depleted
+    if (trainingIntensity === 'hard' || trainingIntensity === 'all_out') {
+      if (recoveryPct < 25 || rs >= 9) return 'skip'
+      if (recoveryPct < 35 || rs >= 7) return 'recover'
+      if (recoveryPct < 45 || rs >= 5) return 'lessVol'
+      return 'proceed'
+    }
+    // easy: more conservative
+    if (trainingIntensity === 'easy') {
+      if (recoveryPct < 40 || rs >= 7) return 'skip'
+      if (recoveryPct < 55 || rs >= 5) return 'recover'
+      if (recoveryPct < 70 || rs >= 3) return 'lessVol'
+      return 'proceed'
+    }
+    // moderate (default)
     if (recoveryPct < 30 || rs >= 8) return 'skip'
     if (recoveryPct < 45 || rs >= 6) return 'recover'
     if (recoveryPct < 60 || rs >= 4) return 'lessVol'
