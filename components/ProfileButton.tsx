@@ -1129,20 +1129,6 @@ export function ProfileButton() {
                                     style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
                                 </div>
                               </div>
-                              {val > 0 && !injuries[key] && (
-                                <button
-                                  onClick={() => setSelfPlanned(p => ({ ...p, [key]: !p[key] }))}
-                                  className="flex items-center gap-2 px-4 pb-3 active:opacity-60"
-                                >
-                                  <div className="w-[18px] h-[18px] rounded-[5px] flex items-center justify-center shrink-0 transition-colors"
-                                    style={{ background: selfPlanned[key] ? 'rgba(45,212,191,0.25)' : 'rgba(255,255,255,0.08)', border: `1px solid ${selfPlanned[key] ? 'rgba(45,212,191,0.5)' : 'rgba(255,255,255,0.15)'}` }}>
-                                    {selfPlanned[key] && <span className="text-[11px] text-teal-400">✓</span>}
-                                  </div>
-                                  <span className="text-[12px]" style={{ color: selfPlanned[key] ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.35)' }}>
-                                    I plan this myself — no coach advice
-                                  </span>
-                                </button>
-                              )}
                             </div>
                           )
                         })}
