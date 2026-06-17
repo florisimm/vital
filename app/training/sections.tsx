@@ -2431,10 +2431,26 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   }
 
   const rc = readinessPct >= 80 ? '#4ade80' : readinessPct >= 60 ? '#2dd4bf' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-  const headline = simplified ? toSimpleLabel() : toSpecificRecommendation()
+  const isDone = (completedToday && completedToday.length > 0) || focus.label.toLowerCase().includes(' done')
+
+  function toDoneHeadline(): string {
+    const l = focus.label.toLowerCase()
+    if (l.includes('room for easy')) {
+      if (l.includes('cycling')) return 'Done — optional easy ride'
+      if (l.includes('run'))     return 'Done — optional easy run'
+      if (l.includes('swim'))    return 'Done — optional easy swim'
+      return 'Done — optional session'
+    }
+    if (readinessPct < 50) return 'Done — rest & recover'
+    if (readinessPct < 70) return 'Done — take it easy today'
+    return 'Great session today'
+  }
+
+  const headline = simplified
+    ? (isDone ? toDoneHeadline() : toSimpleLabel())
+    : toSpecificRecommendation()
 
   if (simplified) {
-    const isDone = (completedToday && completedToday.length > 0) || focus.label.toLowerCase().includes(' done')
     return (
       <a href={ctaHref} className="block p-5 rounded-[24px] border border-white/[0.12] active:opacity-75 transition-opacity" style={{ background: 'rgba(45,212,191,0.07)' }}>
         <div className="flex items-center justify-between mb-3">
