@@ -2431,10 +2431,26 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   }
 
   const rc = readinessPct >= 80 ? '#4ade80' : readinessPct >= 60 ? '#2dd4bf' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-  const headline = simplified ? toSimpleLabel() : toSpecificRecommendation()
+  const isDone = (completedToday && completedToday.length > 0) || focus.label.toLowerCase().includes(' done')
+
+  function toDoneHeadline(): string {
+    const l = focus.label.toLowerCase()
+    // computeTodaysFocus already generated the right advice — surface the actionable part
+    if (l.includes('room for easy') && (l.includes('run') || l.includes('loop'))) return 'Room for an easy run'
+    if (l.includes('room for easy') && (l.includes('cycl') || l.includes('ride') || l.includes('bike'))) return 'Room for an easy ride'
+    if (l.includes('room for easy') && (l.includes('swim') || l.includes('zwem'))) return 'Room for an easy swim'
+    if (l.includes('room for easy')) return 'Room for an optional session'
+    if (focus.action === 'Rest & recover' || focus.action === 'Recovery day') return 'Rest & recover'
+    if (readinessPct < 50) return 'Rest — prioritise recovery'
+    if (readinessPct < 65) return 'Take it easy today'
+    return 'Good work — you\'re on track'
+  }
+
+  const headline = simplified
+    ? (isDone ? toDoneHeadline() : toSimpleLabel())
+    : toSpecificRecommendation()
 
   if (simplified) {
-    const isDone = (completedToday && completedToday.length > 0) || focus.label.toLowerCase().includes(' done')
     return (
       <a href={ctaHref} className="block p-5 rounded-[24px] border border-white/[0.12] active:opacity-75 transition-opacity" style={{ background: 'rgba(45,212,191,0.07)' }}>
         <div className="flex items-center justify-between mb-3">
