@@ -1,12 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 
 export function InjuryToggle({ sport, injuries }: { sport: string; injuries: Record<string, boolean> }) {
   const [optimistic, setOptimistic] = useState<boolean | null>(null)
   const injured = optimistic !== null ? optimistic : (injuries[sport] ?? false)
+
+  // Clear optimistic once SWR has synced the new value from the DB
+  useEffect(() => {
+    if (optimistic !== null && (injuries[sport] ?? false) === optimistic) {
+      setOptimistic(null)
+    }
+  }, [injuries, sport, optimistic])
 
   async function toggle() {
     const next = !injured
@@ -17,7 +24,6 @@ export function InjuryToggle({ sport, injuries }: { sport: string; injuries: Rec
     await supabase.from('user_settings').update({ training_injuries: { ...injuries, [sport]: next } }).eq('user_id', user.id)
     mutate('training')
     mutate('today')
-    setOptimistic(null)
   }
 
   return (

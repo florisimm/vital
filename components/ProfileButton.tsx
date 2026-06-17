@@ -65,6 +65,7 @@ export function ProfileButton() {
   const [trainingIntensity, setTrainingIntensity] = useState<string>('moderate')
   const [sportOrder, setSportOrder] = useState<string[]>(['running', 'cycling', 'swimming', 'gym'])
   const [injuries, setInjuries] = useState<Record<string, boolean>>({ running: false, cycling: false, swimming: false, gym: false })
+  const [selfPlanned, setSelfPlanned] = useState<Record<string, boolean>>({})
   const [activeSport, setActiveSport] = useState<string | null>(null)
   const [weeklyDoneIdx, setWeeklyDoneIdx] = useState<Record<string, number[]>>({})
   const [personalZones, setPersonalZones] = useState<Record<string, { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }>>({})
@@ -142,7 +143,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -168,6 +169,8 @@ export function ProfileButton() {
             setGoalOrder(data.training_goal_priority)
           if (data?.training_injuries && typeof data.training_injuries === 'object')
             setInjuries(prev => ({ ...prev, ...data.training_injuries }))
+          if (data?.training_self_planned && typeof data.training_self_planned === 'object')
+            setSelfPlanned(data.training_self_planned)
         })
 
       // Auto-detect injuries from calendar events and recent Strava activities
@@ -450,7 +453,7 @@ export function ProfileButton() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder, training_injuries: injuries })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder, training_injuries: injuries, training_self_planned: selfPlanned })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
@@ -1126,6 +1129,20 @@ export function ProfileButton() {
                                     style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
                                 </div>
                               </div>
+                              {val > 0 && !injuries[key] && (
+                                <button
+                                  onClick={() => setSelfPlanned(p => ({ ...p, [key]: !p[key] }))}
+                                  className="flex items-center gap-2 px-4 pb-3 active:opacity-60"
+                                >
+                                  <div className="w-[18px] h-[18px] rounded-[5px] flex items-center justify-center shrink-0 transition-colors"
+                                    style={{ background: selfPlanned[key] ? 'rgba(45,212,191,0.25)' : 'rgba(255,255,255,0.08)', border: `1px solid ${selfPlanned[key] ? 'rgba(45,212,191,0.5)' : 'rgba(255,255,255,0.15)'}` }}>
+                                    {selfPlanned[key] && <span className="text-[11px] text-teal-400">✓</span>}
+                                  </div>
+                                  <span className="text-[12px]" style={{ color: selfPlanned[key] ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.35)' }}>
+                                    I plan this myself — no coach advice
+                                  </span>
+                                </button>
+                              )}
                             </div>
                           )
                         })}
