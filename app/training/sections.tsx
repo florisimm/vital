@@ -670,7 +670,8 @@ const MUSCLE_GROUPS = [
   { label: 'Chest',     keywords: ['bench', 'push', 'fly', 'dip', 'chest'],                                                                                    titleKeywords: ['push', 'chest', 'bench', 'upper', 'full'] },
   { label: 'Back',      keywords: ['row', 'pull-up', 'pullup', 'lat', 'deadlift', 'chin', 'cable row'],                                                        titleKeywords: ['pull', 'back', 'row', 'lat', 'upper', 'full'] },
   { label: 'Shoulders', keywords: ['lateral raise', 'front raise', 'shoulder', 'overhead press', 'ohp', 'military press', 'upright row'],                      titleKeywords: ['push', 'shoulder', 'upper', 'full'] },
-  { label: 'Arms',      keywords: ['curl', 'tricep', 'extension', 'hammer', 'bicep', 'preacher'],                                                              titleKeywords: ['push', 'pull', 'arm', 'upper', 'full', 'bicep', 'tricep', 'curl'] },
+  { label: 'Biceps',    keywords: ['curl', 'hammer', 'bicep', 'preacher', 'chin'],                                                                             titleKeywords: ['pull', 'bicep', 'arm', 'upper', 'full', 'curl'] },
+  { label: 'Triceps',   keywords: ['tricep', 'extension', 'pushdown', 'skull', 'dip', 'close grip'],                                                           titleKeywords: ['push', 'tricep', 'arm', 'upper', 'full'] },
 ]
 
 function muscleMatchesWorkout(w: HevyWorkout, keywords: string[], titleKeywords: string[]): boolean {
