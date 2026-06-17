@@ -1004,14 +1004,16 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
   return (
     <div className="flex flex-col gap-6">
 
-      {/* Log today button */}
-      <button
-        onClick={openLogToday}
-        className="w-full py-3.5 rounded-2xl text-[15px] font-semibold text-black active:opacity-80"
-        style={{ background: '#2dd4bf' }}
-      >
-        {todayHasWeight ? `Update today's weight` : `Log today's weight`}
-      </button>
+      {/* Log today button — only when no weight logged yet today */}
+      {!todayHasWeight && (
+        <button
+          onClick={openLogToday}
+          className="w-full py-3.5 rounded-2xl text-[15px] font-semibold text-black active:opacity-80"
+          style={{ background: '#2dd4bf' }}
+        >
+          Log today's weight
+        </button>
+      )}
 
       <AiInsight text={buildWeightInsight(weights, weeklyRate, change, avgProtein, proteinTarget)} />
 
@@ -1034,18 +1036,18 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
         </div>
       </div>
 
-      {/* Trend Chart — tap title to open full list */}
-      <Card>
+      {/* Trend Chart — tap anywhere on card to open full list */}
+      <Card onClick={() => setShowList(true)} style={{ cursor: 'pointer' }}>
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <button onClick={() => setShowList(true)} className="text-[15px] font-semibold text-white/50 active:opacity-60 flex items-center gap-1">
+            <span className="text-[15px] font-semibold text-white/50 flex items-center gap-1">
               Weight Trend <span className="text-white/30">›</span>
-            </button>
+            </span>
             <div className="flex gap-2">
               {([7, 14, 30] as const).map(p => (
                 <button
                   key={p}
-                  onClick={() => setPeriod(p)}
+                  onClick={e => { e.stopPropagation(); setPeriod(p) }}
                   className={`px-3 py-1 rounded-full text-[13px] font-semibold transition-all ${
                     period === p ? 'bg-white text-black' : 'bg-white/10 text-white/70'
                   }`}
