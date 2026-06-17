@@ -361,28 +361,7 @@ export function SleepSection() {
 
   const insightText = noData
     ? (selectedRow === null ? 'No Fitbit data for this night — Fitbit was not worn.' : 'Sync Fitbit to see your sleep quality data.')
-    : (() => {
-        const lines: string[] = []
-        if (deepPct !== null && deepPct < 20) {
-          const streak = sleepRows.slice(0, 4).filter(r => {
-            const d = r.slaap_diep; const t = r.slaap_minuten
-            return d !== null && t !== null && Math.round(d / t * 100) < 20
-          }).length
-          lines.push(streak >= 3
-            ? `Deep sleep below 20% for ${streak} consecutive nights — try an earlier bedtime and less screen time in the evening.`
-            : `Deep sleep at ${deepPct}% — slightly below the 20–25% target.`)
-        } else if (deepPct !== null) {
-          lines.push(`Deep sleep at ${deepPct}% — within the healthy range.`)
-        }
-        if (efficiency !== null && efficiency < 85)
-          lines.push(`Sleep efficiency at ${efficiency}% — frequent awakenings are reducing sleep quality.`)
-        if (totalMin !== null && avg30Min !== null) {
-          const diff = totalMin - avg30Min
-          if (Math.abs(diff) > 30)
-            lines.push(`Duration ${diff > 0 ? '+' : ''}${fmtMin(Math.round(diff))} vs your 30-day average.`)
-        }
-        return lines.join(' ') || 'Sleep data looks normal.'
-      })()
+    : buildSleepInsight({ score, quality, totalMin, avg7Min, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows })
 
   // Sleep → next-day HRV correlation pairs
   const correlationPairs: { sleep: number; hrv: number }[] = []
@@ -696,6 +675,112 @@ export function RecoverySection() {
 }
 
 // ─── Heart ────────────────────────────────────────────────────────────────────
+
+function buildSleepInsight({ score, quality, totalMin, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows }: {
+  score: number | null; quality: string | null; totalMin: number | null; avg7Min: number | null
+  avg30Min: number | null; deepPct: number | null; remPct: number | null; efficiency: number | null
+  consistency: number | null; spo2: number | null; resp: number | null; durationDiff: number | null
+  sleepRows: GezondheidsRow[]
+}): string {
+  type Finding = { priority: number; text: string }
+  const findings: Finding[] = []
+
+  // SpO₂
+  if (spo2 !== null && spo2 < 94)
+    findings.push({ priority: 10, text: `SpO₂ dropped to ${spo2}% — check for breathing disruptions or nasal congestion.` })
+  else if (spo2 !== null && spo2 < 96)
+    findings.push({ priority: 6, text: `SpO₂ was ${spo2}% — slightly below the ideal 97%+.` })
+  else if (spo2 !== null && spo2 >= 97)
+    findings.push({ priority: 1, text: `Blood oxygen at ${spo2}% — no breathing issues detected.` })
+
+  // Breathing rate
+  if (resp !== null && resp > 18)
+    findings.push({ priority: 7, text: `Breathing rate elevated at ${resp} breaths/min — could indicate stress, congestion, or early illness.` })
+  else if (resp !== null && resp <= 14)
+    findings.push({ priority: 2, text: `Very calm breathing at ${resp} breaths/min — a sign of deep relaxation.` })
+
+  // Deep sleep
+  if (deepPct !== null) {
+    const streak = sleepRows.slice(0, 4).filter(r => {
+      const d = r.slaap_diep; const t = r.slaap_minuten
+      return d !== null && t !== null && Math.round(d / t * 100) < 20
+    }).length
+    if (deepPct < 15)
+      findings.push({ priority: 8, text: streak >= 3
+        ? `Deep sleep only ${deepPct}% — ${streak} nights below target in a row. Earlier bedtime and less screen time may help.`
+        : `Deep sleep at ${deepPct}%, well below the 20–25% target — physical recovery was limited tonight.` })
+    else if (deepPct < 20)
+      findings.push({ priority: 4, text: streak >= 2
+        ? `Deep sleep at ${deepPct}% again — trending below the 20% threshold. Consider winding down earlier.`
+        : `Deep sleep at ${deepPct}%, just below the 20–25% ideal range.` })
+    else if (deepPct >= 26)
+      findings.push({ priority: 3, text: `Strong deep sleep at ${deepPct}% — excellent physical restoration tonight.` })
+    else
+      findings.push({ priority: 1, text: `Deep sleep at ${deepPct}% — right in the healthy 20–25% window.` })
+  }
+
+  // REM sleep
+  if (remPct !== null) {
+    if (remPct < 15)
+      findings.push({ priority: 5, text: `REM was only ${remPct}% — lower than ideal for memory consolidation and mood regulation.` })
+    else if (remPct >= 26)
+      findings.push({ priority: 2, text: `High REM at ${remPct}% — your brain was processing and consolidating well overnight.` })
+  }
+
+  // Efficiency
+  if (efficiency !== null) {
+    if (efficiency < 80)
+      findings.push({ priority: 7, text: `Sleep efficiency at ${efficiency}% — significant time spent restless or awake is reducing overall recovery.` })
+    else if (efficiency < 85)
+      findings.push({ priority: 4, text: `Efficiency at ${efficiency}% — some restlessness during the night cut into deep recovery time.` })
+    else if (efficiency >= 93)
+      findings.push({ priority: 2, text: `Sleep efficiency at ${efficiency}% — highly consolidated with very little wake time.` })
+  }
+
+  // Duration vs 30-day average
+  if (durationDiff !== null) {
+    if (durationDiff < -75)
+      findings.push({ priority: 6, text: `${fmtMin(Math.abs(Math.round(durationDiff)))} less than your 30-day average — repeated short nights lead to accumulated sleep debt.` })
+    else if (durationDiff < -35)
+      findings.push({ priority: 3, text: `Slightly short night — ${fmtMin(Math.abs(Math.round(durationDiff)))} below your average.` })
+    else if (durationDiff > 75)
+      findings.push({ priority: 3, text: `${fmtMin(Math.round(durationDiff))} more than usual — either great extra recovery or catching up on debt.` })
+    else if (durationDiff > 35)
+      findings.push({ priority: 2, text: `A little longer than average — ${fmtMin(Math.round(durationDiff))} of extra rest.` })
+  }
+
+  // Wake-time consistency
+  if (consistency !== null) {
+    if (consistency >= 88)
+      findings.push({ priority: 2, text: `Wake time is very consistent this week (${consistency}%) — a stable schedule strengthens your circadian rhythm.` })
+    else if (consistency < 55)
+      findings.push({ priority: 3, text: `Wake times vary a lot this week — inconsistent timing disrupts your circadian rhythm and reduces sleep quality.` })
+  }
+
+  // Score trend over last 3–4 nights
+  if (sleepRows.length >= 4) {
+    const recent = sleepRows.slice(0, 4)
+      .map(r => r.slaap_score ?? computeSleepScore(r))
+      .filter((s): s is number => s !== null)
+    if (recent.length >= 3) {
+      if (recent[0] > recent[1] && recent[1] > recent[2])
+        findings.push({ priority: 2, text: `Sleep scores improving over the last ${recent.length} nights — positive trend.` })
+      else if (recent[0] < recent[1] && recent[1] < recent[2])
+        findings.push({ priority: 3, text: `Sleep scores declining over the last ${recent.length} nights — worth monitoring.` })
+    }
+  }
+
+  // Pick top 2 by priority
+  findings.sort((a, b) => b.priority - a.priority)
+  const top = findings.filter(f => f.priority >= 2).slice(0, 2)
+  if (top.length > 0) return top.map(f => f.text).join(' ')
+
+  // Fallback based on overall quality
+  if (quality === 'Excellent') return 'Outstanding sleep tonight — deep, efficient, and well-timed recovery.'
+  if (quality === 'Good') return `Good night of sleep at ${totalMin ? fmtMin(totalMin) : '—'}. Keep the routine consistent.`
+  if (quality === 'Fair') return 'Sleep was lighter than ideal tonight. Focus on an earlier, screen-free wind-down.'
+  return 'Disrupted sleep tonight. Prioritise an earlier, consistent bedtime for better recovery.'
+}
 
 function buildHeartInsight(restingHR: number | null, hrv: number | null, trend: number | null, hrvBaseline: { baseline: number | null; deviationPct: number | null }): string {
   if (!restingHR && !hrv) return 'Sync Fitbit to see your heart rate and HRV data.'
