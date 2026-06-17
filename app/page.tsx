@@ -375,6 +375,7 @@ function ProgressCard({ data }: { data: any }) {
 
 function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise<void> }) {
   const [syncing, setSyncing] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
   async function handleSync() {
     setSyncing(true)
@@ -406,9 +407,53 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
   const allEvts = [...groups.entries()].flatMap(([, { label, evts }]) => evts.map(e => ({ ...e, _label: label })))
   const next = allEvts[0] ?? null
   const moreCount = allEvts.length - 1
+  const dayGroups = [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, g]) => g)
 
   return (
     <div>
+      {showAll && (
+        <div className="fixed inset-0 z-[60] flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
+            <button onClick={() => setShowAll(false)}
+              className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+              style={{ background: 'rgba(255,255,255,0.10)' }}>
+              Back
+            </button>
+            <span className="text-[17px] font-semibold text-white">Schedule</span>
+            <div className="w-[70px]" />
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
+            {dayGroups.length === 0 ? (
+              <p className="text-[15px] text-white/30 text-center pt-12">No upcoming sessions.</p>
+            ) : (
+              <div className="flex flex-col gap-6">
+                {dayGroups.map((g, gi) => (
+                  <div key={gi} className="flex flex-col gap-2">
+                    <p className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em] px-1">{g.label}</p>
+                    {g.evts.map((e, ei) => (
+                      <a key={ei}
+                        href={`/training/session?title=${encodeURIComponent(e.title)}&time=${encodeURIComponent(e.start_datetime ?? '')}`}
+                        className="flex items-center gap-3 px-4 py-3.5 rounded-[16px] border border-white/[0.07] active:opacity-70 transition-opacity"
+                        style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-[15px] font-semibold text-white truncate">{e.title}</span>
+                          {fmtTime(e.start_datetime) && (
+                            <span className="text-[12px] text-white/35 mt-0.5">{fmtTime(e.start_datetime)}</span>
+                          )}
+                        </div>
+                        <span className="text-white/30 text-[18px] shrink-0">›</span>
+                      </a>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">Upcoming</p>
         <button
@@ -443,9 +488,9 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
           <p className="text-[13px] text-white/30">No upcoming sessions.</p>
         )}
         {moreCount > 0 && (
-          <a href="/training" className="text-center text-[12px] font-semibold text-teal-400/70 py-2 active:opacity-60 transition-opacity">
+          <button onClick={() => setShowAll(true)} className="text-center text-[12px] font-semibold text-teal-400/70 py-2 active:opacity-60 transition-opacity">
             View full schedule ({moreCount} more)
-          </a>
+          </button>
         )}
       </div>
     </div>
