@@ -2687,9 +2687,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   const [ctaLabel, ctaHref] = (() => {
     if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
       const l = focus.label.toLowerCase()
-      if (l.includes('cycling')) return ['Plan zone 2 rit →', '/training/session?title=Zone+2+fietsrit']
-      if (l.includes('swimming')) return ['Plan zone 2 zwem →', '/training/session?title=Zone+2+zwemmen']
-      return ['Plan zone 2 run →', '/training/session?title=Zone+2+duurloop']
+      if (l.includes('cycling')) return ['Go for an easy ride →', '/training?tab=cycling']
+      if (l.includes('swimming')) return ['Go for an easy swim →', '/training?tab=swimming']
+      return ['Go for an easy run →', '/training?tab=running']
     }
 
     // Route straight to the sport the recommendation points at, so the subpage
@@ -4148,6 +4148,12 @@ function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntens
           ))}
         </div>
       </div>
+
+      <a href={`/training/session?title=${encodeURIComponent(suggestion)}`}
+        className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-[14px] text-[14px] font-semibold text-teal-400 active:opacity-70"
+        style={{ background: 'rgba(45,212,191,0.10)', border: '1px solid rgba(45,212,191,0.20)' }}>
+        Bekijk sessie &amp; route →
+      </a>
     </div>
   )
 }
@@ -4339,6 +4345,12 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingInten
           ))}
         </div>
       </div>
+
+      <a href={`/training/session?title=${encodeURIComponent(suggestion)}`}
+        className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-[14px] text-[14px] font-semibold text-cyan-400 active:opacity-70"
+        style={{ background: 'rgba(34,211,238,0.10)', border: '1px solid rgba(34,211,238,0.20)' }}>
+        Bekijk sessie &amp; route →
+      </a>
     </div>
   )
 }
