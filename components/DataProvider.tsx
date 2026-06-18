@@ -16,7 +16,7 @@ export function DataProvider() {
       if (!user) return
 
       const today = new Date().toISOString().split('T')[0]
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+      const thirtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
       const weekStart = (() => {
         const d = new Date(); d.setHours(0,0,0,0)
         d.setDate(d.getDate() - ((d.getDay() + 6) % 7))

@@ -33,6 +33,7 @@ type SportBreakdown = {
 export type ACWRDetail = {
   total: number | null; confidence: 'low' | 'medium' | 'high'
   sports: SportBreakdown[]; explanation: string
+  ewmaTotal?: number | null
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -176,7 +177,35 @@ export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], n
     explanation = 'Your training load is close to your usual level.'
   }
 
-  return { total: total.acwr, confidence: total.confidence, sports, explanation }
+  // EWMA ACWR — Williams (2017): exponentially weighted moving averages smooth
+  // the "cliff effect" of rolling windows (a session from day 8 ago no longer
+  // suddenly drops out of "acute"). λ_a = 2/8 (≈ 7-day), λ_c = 2/29 (≈ 28-day).
+  // Both EWMAs converge to the same daily-average load at steady state → ratio 1.0.
+  // Warm-start from the 14-day mean to avoid cold-start drag on the chronic EWMA.
+  const ewmaTotal = (() => {
+    const λa = 2 / 8, λc = 2 / 29
+    const days = 60
+    const daily: number[] = []
+    for (let d = days - 1; d >= 0; d--) {
+      const s = new Date(now - (d + 1) * 86400000).toISOString()
+      const e = new Date(now - d       * 86400000).toISOString()
+      daily.push(
+        activities.filter(a => a.start_date >= s && a.start_date < e).reduce((x, a) => x + effectiveLoad(a, hrMax), 0)
+        + hevy.filter(h => h.start_time >= s && h.start_time < e).reduce((x, h) => x + hevyLoad(h), 0)
+      )
+    }
+    const warmup = daily.slice(0, 14).reduce((a, b) => a + b, 0) / 14
+    let ea = warmup, ec = warmup
+    for (const load of daily) {
+      ea = λa * load + (1 - λa) * ea
+      ec = λc * load + (1 - λc) * ec
+    }
+    const val = ec > 0.5 ? Math.round((ea / ec) * 10) / 10 : null
+    if (process.env.NODE_ENV !== 'production') console.log('[ACWR] rolling:', total.acwr, 'EWMA:', val)
+    return val
+  })()
+
+  return { total: total.acwr, confidence: total.confidence, sports, explanation, ewmaTotal }
 }
 
 function formatPace100m(speedMs: number): string {
@@ -3006,7 +3035,7 @@ function TrainingLoadCard({ weekCompleted, weekPlanned, weekKm, weekDurationSecs
 
 function ACWRCard({ detail }: { detail: ACWRDetail }) {
   const [expanded, setExpanded] = useState(false)
-  const { total, confidence, sports, explanation } = detail
+  const { total, confidence, sports, explanation, ewmaTotal } = detail
 
   const col = (v: number | null) =>
     v == null ? 'rgba(255,255,255,0.4)'
@@ -3042,7 +3071,12 @@ function ACWRCard({ detail }: { detail: ACWRDetail }) {
         <div className="flex items-center gap-3 mb-1.5">
           {total !== null && effTotal !== null ? (
             <>
-              <span className="text-[28px] font-bold leading-none" style={{ color: col(effTotal) }}>{total.toFixed(2)}</span>
+              <div className="flex flex-col">
+                <span className="text-[28px] font-bold leading-none" style={{ color: col(effTotal) }}>{total.toFixed(2)}</span>
+                {ewmaTotal !== null && ewmaTotal !== undefined && (
+                  <span className="text-[11px] text-white/35 mt-0.5">EWMA {ewmaTotal.toFixed(2)}</span>
+                )}
+              </div>
               {status && <span className="text-[15px] font-semibold" style={{ color: statusColor }}>{status}</span>}
             </>
           ) : (

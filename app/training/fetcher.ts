@@ -14,8 +14,8 @@ export async function trainingFetcher() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('unauthenticated')
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-  const thirtyDaysAgoDate = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
+  const sixtyDaysAgoDate = new Date(Date.now() - 60 * 86400000).toISOString().split('T')[0]
   const now = new Date()
   const todayDate = now.toISOString().split('T')[0]
 
@@ -23,15 +23,15 @@ export async function trainingFetcher() {
     supabase
       .from('strava_activities')
       .select('id,name,sport_type,start_date,distance,moving_time,elapsed_time,total_elevation_gain,average_speed,average_heartrate,average_cadence,kilojoules,average_watts,weighted_average_watts')
-      .eq('user_id', user.id).gte('start_date', thirtyDaysAgo).order('start_date', { ascending: false }),
+      .eq('user_id', user.id).gte('start_date', sixtyDaysAgo).order('start_date', { ascending: false }),
     supabase
       .from('hevy_workouts')
       .select('id,title,start_time,end_time,duration,volume_kg,sets,exercises')
-      .eq('user_id', user.id).gte('start_time', thirtyDaysAgo).order('start_time', { ascending: false }),
+      .eq('user_id', user.id).gte('start_time', sixtyDaysAgo).order('start_time', { ascending: false }),
     supabase
       .from('calendar_events')
       .select('id,title,start_date,start_datetime,end_datetime')
-      .eq('user_id', user.id).gte('start_date', thirtyDaysAgoDate).order('start_date', { ascending: true }),
+      .eq('user_id', user.id).gte('start_date', sixtyDaysAgoDate).order('start_date', { ascending: true }),
     supabase
       .from('user_settings')
       .select('training_frequencies,training_goal,training_sport_priority,training_goal_priority,training_intensity,training_injuries,training_self_planned,age,max_hr')
