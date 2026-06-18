@@ -2687,9 +2687,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   const [ctaLabel, ctaHref] = (() => {
     if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
       const l = focus.label.toLowerCase()
-      if (l.includes('cycling')) return ['Go for an easy ride →', '/training?tab=cycling']
-      if (l.includes('swimming')) return ['Go for an easy swim →', '/training?tab=swimming']
-      return ['Go for an easy run →', '/training?tab=running']
+      if (l.includes('cycling')) return ['Plan zone 2 rit →', '/training/session?title=Zone+2+fietsrit']
+      if (l.includes('swimming')) return ['Plan zone 2 zwem →', '/training/session?title=Zone+2+zwemmen']
+      return ['Plan zone 2 run →', '/training/session?title=Zone+2+duurloop']
     }
 
     // Route straight to the sport the recommendation points at, so the subpage
@@ -4402,16 +4402,16 @@ function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
   const legsScore = get('Legs')?.recovery ?? 100
 
   const splits = [
-    { key: 'Push', score: pushScore, groups: 'Chest + Shoulders', color: '#60a5fa', emoji: '💪' },
-    { key: 'Pull', score: pullScore, groups: 'Back + Arms', color: '#2dd4bf', emoji: '🏋️' },
-    { key: 'Legs', score: legsScore, groups: 'Quads + Glutes', color: '#4ade80', emoji: '🦵' },
+    { key: 'Push', score: pushScore, groups: 'Chest · Shoulders', color: '#60a5fa', emoji: '💪' },
+    { key: 'Pull', score: pullScore, groups: 'Back · Arms', color: '#2dd4bf', emoji: '🏋️' },
+    { key: 'Legs', score: legsScore, groups: 'Quads · Glutes', color: '#4ade80', emoji: '🦵' },
   ].sort((a, b) => b.score - a.score)
 
   const best = splits[0]
   const isRest = best.score < 60
 
   const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
-  const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
+  const sl = (pct: number) => pct >= 80 ? 'Klaar' : pct >= 55 ? 'Mogelijk' : 'Herstel'
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(251,146,60,0.07)' }}>
@@ -4420,24 +4420,36 @@ function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
       <div className="flex items-center gap-3 mb-5">
         <span className="text-[42px] leading-none">{isRest ? '😴' : best.emoji}</span>
         <div>
-          <span className="text-[24px] font-bold text-white">{isRest ? 'Rest day' : `${best.key} day`}</span>
+          <span className="text-[24px] font-bold text-white">{isRest ? 'Rustdag' : `${best.key} day`}</span>
           <p className="text-[13px] text-white/50 mt-0.5">
-            {isRest ? 'Muscle recovery priority' : `${best.groups} recovered`}
+            {isRest ? 'Spieren herstellen' : `${best.groups} hersteld`}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {splits.map(s => (
+      <div className="flex flex-col gap-2">
+        {splits.map((s, i) => (
           <div key={s.key}
-            className="flex flex-col gap-1.5 p-3 rounded-[12px]"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-[14px]"
             style={{
-              background: s.key === best.key && !isRest ? `${s.color}18` : 'rgba(255,255,255,0.04)',
-              border: s.key === best.key && !isRest ? `1px solid ${s.color}40` : '1px solid transparent',
+              background: i === 0 && !isRest ? `${s.color}15` : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${i === 0 && !isRest ? `${s.color}30` : 'rgba(255,255,255,0.05)'}`,
             }}>
-            <span className="text-[14px] font-bold text-white">{s.key}</span>
-            <span className="text-[11px] font-semibold" style={{ color: sc(s.score) }}>{sl(s.score)}</span>
-            <span className="text-[10px] text-white/30">{s.score}%</span>
+            <span className="text-[20px] leading-none w-7 shrink-0">{s.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-semibold text-white">{s.key} day</span>
+                {i === 0 && !isRest && (
+                  <span className="text-[9px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full"
+                    style={{ background: `${s.color}25`, color: s.color }}>volgende</span>
+                )}
+              </div>
+              <span className="text-[11px] text-white/35">{s.groups}</span>
+            </div>
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className="text-[12px] font-semibold" style={{ color: sc(s.score) }}>{sl(s.score)}</span>
+              <span className="text-[10px] text-white/30">{s.score}%</span>
+            </div>
           </div>
         ))}
       </div>
