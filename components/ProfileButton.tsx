@@ -604,10 +604,10 @@ export function ProfileButton() {
     })
   }, [activeSport, userId])
 
-  type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string }
+  type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string; typeKey: number }
   type Zones = { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }
 
-  function getSessionTemplates(sport: string, freq: number, zones?: Zones, activities?: any[]): SessionTemplate[] {
+  function getSessionTemplates(sport: string, freq: number, zones?: Zones, activities?: any[], intensity?: string): SessionTemplate[] {
     const n = Math.max(1, Math.min(freq, 7))
 
     const kmh = (mps: number | null | undefined) => mps ? `${Math.round(mps * 3.6)} km/h` : null
@@ -629,59 +629,68 @@ export function ProfileButton() {
       const z2Pace  = pace(zones?.z2Speed)
       const thrPace = pace(zones?.thresholdSpeed)
       const longKm  = km(zones?.longDist)
-      // Polarized order: Easy(0) → Intervals(1) → Long(2) → Tempo(3) → Hills(4)
-      // Matches classifyRun indices so done-detection works correctly.
-      const all: SessionTemplate[] = [
-        { title: 'Easy run',          subtitle: z2Pace  ? `Zone 2 — ${z2Pace} — conversational pace`          : 'Zone 2 aerobic — conversational pace',    emoji: '🏃', href: '/training/session?title=Easy+Run',           duration: dur('Easy Run') },
-        { title: 'Interval training', subtitle: thrPace ? `5×1 km at ${thrPace} — VO2max boost`                : '5×1 km at 5K pace — VO2max boost',        emoji: '⚡', href: '/training/session?title=Running+Intervals', duration: dur('Running Intervals') },
-        { title: 'Long run',          subtitle: longKm  ? `Slow & steady — target ${longKm}`                  : 'Slow & steady — builds endurance base',   emoji: '🛣️', href: '/training/session?title=Long+Run',           duration: dur('Long Run') },
-        { title: 'Tempo run',         subtitle: thrPace ? `Comfortably hard — ${thrPace} — lactate threshold` : 'Comfortably hard — lactate threshold',    emoji: '🔥', href: '/training/session?title=Tempo+Run',          duration: dur('Tempo Run') },
-        { title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',                                                                       emoji: '⛰️', href: '/training/session?title=Hill+Repeats',       duration: dur('Hill Repeats') },
-      ]
-      return all.slice(0, n)
+      // typeKey matches classifyRun return values so done-detection works regardless of display order.
+      const easy      = { typeKey: 0, title: 'Easy run',          subtitle: z2Pace  ? `Zone 2 — ${z2Pace} — conversational pace`          : 'Zone 2 aerobic — conversational pace',    emoji: '🏃', href: '/training/session?title=Easy+Run',           duration: dur('Easy Run') }
+      const intervals = { typeKey: 1, title: 'Interval training', subtitle: thrPace ? `5×1 km at ${thrPace} — VO2max boost`                : '5×1 km at 5K pace — VO2max boost',        emoji: '⚡', href: '/training/session?title=Running+Intervals', duration: dur('Running Intervals') }
+      const longRun   = { typeKey: 2, title: 'Long run',          subtitle: longKm  ? `Slow & steady — target ${longKm}`                  : 'Slow & steady — builds endurance base',   emoji: '🛣️', href: '/training/session?title=Long+Run',           duration: dur('Long Run') }
+      const tempo     = { typeKey: 3, title: 'Tempo run',         subtitle: thrPace ? `Comfortably hard — ${thrPace} — lactate threshold` : 'Comfortably hard — lactate threshold',    emoji: '🔥', href: '/training/session?title=Tempo+Run',          duration: dur('Tempo Run') }
+      const hills     = { typeKey: 4, title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',                                                                       emoji: '⛰️', href: '/training/session?title=Hill+Repeats',       duration: dur('Hill Repeats') }
+      // easy: zone 2 first, quality sessions pushed back
+      // moderate: one quality session early
+      // hard/all_out: quality sessions front-loaded
+      const order = (intensity === 'easy')
+        ? [easy, longRun, tempo, intervals, hills]
+        : (intensity === 'hard' || intensity === 'all_out')
+          ? [easy, intervals, tempo, longRun, hills]
+          : [easy, intervals, longRun, tempo, hills] // moderate (default)
+      return order.slice(0, n)
     }
     if (sport === 'cycling') {
       const z2Kmh  = kmh(zones?.z2Speed)
       const thrKmh = kmh(zones?.thresholdSpeed)
       const longKm = km(zones?.longDist)
-      // Polarized order: Endurance(0) → FTP(1) → Long(2) → Recovery(3) → VO2(4)
-      // VO2max only appears at 5×+ so hard sessions stay ≤25% of volume.
-      // Matches updated classifyRide indices so done-detection works correctly.
-      const all: SessionTemplate[] = [
-        { title: 'Endurance ride', subtitle: z2Kmh  ? `Zone 2 — ${z2Kmh} — fat metabolism & aerobic base` : 'Zone 2 — fat metabolism & aerobic base',   emoji: '🚴', href: '/training/session?title=Endurance+Ride', duration: dur('Endurance Ride') },
-        { title: 'FTP intervals',  subtitle: thrKmh ? `3×10 min at ${thrKmh} — raise FTP`                : '3×10 min threshold — raise FTP',             emoji: '⚡', href: '/training/session?title=FTP+Intervals',  duration: dur('FTP Intervals') },
-        { title: 'Long ride',      subtitle: longKm ? `Steady endurance — target ${longKm}`              : 'Steady endurance — big aerobic volume',      emoji: '🛣️', href: '/training/session?title=Long+Ride',       duration: dur('Long Ride') },
-        { title: 'Recovery ride',  subtitle: z2Kmh  ? `Easy spin onder ${z2Kmh} — flush legs`            : 'Easy spin — flush legs & recover',           emoji: '🌱', href: '/training/session?title=Recovery+Ride',  duration: dur('Recovery Ride') },
-        { title: 'VO₂max effort',  subtitle: thrKmh ? `5×3 min boven ${thrKmh} — aerobic ceiling`        : '5×3 min at 110% FTP — aerobic ceiling',      emoji: '🔥', href: '/training/session?title=VO2max+Cycling', duration: dur('VO2max Cycling') },
-      ]
-      return all.slice(0, n)
+      // typeKey matches classifyRide return values so done-detection works regardless of display order.
+      const endurance = { typeKey: 0, title: 'Endurance ride', subtitle: z2Kmh  ? `Zone 2 — ${z2Kmh} — fat metabolism & aerobic base` : 'Zone 2 — fat metabolism & aerobic base',   emoji: '🚴', href: '/training/session?title=Endurance+Ride', duration: dur('Endurance Ride') }
+      const ftp       = { typeKey: 1, title: 'FTP intervals',  subtitle: thrKmh ? `3×10 min at ${thrKmh} — raise FTP`                : '3×10 min threshold — raise FTP',             emoji: '⚡', href: '/training/session?title=FTP+Intervals',  duration: dur('FTP Intervals') }
+      const longRide  = { typeKey: 2, title: 'Long ride',      subtitle: longKm ? `Steady endurance — target ${longKm}`              : 'Steady endurance — big aerobic volume',      emoji: '🛣️', href: '/training/session?title=Long+Ride',       duration: dur('Long Ride') }
+      const recovery  = { typeKey: 3, title: 'Recovery ride',  subtitle: z2Kmh  ? `Easy spin onder ${z2Kmh} — flush legs`            : 'Easy spin — flush legs & recover',           emoji: '🌱', href: '/training/session?title=Recovery+Ride',  duration: dur('Recovery Ride') }
+      const vo2       = { typeKey: 4, title: 'VO₂max effort',  subtitle: thrKmh ? `5×3 min boven ${thrKmh} — aerobic ceiling`        : '5×3 min at 110% FTP — aerobic ceiling',      emoji: '🔥', href: '/training/session?title=VO2max+Cycling', duration: dur('VO2max Cycling') }
+      // easy: long ride before FTP so quality only appears at 3×+
+      // moderate: FTP at 2×, VO2 only at 5×
+      // hard/all_out: VO2max pushed to 3×, aggressive front-loading
+      const order = (intensity === 'easy')
+        ? [endurance, longRide, ftp, recovery, vo2]
+        : (intensity === 'hard' || intensity === 'all_out')
+          ? [endurance, ftp, vo2, longRide, recovery]
+          : [endurance, ftp, longRide, recovery, vo2] // moderate (default)
+      return order.slice(0, n)
     }
     if (sport === 'swimming') {
       const all: SessionTemplate[] = [
-        { title: 'Endurance swim',   subtitle: 'Steady aerobic pace — 2000–3000m',         duration: '45–60 min', emoji: '🏊', href: '/training/session?title=Endurance+Swim' },
-        { title: 'Speed intervals',  subtitle: '8×100m with 20s rest — pace work',          duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Swimming+Intervals' },
-        { title: 'Technique drills', subtitle: 'Pull buoy, catch drills, form focus',       duration: '40–50 min', emoji: '🎯', href: '/training/session?title=Swim+Technique' },
-        { title: 'Mixed session',    subtitle: 'Warm-up + speed + endurance + cool-down',   duration: '55–70 min', emoji: '🌊', href: '/training/session?title=Swimming' },
+        { typeKey: 0, title: 'Endurance swim',   subtitle: 'Steady aerobic pace — 2000–3000m',         duration: '45–60 min', emoji: '🏊', href: '/training/session?title=Endurance+Swim' },
+        { typeKey: 1, title: 'Speed intervals',  subtitle: '8×100m with 20s rest — pace work',          duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Swimming+Intervals' },
+        { typeKey: 2, title: 'Technique drills', subtitle: 'Pull buoy, catch drills, form focus',       duration: '40–50 min', emoji: '🎯', href: '/training/session?title=Swim+Technique' },
+        { typeKey: 3, title: 'Mixed session',    subtitle: 'Warm-up + speed + endurance + cool-down',   duration: '55–70 min', emoji: '🌊', href: '/training/session?title=Swimming' },
       ]
       return all.slice(0, n)
     }
     if (sport === 'gym') {
       const splits: SessionTemplate[][] = [
-        [{ title: 'Full body',  subtitle: 'Squat · press · row · hinge — all patterns',      duration: '55–65 min', emoji: '🏋️', href: '/training/strength' }],
+        [{ typeKey: 0, title: 'Full body',  subtitle: 'Squat · press · row · hinge — all patterns',      duration: '55–65 min', emoji: '🏋️', href: '/training/strength' }],
         [
-          { title: 'Upper body', subtitle: 'Chest · shoulders · back · arms',                duration: '50–60 min', emoji: '💪', href: '/training/strength' },
-          { title: 'Lower body', subtitle: 'Squat · hinge · calves · core',                  duration: '50–60 min', emoji: '🦵', href: '/training/strength' },
+          { typeKey: 0, title: 'Upper body', subtitle: 'Chest · shoulders · back · arms',                duration: '50–60 min', emoji: '💪', href: '/training/strength' },
+          { typeKey: 1, title: 'Lower body', subtitle: 'Squat · hinge · calves · core',                  duration: '50–60 min', emoji: '🦵', href: '/training/strength' },
         ],
         [
-          { title: 'Push', subtitle: 'Chest · shoulders · triceps',                          duration: '55–65 min', emoji: '⬆️', href: '/training/strength' },
-          { title: 'Pull', subtitle: 'Back · rear delts · biceps',                           duration: '55–65 min', emoji: '⬇️', href: '/training/strength' },
-          { title: 'Legs', subtitle: 'Quads · hamstrings · glutes · calves',                 duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
+          { typeKey: 0, title: 'Push', subtitle: 'Chest · shoulders · triceps',                          duration: '55–65 min', emoji: '⬆️', href: '/training/strength' },
+          { typeKey: 1, title: 'Pull', subtitle: 'Back · rear delts · biceps',                           duration: '55–65 min', emoji: '⬇️', href: '/training/strength' },
+          { typeKey: 2, title: 'Legs', subtitle: 'Quads · hamstrings · glutes · calves',                 duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
         ],
         [
-          { title: 'Upper A', subtitle: 'Chest focus — bench · OHP · rows',                  duration: '55–65 min', emoji: '💪', href: '/training/strength' },
-          { title: 'Lower A', subtitle: 'Squat focus — back squat · lunges · RDL',           duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
-          { title: 'Upper B', subtitle: 'Back focus — pull-ups · rows · chest',              duration: '55–65 min', emoji: '🔄', href: '/training/strength' },
-          { title: 'Lower B', subtitle: 'Hinge focus — deadlift · leg press · core',        duration: '55–65 min', emoji: '🔁', href: '/training/strength' },
+          { typeKey: 0, title: 'Upper A', subtitle: 'Chest focus — bench · OHP · rows',                  duration: '55–65 min', emoji: '💪', href: '/training/strength' },
+          { typeKey: 1, title: 'Lower A', subtitle: 'Squat focus — back squat · lunges · RDL',           duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
+          { typeKey: 2, title: 'Upper B', subtitle: 'Back focus — pull-ups · rows · chest',              duration: '55–65 min', emoji: '🔄', href: '/training/strength' },
+          { typeKey: 3, title: 'Lower B', subtitle: 'Hinge focus — deadlift · leg press · core',        duration: '55–65 min', emoji: '🔁', href: '/training/strength' },
         ],
       ]
       const split = splits[Math.min(n - 1, splits.length - 1)]
@@ -1021,7 +1030,7 @@ export function ProfileButton() {
                 }
                 const meta = SPORT_META[activeSport]
                 const freq = trainingFrequencies[activeSport] ?? 0
-                const templates = getSessionTemplates(activeSport, freq, personalZones[activeSport], sportActivities)
+                const templates = getSessionTemplates(activeSport, freq, personalZones[activeSport], sportActivities, trainingIntensity)
                 return (
                   <div className="absolute inset-0 z-20 flex flex-col"
                     style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
@@ -1038,7 +1047,7 @@ export function ProfileButton() {
                       <div className="px-1">
                         {(() => {
                           const doneList = weeklyDoneIdx[activeSport] ?? []
-                          const done = doneList.filter(i => i < freq).length
+                          const done = templates.filter(t => doneList.includes(t.typeKey)).length
                           const remaining = Math.max(0, freq - done)
                           return (
                             <p className="text-[13px] text-white/35">
@@ -1054,8 +1063,8 @@ export function ProfileButton() {
                       <div className="flex flex-col gap-3">
                         {templates.map((t, i) => {
                           const doneList = weeklyDoneIdx[activeSport] ?? []
-                          const done = doneList.includes(i)
-                          const firstOpen = templates.findIndex((_, j) => !doneList.includes(j))
+                          const done = doneList.includes(t.typeKey)
+                          const firstOpen = templates.findIndex(t2 => !doneList.includes(t2.typeKey))
                           const isNext = !done && i === firstOpen
                           return (
                             <button
