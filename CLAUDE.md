@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git workflow
+
+Always push to **both** the feature branch and `main`:
+
+```bash
+git push -u origin <feature-branch>
+git push origin <feature-branch>:main
+```
+
 ## Commands
 
 ```bash
