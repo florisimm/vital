@@ -1257,17 +1257,130 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
   )
 }
 
-function StrengthDetailScreen({ workout: w, onBack }: { workout: HevyWorkout; onBack: () => void }) {
-  const exList = w.exercises ?? []
+function ExerciseProgressScreen({ exerciseTitle, allWorkouts, onBack }: {
+  exerciseTitle: string
+  allWorkouts: HevyWorkout[]
+  onBack: () => void
+}) {
+  const isCompound = COMPOUND_KEYWORDS.some(k => exerciseTitle.toLowerCase().includes(k))
+
+  const sessions = allWorkouts
+    .filter(w => (w.exercises ?? []).some(e => e.title === exerciseTitle))
+    .sort((a, b) => a.start_time.localeCompare(b.start_time))
+    .map(w => {
+      const ex = (w.exercises ?? []).find(e => e.title === exerciseTitle)!
+      const sets = ex.sets ?? []
+      const maxWeight = Math.max(0, ...sets.map(s => s.weight_kg ?? 0))
+      const bestE1RM = isCompound ? Math.max(0, ...sets.map(s => (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0 ? epley1RM(s.weight_kg, s.reps) : 0)) : 0
+      const totalVolume = sets.reduce((acc, s) => acc + (s.weight_kg ?? 0) * (s.reps ?? 0), 0)
+      return { date: w.start_time, sets, maxWeight, bestE1RM, totalVolume }
+    })
+
+  const last = sessions[sessions.length - 1]
+  const prev = sessions[sessions.length - 2]
+  let overloadText = ''
+  let overloadPositive = true
+  if (last && prev) {
+    const dw = last.maxWeight - prev.maxWeight
+    const dv = last.totalVolume - prev.totalVolume
+    if (dw > 0) { overloadText = `↑ +${dw} kg meer gewicht`; overloadPositive = true }
+    else if (dw < 0) { overloadText = `↓ ${Math.abs(dw)} kg minder gewicht`; overloadPositive = false }
+    else if (dv > 100) { overloadText = `↑ meer volume (+${Math.round(dv)} kg totaal)`; overloadPositive = true }
+    else if (dv < -100) { overloadText = `↓ minder volume`; overloadPositive = false }
+    else { overloadText = '= Gelijk aan vorige sessie'; overloadPositive = true }
+  }
+
+  const chartSessions = sessions.slice(-8)
+  const chartVals = chartSessions.map(s => isCompound && s.bestE1RM > 0 ? Math.round(s.bestE1RM) : s.maxWeight)
+  const minVal = Math.min(...chartVals.filter(v => v > 0))
+  const maxVal = Math.max(...chartVals)
+  const range = maxVal - minVal || 1
+  const pts = chartVals.map((v, i) => {
+    const x = chartSessions.length <= 1 ? 50 : (i / (chartSessions.length - 1)) * 100
+    const y = 90 - ((v - minVal) / range) * 70
+    return `${x},${y}`
+  }).join(' ')
+
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
+    <div className="fixed inset-0 z-[70] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
       <div className="flex items-center justify-between px-5 py-4 shrink-0">
         <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
-        <span className="text-[17px] font-semibold text-white">Workout</span>
+        <span className="text-[16px] font-semibold text-white truncate max-w-[55%] text-center">{exerciseTitle}</span>
         <div className="w-[70px]" />
       </div>
-      <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
-        <div className="flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-5" style={{ scrollbarWidth: 'none', paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 3rem)' }}>
+        {overloadText && (
+          <div className="px-4 py-3 rounded-[14px]" style={{ background: overloadPositive && overloadText !== '= Gelijk aan vorige sessie' ? 'rgba(45,212,191,0.08)' : 'rgba(255,255,255,0.05)', border: `1px solid ${overloadPositive && overloadText !== '= Gelijk aan vorige sessie' ? 'rgba(45,212,191,0.2)' : 'rgba(255,255,255,0.07)'}` }}>
+            <span className={`text-[15px] font-semibold ${overloadPositive && overloadText !== '= Gelijk aan vorige sessie' ? 'text-teal-400' : overloadText.startsWith('↓') ? 'text-orange-400' : 'text-white/50'}`}>{overloadText}</span>
+          </div>
+        )}
+
+        {chartVals.length > 1 && (
+          <div className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <span className="text-[11px] text-white/40 uppercase tracking-[0.08em]">{isCompound ? 'Geschat 1RM' : 'Max gewicht'} per sessie</span>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-[72px]">
+              <polyline points={pts} fill="none" stroke="rgb(45,212,191)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+              {chartVals.map((v, i) => {
+                const x = chartSessions.length <= 1 ? 50 : (i / (chartSessions.length - 1)) * 100
+                const y = 90 - ((v - minVal) / range) * 70
+                return <circle key={i} cx={x} cy={y} r="2.5" fill="rgb(45,212,191)" vectorEffect="non-scaling-stroke" />
+              })}
+            </svg>
+            <div className="flex justify-between items-end">
+              <span className="text-[11px] text-white/30">{formatDate(chartSessions[0].date)}</span>
+              <span className="text-[15px] font-bold text-teal-400">{chartVals[chartVals.length - 1]} kg</span>
+              <span className="text-[11px] text-white/30">{formatDate(chartSessions[chartSessions.length - 1].date)}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          {[...sessions].reverse().map((s, idx) => (
+            <div key={idx} className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-white/50">{formatDate(s.date)}</span>
+                {isCompound && s.bestE1RM > 0 && (
+                  <span className="text-[12px] font-semibold text-purple-400">e1RM {Math.round(s.bestE1RM)} kg</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {s.sets.map((set, i) => (
+                  <span key={i} className="text-[13px] font-semibold px-3 py-1 rounded-full"
+                    style={{ background: 'rgba(251,146,60,0.12)', color: 'rgb(251,146,60)', border: '1px solid rgba(251,146,60,0.25)' }}>
+                    {(set.weight_kg ?? 0) > 0 ? `${set.weight_kg} kg × ${set.reps}` : `${set.reps} reps`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {sessions.length === 0 && (
+            <p className="text-[13px] text-white/30 text-center pt-8">Geen historische data gevonden</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StrengthDetailScreen({ workout: w, allWorkouts, onBack }: { workout: HevyWorkout; allWorkouts: HevyWorkout[]; onBack: () => void }) {
+  const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
+  const exList = w.exercises ?? []
+  return (
+    <>
+      {selectedExercise && (
+        <ExerciseProgressScreen
+          exerciseTitle={selectedExercise}
+          allWorkouts={allWorkouts}
+          onBack={() => setSelectedExercise(null)}
+        />
+      )}
+      <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
+        <div className="flex items-center justify-between px-5 py-4 shrink-0">
+          <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
+          <span className="text-[17px] font-semibold text-white">Workout</span>
+          <div className="w-[70px]" />
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-5" style={{ scrollbarWidth: 'none', paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 3rem)' }}>
           <div>
             <span className="text-[22px] font-bold text-white leading-snug">{w.title}</span>
             <p className="text-[13px] text-white/40 mt-0.5">{formatDate(w.start_time)}</p>
@@ -1300,12 +1413,17 @@ function StrengthDetailScreen({ workout: w, onBack }: { workout: HevyWorkout; on
                   ? Math.max(0, ...ex.sets.map(s => s.weight_kg > 0 && s.reps > 0 ? epley1RM(s.weight_kg, s.reps) : 0))
                   : 0
                 return (
-                  <div key={ex.title} className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <button key={ex.title} onClick={() => setSelectedExercise(ex.title)}
+                    className="w-full text-left p-4 rounded-[18px] flex flex-col gap-3 active:opacity-70"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
                     <div className="flex items-center justify-between">
                       <span className="text-[15px] font-semibold text-white">{ex.title}</span>
-                      {best1RM > 0 && (
-                        <span className="text-[12px] font-semibold text-purple-400">e1RM {Math.round(best1RM)} kg</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {best1RM > 0 && (
+                          <span className="text-[12px] font-semibold text-purple-400">e1RM {Math.round(best1RM)} kg</span>
+                        )}
+                        <span className="text-white/30 text-[16px]">›</span>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {ex.sets.map((s, i) => (
@@ -1315,7 +1433,7 @@ function StrengthDetailScreen({ workout: w, onBack }: { workout: HevyWorkout; on
                         </span>
                       ))}
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -1324,7 +1442,7 @@ function StrengthDetailScreen({ workout: w, onBack }: { workout: HevyWorkout; on
           )}
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -1688,7 +1806,7 @@ function LastStrengthWorkoutCard({ workout, allWorkouts }: { workout: HevyWorkou
 
   return (
     <>
-      {selected && <StrengthDetailScreen workout={selected} onBack={() => setSelected(null)} />}
+      {selected && <StrengthDetailScreen workout={selected} allWorkouts={allWorkouts} onBack={() => setSelected(null)} />}
       {showAll && !selected && (
         <div className="fixed inset-0 z-50 flex flex-col"
           style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
@@ -4622,7 +4740,7 @@ export function HistorySection({ activities, hevy }: { activities: Activity[]; h
       </Card>
 
       {selectedCardio && <CardioDetailScreen activity={selectedCardio} onBack={() => setSelectedCardio(null)} />}
-      {selectedStrength && <StrengthDetailScreen workout={selectedStrength} onBack={() => setSelectedStrength(null)} />}
+      {selectedStrength && <StrengthDetailScreen workout={selectedStrength} allWorkouts={hevy} onBack={() => setSelectedStrength(null)} />}
 
       {/* 4. Filter + All workouts */}
       <Card>
