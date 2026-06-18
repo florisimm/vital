@@ -396,7 +396,7 @@ function SessionContent() {
 
       const intensity = settings?.training_intensity ?? 'moderate'
       const maxHr = settings?.age ? Math.round(208 - 0.7 * settings.age) : null
-      const recovery = computeRecoveryDetail(activities ?? [], hevy ?? [], maxHr)
+      const recovery = computeRecoveryDetail((activities ?? []) as any[], (hevy ?? []) as any[], maxHr)
       setRecoveryPct(recovery.pct)
       setResult(computeAdvice(sport, activities ?? [], title, intensity, recovery.pct))
     }
