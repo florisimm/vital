@@ -57,6 +57,15 @@ function avgSpeedKmh(acts: any[]): number {
   return valid.reduce((s: number, a: any) => s + a.average_speed, 0) / valid.length * 3.6
 }
 
+// Activities that were actually ridden/run at the requested training type
+// (classified by HR + duration). Lets us read the user's real Zone 2 pace/speed
+// straight from their history instead of scaling the all-rides average by a
+// blanket factor. (Function declarations are hoisted, so calling
+// classifyActivityType here is fine.)
+function sameTypeActivities(acts: any[], sport: SportType, type: TrainingType): any[] {
+  return acts.filter(a => a.average_speed > 0 && classifyActivityType(a, sport) === type)
+}
+
 // Average weekly km over the last 4 weeks (of matching-sport activities)
 function weeklyAvgKm(acts: any[]): number {
   const now = Date.now()
@@ -265,22 +274,44 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
   let advice: Advice
 
   if (sport === 'running') {
-    const baseSecPerKm = matching.length ? avgPaceSecPerKm(matching) : 360
-    const targetSecPerKm = Math.max(180, baseSecPerKm + RUN_PACE_OFFSET[trainingType])
+    // Prefer the user's real pace for this exact training type; fall back to the
+    // all-runs average shifted by the type offset when there's too little history.
+    const sameType = sameTypeActivities(matching, sport, trainingType)
+    let targetSecPerKm: number
+    let paceFromHistory = false
+    if (sameType.length >= 2) {
+      targetSecPerKm = Math.max(180, Math.round(avgPaceSecPerKm(sameType)))
+      paceFromHistory = true
+    } else {
+      const baseSecPerKm = matching.length ? avgPaceSecPerKm(matching) : 360
+      targetSecPerKm = Math.max(180, baseSecPerKm + RUN_PACE_OFFSET[trainingType])
+    }
     const paceMin = Math.floor(targetSecPerKm / 60)
     const paceSec = Math.round(targetSecPerKm % 60)
     const targetPace = `${paceMin}:${paceSec.toString().padStart(2, '0')}`
     const targetKm = Math.round((durationMin / (targetSecPerKm / 60)) * 10) / 10
     const parts = [`${TYPE_LABEL[trainingType]} · ${durationMin} min`, levelLabel]
     if (progressBasis) parts.push(progressBasis)
+    else if (paceFromHistory) parts.push(`Pace uit je ${sameType.length} ${TYPE_LABEL[trainingType].toLowerCase()} runs`)
     else if (wkly) parts.push(`~${wkly} km/week`)
     advice = { sport, trainingType, userLevel, durationMin, targetKm, targetPace, targetSpeed: null, zone, basis: parts.join(' · '), progressionRate }
   } else if (sport === 'cycling') {
-    const baseSpeedKmh = matching.length ? avgSpeedKmh(matching) : 25
-    const targetSpeed = Math.max(10, Math.round(baseSpeedKmh * CYCLE_SPEED_FACTOR[trainingType]))
+    // Prefer the user's real speed for this exact training type; fall back to the
+    // all-rides average scaled by the type factor when there's too little history.
+    const sameType = sameTypeActivities(matching, sport, trainingType)
+    let targetSpeed: number
+    let speedFromHistory = false
+    if (sameType.length >= 2) {
+      targetSpeed = Math.max(10, Math.round(avgSpeedKmh(sameType)))
+      speedFromHistory = true
+    } else {
+      const baseSpeedKmh = matching.length ? avgSpeedKmh(matching) : 25
+      targetSpeed = Math.max(10, Math.round(baseSpeedKmh * CYCLE_SPEED_FACTOR[trainingType]))
+    }
     const targetKm = Math.round((durationMin / 60) * targetSpeed * 10) / 10
     const parts = [`${TYPE_LABEL[trainingType]} · ${durationMin} min`, levelLabel]
     if (progressBasis) parts.push(progressBasis)
+    else if (speedFromHistory) parts.push(`Snelheid uit je ${sameType.length} ${TYPE_LABEL[trainingType].toLowerCase()} ritten`)
     else if (wkly) parts.push(`~${wkly} km/week`)
     advice = { sport, trainingType, userLevel, durationMin, targetKm, targetPace: null, targetSpeed, zone, basis: parts.join(' · '), progressionRate }
   } else {
