@@ -528,6 +528,22 @@ export default function TodayPage() {
     syncCalendar()
   }, [])
 
+  useEffect(() => {
+    async function syncHevy() {
+      try {
+        const THROTTLE_KEY = 'hevy_sync_last'
+        const last = parseInt(localStorage.getItem(THROTTLE_KEY) ?? '0', 10)
+        if (Date.now() - last < 15 * 60 * 1000) return // max once per 15 min
+        localStorage.setItem(THROTTLE_KEY, String(Date.now()))
+        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+        })
+        mutate('training')
+      } catch { /* ignore */ }
+    }
+    syncHevy()
+  }, [])
+
   const todayStr = localDateStr()
   const todayHealthRow = rows.find(r => r.datum === todayStr)
   const effectiveData = data && todayHealthRow?.stappen != null
