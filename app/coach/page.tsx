@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ArrowUp, Loader2 } from 'lucide-react'
+import { ArrowUp, Loader2, Trash2 } from 'lucide-react'
+
+const MAX_TURNS = 10
 import useSWR from 'swr'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { CoachRecommendation } from '@/components/ui'
@@ -283,11 +285,20 @@ function selectContext(question: string, s: Sections): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CoachPage() {
-  const [message, setMessage]       = useState('')
+  const [message, setMessage]           = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [streaming, setStreaming]   = useState(false)
-  const [streamText, setStreamText] = useState('')
+  const [sessionContext, setSessionContext] = useState<string | null>(null)
+  const [streaming, setStreaming]       = useState(false)
+  const [streamText, setStreamText]     = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  const userTurns = chatMessages.filter(m => m.role === 'user').length
+  const atLimit   = userTurns >= MAX_TURNS
+
+  function clearChat() {
+    setChatMessages([])
+    setSessionContext(null)
+  }
 
   const today = new Date().toISOString().slice(0, 10)
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
@@ -307,7 +318,7 @@ export default function CoachPage() {
   }, [chatMessages, streamText])
 
   async function handleSend() {
-    if (!message.trim() || streaming) return
+    if (!message.trim() || streaming || atLimit) return
     const q = message.trim()
     setMessage('')
 
@@ -318,9 +329,11 @@ export default function CoachPage() {
       return
     }
 
-    // Build context for this question only
+    // Lock context on first turn; all subsequent turns reuse the same text so the
+    // Anthropic cache_control hit fires on turns 2+ (identical content = cache hit).
     const sections = buildSections(goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
-    const context  = selectContext(q, sections)
+    const ctx = sessionContext ?? selectContext(q, sections)
+    if (!sessionContext) setSessionContext(ctx)
 
     const updated = [...chatMessages, { role: 'user' as const, content: q }]
     setChatMessages(updated)
@@ -328,13 +341,13 @@ export default function CoachPage() {
     setStreamText('')
 
     try {
-      // Context goes into the first user message (cached), subsequent turns are plain text
+      // ctx is identical every turn → Anthropic caches it after turn 1 (~10× cheaper input)
       const apiMessages = updated.map((msg, i) => {
         if (i === 0 && msg.role === 'user') {
           return {
             role: 'user' as const,
             content: [
-              { type: 'text' as const, text: `## User context\n\n${context}`, cache_control: { type: 'ephemeral' as const } },
+              { type: 'text' as const, text: `## User context\n\n${ctx}`, cache_control: { type: 'ephemeral' as const } },
               { type: 'text' as const, text: msg.content },
             ],
           }
@@ -386,6 +399,14 @@ export default function CoachPage() {
       {/* Chat history */}
       {chatMessages.length > 0 && (
         <div className="flex flex-col gap-3">
+          {/* Header row: turn counter + clear button */}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[12px] text-white/30">{userTurns}/{MAX_TURNS} vragen</span>
+            <button onClick={clearChat} className="flex items-center gap-1.5 text-[12px] text-white/40 active:text-white/70">
+              <Trash2 size={13} />
+              Wis gesprek
+            </button>
+          </div>
           {chatMessages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
@@ -413,6 +434,16 @@ export default function CoachPage() {
         </div>
       )}
 
+      {/* Turn limit reached */}
+      {atLimit && (
+        <div className="rounded-[14px] px-4 py-3 text-center text-[14px] text-white/50"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          Limiet bereikt —{' '}
+          <button onClick={clearChat} className="text-teal-400 underline-offset-2 underline">wis het gesprek</button>
+          {' '}om door te gaan.
+        </div>
+      )}
+
       {/* Chat input */}
       <div className="flex items-center gap-3 pt-2.5">
         <input
@@ -422,13 +453,14 @@ export default function CoachPage() {
           onChange={e => setMessage(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend()}
           className="flex-1 h-[52px] px-4 rounded-[18px] text-white placeholder:text-white/30 outline-none text-[17px]"
-          style={{ background: 'rgba(255,255,255,0.08)' }}
+          style={{ background: 'rgba(255,255,255,0.08)', opacity: atLimit ? 0.4 : 1 }}
+          disabled={atLimit}
         />
         <button
           onClick={handleSend}
           aria-label="Send message"
           className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 disabled:opacity-30"
-          disabled={!message.trim() || streaming}
+          disabled={!message.trim() || streaming || atLimit}
         >
           {streaming
             ? <Loader2 size={20} className="text-black animate-spin" />
