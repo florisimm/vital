@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowUp, Copy, Check, X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ArrowUp, Loader2 } from 'lucide-react'
 import useSWR from 'swr'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { CoachRecommendation } from '@/components/ui'
@@ -16,6 +16,7 @@ import { trainingFetcher } from '@/app/training/fetcher'
 import { fetchFoodData } from '@/app/food/fetchers'
 
 type Rec = { title: string; text: string }
+type ChatMessage = { role: 'user' | 'assistant'; content: string; direct?: boolean }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,6 @@ function fmtMin(min: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-// RHR + sleep 30-day means (HRV baseline comes from computeHRVBaseline)
 function computeSimpleBaselines(rows: HealthRow[]) {
   const hist = rows.slice(1, 31)
   const mean = (a: number[]) => a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length * 10) / 10 : null
@@ -35,7 +35,7 @@ function computeSimpleBaselines(rows: HealthRow[]) {
   }
 }
 
-// ─── buildRecs (unchanged logic) ─────────────────────────────────────────────
+// ─── buildRecs ────────────────────────────────────────────────────────────────
 
 function buildRecs(
   healthRows: HealthRow[], activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[], foodData: any,
@@ -62,17 +62,8 @@ function buildRecs(
 
   const { acwr } = computeTrainingLoadScore(activities, hevy)
   if (acwr !== null) {
-    if (acwr > 1.4) {
-      recs.push({
-        title: 'Ease off this week',
-        text: `You've trained noticeably more this week than your recent average — a jump this big raises injury risk. Cut back about 20–30% before your next hard session.`,
-      })
-    } else if (acwr < 0.7 && activities.length > 3) {
-      recs.push({
-        title: 'Room to do more',
-        text: `This week is lighter than usual for you. If you're feeling fresh, it's a good day to add a bit more.`,
-      })
-    }
+    if (acwr > 1.4) recs.push({ title: 'Ease off this week', text: `You've trained noticeably more this week than your recent average — a jump this big raises injury risk. Cut back about 20–30% before your next hard session.` })
+    else if (acwr < 0.7 && activities.length > 3) recs.push({ title: 'Room to do more', text: `This week is lighter than usual for you. If you're feeling fresh, it's a good day to add a bit more.` })
   }
 
   const logs = Array.isArray(foodData) ? foodData : (foodData?.food_log ?? foodData?.foodLog ?? [])
@@ -96,119 +87,91 @@ function buildRecs(
 }
 
 // ─── tryDirectAnswer ─────────────────────────────────────────────────────────
-// Returns an instant answer string for simple factual questions, or null when
-// the question needs coaching judgment (→ send to Claude).
 
 function tryDirectAnswer(
-  msg: string,
-  healthRows: HealthRow[],
-  activities: Activity[],
-  hevy: HevyWorkout[],
-  foodData: any,
+  msg: string, healthRows: HealthRow[], activities: Activity[], hevy: HevyWorkout[], foodData: any,
 ): string | null {
-  const m         = msg.toLowerCase()
-  const today     = new Date().toISOString().slice(0, 10)
-  const todayH    = healthRows.find(r => r.datum === today)
+  const m      = msg.toLowerCase()
+  const today  = new Date().toISOString().slice(0, 10)
+  const todayH = healthRows.find(r => r.datum === today)
   const sleepRows = healthRows.filter(r => r.slaap_minuten != null)
-  const logs      = Array.isArray(foodData) ? foodData : (foodData?.food_log ?? foodData?.foodLog ?? [])
-  const tgProt    = Number(foodData?.targets?.protein ?? 0)
-  const tgKcal    = Number(foodData?.targets?.kcal ?? 0)
-  const totProt   = Math.round(logs.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0))
-  const totKcal   = Math.round(logs.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0))
+  const logs   = Array.isArray(foodData) ? foodData : (foodData?.food_log ?? foodData?.foodLog ?? [])
+  const tgProt = Number(foodData?.targets?.protein ?? 0)
+  const tgKcal = Number(foodData?.targets?.kcal ?? 0)
+  const totProt = Math.round(logs.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0))
+  const totKcal = Math.round(logs.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0))
 
-  // Protein
   if (/protein|eiwit/.test(m) && /target|goal|doel|how much|hoeveel|today|vandaag|daily/.test(m)) {
     if (!tgProt) return 'No protein target set yet — add one in your profile.'
     const rem = Math.round(tgProt - totProt)
-    return rem > 0
-      ? `Protein target: ${Math.round(tgProt)}g/day. Logged today: ${totProt}g — ${rem}g remaining.`
-      : `Protein goal reached: ${totProt}g logged (target: ${Math.round(tgProt)}g). ✓`
+    return rem > 0 ? `Protein target: ${Math.round(tgProt)}g/day. Logged today: ${totProt}g — ${rem}g remaining.` : `Protein goal reached: ${totProt}g logged (target: ${Math.round(tgProt)}g). ✓`
   }
-
-  // Calories
   if (/calori|kcal/.test(m) && /target|goal|doel|how much|hoeveel|today|vandaag|daily/.test(m)) {
     if (!tgKcal) return `Logged today: ${totKcal} kcal. No calorie target set.`
     const rem = tgKcal - totKcal
-    return rem > 0
-      ? `Calorie target: ${tgKcal} kcal. Logged today: ${totKcal} kcal — ${rem} kcal remaining.`
-      : `Calorie target reached: ${totKcal} kcal logged (target: ${tgKcal} kcal). ✓`
+    return rem > 0 ? `Calorie target: ${tgKcal} kcal. Logged today: ${totKcal} kcal — ${rem} kcal remaining.` : `Calorie target reached: ${totKcal} kcal logged (target: ${tgKcal} kcal). ✓`
   }
-
-  // Sleep last night — fact only, not "how should I sleep" advice
   if (/how.*(did i sleep|was my sleep|heb ik geslapen)|sleep (last night|score|gisteravond)|slaap (gisteravond|score)/.test(m)) {
     const last = sleepRows[0]
     if (!last) return 'No sleep data yet — sync your Fitbit.'
-    const dur   = last.slaap_minuten ? fmtMin(last.slaap_minuten) : '–'
+    const dur  = last.slaap_minuten ? fmtMin(last.slaap_minuten) : '–'
     const score = last.slaap_score != null ? `, score ${last.slaap_score}/100` : ''
-    const deep  = last.slaap_diep != null && last.slaap_minuten
-      ? `, deep ${Math.round(last.slaap_diep / last.slaap_minuten * 100)}%` : ''
+    const deep  = last.slaap_diep != null && last.slaap_minuten ? `, deep ${Math.round(last.slaap_diep / last.slaap_minuten * 100)}%` : ''
     return `Last night (${last.datum}): ${dur}${score}${deep}.`
   }
-
-  // Readiness / recovery score — number only
   if (/what.*(is my|is de).*(readiness|recovery|herstel)|readiness score|recovery score|herstelwaarde/.test(m)) {
     const r = computePhysiologyReadiness(healthRows)
     if (r.score == null) return 'No readiness data yet — connect Fitbit.'
     return `Readiness today: ${r.score}/100 (${r.label}).${r.explanation ? ` ${r.explanation}` : ''}`
   }
-
-  // HRV — number only
   if (/what.*(is my|is de).*\bhrv\b|\bhrv\b.*(today|vandaag|now|nu)/.test(m)) {
     if (!todayH?.hrv_rmssd) return 'No HRV data for today yet.'
     const base = computeHRVBaseline(healthRows)
     const dev  = base.deviationPct != null ? ` (${base.deviationPct > 0 ? '+' : ''}${base.deviationPct}% vs baseline)` : ''
     return `HRV today: ${todayH.hrv_rmssd} ms${base.baseline != null ? ` / baseline ${base.baseline} ms` : ''}${dev}.`
   }
-
-  // Resting heart rate — number only
   if (/resting.heart|rusthartslag|resting hr/.test(m) && /what|how|hoeveel|wat/.test(m)) {
     if (!todayH?.hartslag_rust) return 'No resting heart rate for today yet.'
     const base = computeSimpleBaselines(healthRows)
     const dev  = base.rhr != null ? ` (30-day baseline: ${base.rhr} bpm)` : ''
     return `Resting HR today: ${todayH.hartslag_rust} bpm${dev}.`
   }
-
-  // Steps
   if (/\b(steps|stappen)\b/.test(m) && /today|vandaag|how many|hoeveel/.test(m)) {
     if (!todayH?.stappen) return 'No step data for today yet.'
     return `Steps today: ${todayH.stappen.toLocaleString()}.`
   }
-
-  // Recent sessions — listing, not advice
   if (/what.*(did i (train|do|workout)|sessions?)|recent.*(sessions?|trainings?)|laatste.*training|welke.*training.*week/.test(m)) {
     const t7 = new Date(Date.now() - 7 * 86400000).toISOString()
     const acts7 = activities.filter(a => a.start_date >= t7)
     const hevy7 = hevy.filter(h => h.start_time >= t7)
     if (!acts7.length && !hevy7.length) return 'No sessions in the last 7 days.'
-    const lines: string[] = [
+    const lines = [
       ...acts7.map(a => `${a.start_date?.slice(0, 10)} — ${a.sport_type} "${a.name}" ${Math.round((a.moving_time ?? 0) / 60)} min${a.distance ? `, ${(a.distance / 1000).toFixed(1)} km` : ''}`),
       ...hevy7.map(h => `${h.start_time?.slice(0, 10)} — Strength: ${h.title} ${fmtMin((h.duration ?? 0) / 60)}`),
     ].sort().reverse()
     return `Sessions last 7 days:\n${lines.join('\n')}`
   }
-
   return null
 }
 
-// ─── buildPrompt ──────────────────────────────────────────────────────────────
+// ─── buildSections + selectContext ───────────────────────────────────────────
 
-function buildPrompt(
-  userMessage: string,
-  goal: string,
-  trainingGoalKey: string,
-  healthRows: HealthRow[],
-  activities: Activity[],
-  hevy: HevyWorkout[],
-  calendarEvents: any[],
-  foodData: any,
-): string {
+type Sections = {
+  profile: string; readiness: string; sleep: string; trainingLoad: string
+  activities: string; muscle: string; nutrition: string; calendar: string
+}
+
+function buildSections(
+  goal: string, trainingGoalKey: string, healthRows: HealthRow[],
+  activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[], foodData: any,
+): Sections {
   const today     = new Date().toISOString().slice(0, 10)
   const readiness = computePhysiologyReadiness(healthRows)
   const illness   = computeIllnessFlag(healthRows)
   const baselines = computeSimpleBaselines(healthRows)
-  const load      = computeTrainingLoadScore(activities, hevy)   // intensity-weighted ACWR, volume, consecutive days
+  const load      = computeTrainingLoadScore(activities, hevy)
   const rampRate  = computeRampRate(activities, hevy)
-  const muscle    = computeMuscleGroupAdvice(hevy)               // per-group recovery % + train/possible/rest
+  const muscle    = computeMuscleGroupAdvice(hevy)
   const hrvBase   = computeHRVBaseline(healthRows)
 
   const todayHealth   = healthRows.find(r => r.datum === today)
@@ -219,32 +182,22 @@ function buildPrompt(
   const totalProtein  = logs.reduce((s: number, f: any) => s + Number(f.protein ?? 0), 0)
   const totalKcal     = logs.reduce((s: number, f: any) => s + Number(f.kcal ?? 0), 0)
 
-  // Compact HRV line: "86.7 ms / baseline 108.4 ms (-20%)"
   const hrvToday = todayHealth?.hrv_rmssd
   const hrvDev   = hrvBase.deviationPct
-  const hrvLine  = hrvToday != null
-    ? `${hrvToday} ms${hrvBase.baseline != null ? ` / baseline ${hrvBase.baseline} ms` : ''}${hrvDev != null ? ` (${hrvDev > 0 ? '+' : ''}${hrvDev}%)` : ''}`
-    : '–'
+  const hrvLine  = hrvToday != null ? `${hrvToday} ms${hrvBase.baseline != null ? ` / baseline ${hrvBase.baseline} ms` : ''}${hrvDev != null ? ` (${hrvDev > 0 ? '+' : ''}${hrvDev}%)` : ''}` : '–'
 
-  // Compact RHR line: "58 bpm / baseline 54 bpm (+7%)"
   const rhrToday = todayHealth?.hartslag_rust
-  const rhrDev   = rhrToday != null && baselines.rhr != null
-    ? Math.round((rhrToday - baselines.rhr) / baselines.rhr * 100)
-    : null
-  const rhrLine  = rhrToday != null
-    ? `${rhrToday} bpm${baselines.rhr != null ? ` / baseline ${baselines.rhr} bpm` : ''}${rhrDev != null ? ` (${rhrDev > 0 ? '+' : ''}${rhrDev}%)` : ''}`
-    : '–'
+  const rhrDev   = rhrToday != null && baselines.rhr != null ? Math.round((rhrToday - baselines.rhr) / baselines.rhr * 100) : null
+  const rhrLine  = rhrToday != null ? `${rhrToday} bpm${baselines.rhr != null ? ` / baseline ${baselines.rhr} bpm` : ''}${rhrDev != null ? ` (${rhrDev > 0 ? '+' : ''}${rhrDev}%)` : ''}` : '–'
 
-  // Training load summary: "2 strength, 1 run — 3h12m, ACWR 1.25 (optimal), ramp +8%"
-  const t7       = new Date(Date.now() - 7 * 86400000).toISOString()
-  const acts7    = activities.filter(a => a.start_date >= t7)
-  const hevy7    = hevy.filter(h => h.start_time >= t7)
+  const t7      = new Date(Date.now() - 7 * 86400000).toISOString()
+  const acts7   = activities.filter(a => a.start_date >= t7)
+  const hevy7   = hevy.filter(h => h.start_time >= t7)
   const sportMap: Record<string, number> = {}
   for (const a of acts7) { const k = (a.sport_type ?? 'other').toLowerCase(); sportMap[k] = (sportMap[k] ?? 0) + 1 }
   if (hevy7.length) sportMap['strength'] = (sportMap['strength'] ?? 0) + hevy7.length
-  const totalMin7  = acts7.reduce((s, a) => s + (a.moving_time ?? 0) / 60, 0)
-                   + hevy7.reduce((s, h) => s + (h.duration ?? 0) / 60, 0)
-  const loadLine   = [
+  const totalMin7 = acts7.reduce((s, a) => s + (a.moving_time ?? 0) / 60, 0) + hevy7.reduce((s, h) => s + (h.duration ?? 0) / 60, 0)
+  const loadLine  = [
     Object.entries(sportMap).length ? Object.entries(sportMap).map(([k, v]) => `${v} ${k}`).join(', ') : 'no sessions',
     totalMin7 > 0 ? fmtMin(totalMin7) : null,
     `ACWR ${load.acwr != null ? Math.round(load.acwr * 100) / 100 : '–'} (${load.status})${load.acwr != null && load.acwr > 1.3 ? ' ⚠' : ''}`,
@@ -252,82 +205,89 @@ function buildPrompt(
     load.consecutiveDays > 0 ? `${load.consecutiveDays} consecutive days` : null,
   ].filter(Boolean).join(', ')
 
-  const recentActivities = activities.slice(0, 5).map(a =>
-    `  - ${a.start_date?.slice(0, 10)} ${a.sport_type ?? ''} ${a.name ?? ''} — ${Math.round((a.moving_time ?? 0) / 60)} min${a.distance ? `, ${(a.distance / 1000).toFixed(1)} km` : ''}`
-  ).join('\n')
-
-  const upcomingEvents = calendarEvents
-    .filter(e => (e.start_datetime || e.start_date || '') >= today)
-    .slice(0, 5)
-    .map(e => `  - ${(e.start_datetime || e.start_date || '').slice(0, 10)} ${e.title}`)
-    .join('\n')
-
-  const sleepSummary = sleepRows.map(r =>
-    `  - ${r.datum}: ${r.slaap_minuten ? fmtMin(r.slaap_minuten) : '–'}${r.slaap_score != null ? `, score ${r.slaap_score}` : ''}${r.hrv_rmssd != null ? `, HRV ${r.hrv_rmssd} ms` : ''}`
-  ).join('\n')
-
-  const muscleSummary = muscle.map(m =>
-    `  - ${m.label}: ${m.recovery}% recovered → ${m.recommendation}`
-  ).join('\n')
-
   const GOAL_PRIORITY: Record<string, string> = {
-    lose_weight:   '1. Recovery\n2. Adherence\n3. Fat loss\n4. Performance',
-    build_muscle:  '1. Recovery\n2. Progressive overload\n3. Protein intake\n4. Cardiovascular fitness',
-    get_fitter:    '1. Recovery\n2. Aerobic load\n3. Consistency\n4. Performance metrics',
-    maintain:      '1. Consistency\n2. Recovery\n3. Balance across modalities',
-    performance:   '1. Performance\n2. Recovery\n3. Training specificity\n4. Volume management',
+    lose_weight:  '1. Recovery · 2. Adherence · 3. Fat loss · 4. Performance',
+    build_muscle: '1. Recovery · 2. Progressive overload · 3. Protein intake · 4. Cardio',
+    get_fitter:   '1. Recovery · 2. Aerobic load · 3. Consistency · 4. Performance',
+    maintain:     '1. Consistency · 2. Recovery · 3. Balance across modalities',
+    performance:  '1. Performance · 2. Recovery · 3. Specificity · 4. Volume management',
   }
-  const priority = GOAL_PRIORITY[trainingGoalKey] ?? null
 
-  const system = `You are a data-driven fitness and health coach. You analyse the user's biometric data, training load, sleep, and nutrition and give concise, evidence-based advice. Be direct and specific — no generic tips. Always refer to the actual numbers in the data.`
+  return {
+    profile: [
+      `### Profile — ${today}`,
+      goal ? `Primary goal: ${goal}` : null,
+      GOAL_PRIORITY[trainingGoalKey] ? `Priority: ${GOAL_PRIORITY[trainingGoalKey]}` : null,
+    ].filter(Boolean).join('\n'),
 
-  const context = `## User context — ${today}
-${goal || priority ? `
-### Coaching priority
-Primary goal: ${goal || '–'}
-${priority ? `\nPriority order:\n${priority}` : ''}
-` : ''}
-### Recovery & readiness
-- Readiness: ${readiness.score ?? '–'}/100 (${readiness.label})
-- HRV: ${hrvLine}
-- RHR: ${rhrLine}
-- Illness/strain: ${illness ? illness.reason : 'none'}
-${readiness.explanation ? `- Note: ${readiness.explanation}` : ''}
+    readiness: [
+      '### Recovery & readiness',
+      `- Readiness: ${readiness.score ?? '–'}/100 (${readiness.label})`,
+      `- HRV: ${hrvLine}`,
+      `- RHR: ${rhrLine}`,
+      `- Illness/strain: ${illness ? illness.reason : 'none'}`,
+      readiness.explanation ? `- Note: ${readiness.explanation}` : null,
+    ].filter(Boolean).join('\n'),
 
-### Sleep (last 7 nights)
-- 30-day avg: ${baselines.sleep != null ? fmtMin(baselines.sleep) : '–'}
-${sleepSummary || '  No data'}
+    sleep: [
+      '### Sleep (last 7 nights)',
+      `- 30-day avg: ${baselines.sleep != null ? fmtMin(baselines.sleep) : '–'}`,
+      ...sleepRows.map(r => `- ${r.datum}: ${r.slaap_minuten ? fmtMin(r.slaap_minuten) : '–'}${r.slaap_score != null ? `, score ${r.slaap_score}` : ''}${r.hrv_rmssd != null ? `, HRV ${r.hrv_rmssd} ms` : ''}`),
+    ].join('\n'),
 
-### Training load (last 7d)
-${loadLine}
+    trainingLoad: `### Training load (last 7d)\n${loadLine}`,
 
-### Recent sessions (last 5)
-${recentActivities || '  No activities'}
+    activities: [
+      '### Recent sessions (last 5)',
+      ...activities.slice(0, 5).map(a => `- ${a.start_date?.slice(0, 10)} ${a.sport_type ?? ''} "${a.name ?? ''}" — ${Math.round((a.moving_time ?? 0) / 60)} min${a.distance ? `, ${(a.distance / 1000).toFixed(1)} km` : ''}`),
+    ].join('\n'),
 
-### Muscle recovery (strength)
-${muscleSummary}
+    muscle: [
+      '### Muscle recovery',
+      ...muscle.map(m => `- ${m.label}: ${m.recovery}% → ${m.recommendation}`),
+    ].join('\n'),
 
-### Nutrition today
-- Calories: ${Math.round(totalKcal)} kcal${targetKcal ? ` / ${targetKcal} kcal target` : ''}
-- Protein: ${Math.round(totalProtein)}g${targetProtein ? ` / ${Math.round(targetProtein)}g target` : ''}
+    nutrition: [
+      '### Nutrition today',
+      `- Calories: ${Math.round(totalKcal)} kcal${targetKcal ? ` / ${targetKcal} kcal` : ''}`,
+      `- Protein: ${Math.round(totalProtein)}g${targetProtein ? ` / ${Math.round(targetProtein)}g` : ''}`,
+    ].join('\n'),
 
-### Upcoming calendar events
-${upcomingEvents || '  None'}
+    calendar: [
+      '### Upcoming events',
+      ...calendarEvents.filter(e => (e.start_datetime || e.start_date || '') >= today).slice(0, 5).map(e => `- ${(e.start_datetime || e.start_date || '').slice(0, 10)} ${e.title}`),
+    ].join('\n'),
+  }
+}
 
----
-## User message
-${userMessage}`
+function selectContext(question: string, s: Sections): string {
+  const q          = question.toLowerCase()
+  const isSleep    = /slaap|sleep|moe|tired|nacht|rust/.test(q)
+  const isFood     = /eten|food|eiwit|protein|kcal|macro|lunch|ontbijt|diner/.test(q)
+  const isTraining = /training|workout|loop|fiets|rit|run|interval|schema|sessie|sport/.test(q)
+  const isRecovery = /herstel|recovery|hrv|hartslag|rhr|readiness/.test(q)
+  const isComplex  = !isSleep && !isFood && !isTraining && !isRecovery
 
-  return `SYSTEM:\n${system}\n\nUSER:\n${context}`
+  return [
+    s.profile,
+    s.readiness,
+    (isSleep || isRecovery || isComplex) ? s.sleep : null,
+    (isRecovery || isComplex) ? s.muscle : null,
+    (isFood || isComplex) ? s.nutrition : null,
+    (isTraining || isComplex) ? s.trainingLoad : null,
+    (isTraining || isComplex) ? s.activities : null,
+    (isTraining || isComplex) ? s.calendar : null,
+  ].filter(Boolean).join('\n\n')
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CoachPage() {
-  const [message, setMessage] = useState('')
-  const [prompt, setPrompt]   = useState<string | null>(null)
-  const [answer, setAnswer]   = useState<string | null>(null)
-  const [copied, setCopied]   = useState(false)
+  const [message, setMessage]       = useState('')
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [streaming, setStreaming]   = useState(false)
+  const [streamText, setStreamText] = useState('')
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   const today = new Date().toISOString().slice(0, 10)
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
@@ -342,78 +302,114 @@ export default function CoachPage() {
   const recs           = buildRecs(healthRows, activities, hevy, calendarEvents, foodForRecs)
   const hasData        = healthRows.length > 0 || activities.length > 0
 
-  function handleSend() {
-    if (!message.trim()) return
-    const direct = tryDirectAnswer(message, healthRows, activities, hevy, foodForRecs)
-    if (direct) {
-      setAnswer(direct)
-      setPrompt(null)
-    } else {
-      const full = buildPrompt(message, goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
-      setPrompt(full)
-      setAnswer(null)
-    }
-    setMessage('')
-  }
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, streamText])
 
-  async function copyPrompt() {
-    if (!prompt) return
-    await navigator.clipboard.writeText(prompt)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  async function handleSend() {
+    if (!message.trim() || streaming) return
+    const q = message.trim()
+    setMessage('')
+
+    // Direct answers skip the API entirely
+    const direct = tryDirectAnswer(q, healthRows, activities, hevy, foodForRecs)
+    if (direct) {
+      setChatMessages(prev => [...prev, { role: 'user', content: q }, { role: 'assistant', content: direct, direct: true }])
+      return
+    }
+
+    // Build context for this question only
+    const sections = buildSections(goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
+    const context  = selectContext(q, sections)
+
+    const updated = [...chatMessages, { role: 'user' as const, content: q }]
+    setChatMessages(updated)
+    setStreaming(true)
+    setStreamText('')
+
+    try {
+      // Context goes into the first user message (cached), subsequent turns are plain text
+      const apiMessages = updated.map((msg, i) => {
+        if (i === 0 && msg.role === 'user') {
+          return {
+            role: 'user' as const,
+            content: [
+              { type: 'text' as const, text: `## User context\n\n${context}`, cache_control: { type: 'ephemeral' as const } },
+              { type: 'text' as const, text: msg.content },
+            ],
+          }
+        }
+        return { role: msg.role, content: msg.content }
+      })
+
+      const resp = await fetch('/api/coach/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: apiMessages }),
+      })
+      if (!resp.ok) throw new Error(await resp.text())
+
+      const reader  = resp.body!.getReader()
+      const decoder = new TextDecoder()
+      let full = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        full += decoder.decode(value, { stream: true })
+        setStreamText(full)
+      }
+      setChatMessages(prev => [...prev, { role: 'assistant', content: full }])
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Er is iets misgegaan — probeer het opnieuw.' }])
+    } finally {
+      setStreaming(false)
+      setStreamText('')
+    }
   }
 
   return (
     <PremiumScreen title="Coach" subtitle="Objective recommendations" contentGap={18}>
 
-      {/* Recs */}
+      {/* Recommendations */}
       {hasData ? (
-        recs.length > 0 ? (
-          recs.map((rec, i) => <CoachRecommendation key={i} rank={String(i + 1).padStart(2, '0')} title={rec.title} text={rec.text} />)
-        ) : (
-          <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-            <p className="text-[15px] text-white/40">All signals look good — no specific actions needed today.</p>
-          </div>
-        )
+        recs.length > 0
+          ? recs.map((rec, i) => <CoachRecommendation key={i} rank={String(i + 1).padStart(2, '0')} title={rec.title} text={rec.text} />)
+          : <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <p className="text-[15px] text-white/40">All signals look good — no specific actions needed today.</p>
+            </div>
       ) : (
         <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <p className="text-[15px] text-white/40">Connect Fitbit and log training to see personalised recommendations.</p>
         </div>
       )}
 
-      {/* Direct answer */}
-      {answer && (
-        <div className="rounded-[18px] border border-white/[0.1] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
-            <span className="text-[12px] font-semibold text-teal-400/80 uppercase tracking-[0.10em]">Direct answer</span>
-            <button onClick={() => setAnswer(null)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <X size={14} className="text-white/50" />
-            </button>
-          </div>
-          <pre className="px-4 py-4 text-[14px] text-white/80 leading-relaxed overflow-x-auto whitespace-pre-wrap font-sans">
-            {answer}
-          </pre>
-        </div>
-      )}
-
-      {/* Prompt debug view */}
-      {prompt && (
-        <div className="rounded-[18px] border border-white/[0.1] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
-            <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.10em]">Prompt that would be sent</span>
-            <div className="flex items-center gap-2">
-              <button onClick={copyPrompt} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-colors" style={{ background: 'rgba(255,255,255,0.08)', color: copied ? '#4ade80' : 'rgba(255,255,255,0.6)' }}>
-                {copied ? <Check size={13} /> : <Copy size={13} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-              <button onClick={() => setPrompt(null)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <X size={14} className="text-white/50" />
-              </button>
+      {/* Chat history */}
+      {chatMessages.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {chatMessages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className="max-w-[85%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+                style={msg.role === 'user'
+                  ? { background: 'rgba(255,255,255,0.13)', color: 'white' }
+                  : { background: msg.direct ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.08)' }
+                }
+              >
+                {msg.content}
+              </div>
             </div>
-          </div>
-          <pre className="px-4 py-4 text-[12px] text-white/60 leading-relaxed overflow-x-auto whitespace-pre-wrap font-mono">
-            {prompt}
-          </pre>
+          ))}
+
+          {/* Streaming bubble */}
+          {streaming && (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+                style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {streamText || <Loader2 size={16} className="animate-spin text-white/40" />}
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
         </div>
       )}
 
@@ -432,9 +428,12 @@ export default function CoachPage() {
           onClick={handleSend}
           aria-label="Send message"
           className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 disabled:opacity-30"
-          disabled={!message.trim()}
+          disabled={!message.trim() || streaming}
         >
-          <ArrowUp size={20} className="text-black" strokeWidth={2.5} />
+          {streaming
+            ? <Loader2 size={20} className="text-black animate-spin" />
+            : <ArrowUp size={20} className="text-black" strokeWidth={2.5} />
+          }
         </button>
       </div>
     </PremiumScreen>
