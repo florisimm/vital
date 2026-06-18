@@ -14,6 +14,7 @@ export type Advice = {
   targetSpeed: number | null  // cycling: km/h
   zone: string
   basis: string
+  progressionRate: number | null  // learned % per session (null = no history)
 }
 
 export type ComputeAdviceResult = {
@@ -70,6 +71,14 @@ function weeklyAvgKm(acts: any[]): number {
   return nonZero.length ? Math.round(nonZero.reduce((s, w) => s + w, 0) / nonZero.length) : 0
 }
 
+// Km done in the current rolling 7-day window
+function weeklyKmNow(acts: any[]): number {
+  const lo = Date.now() - 7 * 86400000
+  return acts
+    .filter(a => new Date(a.start_date).getTime() >= lo)
+    .reduce((s, a) => s + (a.distance ?? 0) / 1000, 0)
+}
+
 // Days since most recent matching-sport activity
 function daysSinceLast(acts: any[]): number {
   if (!acts.length) return 99
@@ -107,6 +116,40 @@ function detectTrainingType(title: string, acts: any[]): TrainingType {
   return 'zone2'
 }
 
+// Classify a historical Strava activity into a training type using HR + duration.
+// Used to find past sessions of the same type for progressive overload.
+function classifyActivityType(a: any, sport: SportType): TrainingType {
+  const minDur = (a.moving_time ?? 0) / 60
+  const hr = a.average_heartrate ?? 0
+  const hrPct = hr > 0 ? hr / 190 : 0 // HRmax default 190
+
+  if (minDur < 28) return 'herstel'
+  if (hrPct > 0.88) return 'interval'
+  if (hrPct > 0.80) return 'tempo'
+  if (sport === 'running' && minDur > 85) return 'lang'
+  if (sport === 'cycling' && minDur > 120) return 'lang'
+  return 'zone2'
+}
+
+// Linear regression on session durations (sorted oldest→newest).
+// Returns learned progression rate per session as a fraction.
+// Clamped to [-5%, +10%].
+function computeProgressionRate(sessions: any[]): number {
+  const durations = sessions.map(a => (a.moving_time ?? 0) / 60).filter(d => d > 5)
+  if (durations.length < 3) return 0 // not enough data
+  const n = durations.length
+  const xMean = (n - 1) / 2
+  const yMean = durations.reduce((s, v) => s + v, 0) / n
+  let num = 0, den = 0
+  for (let i = 0; i < n; i++) {
+    num += (i - xMean) * (durations[i] - yMean)
+    den += (i - xMean) ** 2
+  }
+  const slope = den > 0 ? num / den : 0
+  const ratePerSession = yMean > 0 ? slope / yMean : 0
+  return Math.max(-0.05, Math.min(0.10, ratePerSession))
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DURATION: Record<TrainingType, Record<UserLevel, number>> = {
@@ -115,6 +158,15 @@ const DURATION: Record<TrainingType, Record<UserLevel, number>> = {
   tempo:    { beginner: 30, intermediate: 40, advanced: 50  },
   interval: { beginner: 35, intermediate: 45, advanced: 55  },
   lang:     { beginner: 55, intermediate: 80, advanced: 110 },
+}
+
+// Default progression rate per session (used until enough history to learn from)
+const DEFAULT_PROGRESSION: Record<TrainingType, number> = {
+  herstel:  0,
+  zone2:    0.07,
+  tempo:    0.05,
+  interval: 0.03,
+  lang:     0.05,
 }
 
 const RUN_PACE_OFFSET: Record<TrainingType, number> = {
@@ -147,7 +199,6 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
   const matching = activities.filter(a => matchesSport(a, sport))
   const activityCount = matching.length
 
-  // strength/other never show the sparse-data banner: they don't use Strava volume.
   const isPersonalized = (sport === 'running' || sport === 'cycling')
     ? activityCount >= 3
     : true
@@ -156,9 +207,57 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
   const userLevel = determineUserLevel(matching, sport)
   const wkly = weeklyAvgKm(matching)
 
+  // Base duration from level matrix
   let durationMin = DURATION[trainingType][userLevel]
-  if (wkly > 60 && trainingType !== 'herstel') durationMin = Math.round(durationMin * 1.1)
-  if (wkly > 0 && wkly < 20 && trainingType !== 'herstel') durationMin = Math.round(durationMin * 0.9)
+  let progressionRate: number | null = null
+  let progressBasis = ''
+
+  if (trainingType !== 'herstel' && matching.length >= 2) {
+    // Find previous sessions of the same type (sorted oldest→newest, last 8)
+    const sameSessions = matching
+      .filter(a => classifyActivityType(a, sport) === trainingType)
+      .sort((a: any, b: any) => a.start_date.localeCompare(b.start_date))
+      .slice(-8)
+
+    const lastSession = sameSessions[sameSessions.length - 1]
+    const lastDur = lastSession ? (lastSession.moving_time ?? 0) / 60 : 0
+
+    if (lastDur > 10) {
+      // Safety gate: already elevated volume this week → hold current level
+      const thisWeekKm = weeklyKmNow(matching)
+      const overloaded = wkly > 0 && thisWeekKm > wkly * 1.15
+
+      if (overloaded) {
+        durationMin = Math.round(lastDur)
+        progressionRate = 0
+        progressBasis = `Belasting hoog (${Math.round(thisWeekKm)} km deze week vs gem. ${wkly} km) — zelfde als vorige sessie`
+      } else {
+        // Compute learned rate from history, fall back to default
+        const learnedRate = sameSessions.length >= 3 ? computeProgressionRate(sameSessions) : null
+        const effectiveRate = learnedRate !== null
+          ? Math.max(learnedRate, DEFAULT_PROGRESSION[trainingType] * 0.5) // floor at half default
+          : DEFAULT_PROGRESSION[trainingType]
+
+        durationMin = Math.round(lastDur * (1 + effectiveRate))
+        progressionRate = effectiveRate
+
+        const pctStr = `+${Math.round(effectiveRate * 100)}%`
+        if (learnedRate !== null && sameSessions.length >= 3) {
+          progressBasis = `Geleerd: ${pctStr}/sessie van je laatste ${sameSessions.length} ${TYPE_LABEL[trainingType].toLowerCase()} sessies`
+        } else {
+          progressBasis = `Progressie: ${pctStr} t.o.v. je vorige ${TYPE_LABEL[trainingType].toLowerCase()} (${Math.round(lastDur)} min)`
+        }
+      }
+    } else {
+      // No usable same-type history — use matrix + volume adjustment
+      if (wkly > 60) durationMin = Math.round(durationMin * 1.1)
+      if (wkly > 0 && wkly < 20) durationMin = Math.round(durationMin * 0.9)
+    }
+  } else if (trainingType !== 'herstel') {
+    // Fewer than 2 activities total — plain matrix with volume adjustment
+    if (wkly > 60) durationMin = Math.round(durationMin * 1.1)
+    if (wkly > 0 && wkly < 20) durationMin = Math.round(durationMin * 0.9)
+  }
 
   const zone = ZONE[trainingType]
   const levelLabel = userLevel.charAt(0).toUpperCase() + userLevel.slice(1)
@@ -173,17 +272,19 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
     const targetPace = `${paceMin}:${paceSec.toString().padStart(2, '0')}`
     const targetKm = Math.round((durationMin / (targetSecPerKm / 60)) * 10) / 10
     const parts = [`${TYPE_LABEL[trainingType]} · ${durationMin} min`, levelLabel]
-    if (wkly) parts.push(`~${wkly} km/week`)
-    advice = { sport, trainingType, userLevel, durationMin, targetKm, targetPace, targetSpeed: null, zone, basis: parts.join(' · ') }
+    if (progressBasis) parts.push(progressBasis)
+    else if (wkly) parts.push(`~${wkly} km/week`)
+    advice = { sport, trainingType, userLevel, durationMin, targetKm, targetPace, targetSpeed: null, zone, basis: parts.join(' · '), progressionRate }
   } else if (sport === 'cycling') {
     const baseSpeedKmh = matching.length ? avgSpeedKmh(matching) : 25
     const targetSpeed = Math.max(10, Math.round(baseSpeedKmh * CYCLE_SPEED_FACTOR[trainingType]))
     const targetKm = Math.round((durationMin / 60) * targetSpeed * 10) / 10
     const parts = [`${TYPE_LABEL[trainingType]} · ${durationMin} min`, levelLabel]
-    if (wkly) parts.push(`~${wkly} km/week`)
-    advice = { sport, trainingType, userLevel, durationMin, targetKm, targetPace: null, targetSpeed, zone, basis: parts.join(' · ') }
+    if (progressBasis) parts.push(progressBasis)
+    else if (wkly) parts.push(`~${wkly} km/week`)
+    advice = { sport, trainingType, userLevel, durationMin, targetKm, targetPace: null, targetSpeed, zone, basis: parts.join(' · '), progressionRate }
   } else {
-    advice = { sport, trainingType: 'zone2', userLevel: 'beginner', durationMin: 0, targetKm: 0, targetPace: null, targetSpeed: null, zone: '–', basis: '–' }
+    advice = { sport, trainingType: 'zone2', userLevel: 'beginner', durationMin: 0, targetKm: 0, targetPace: null, targetSpeed: null, zone: '–', basis: '–', progressionRate: null }
   }
 
   return { advice, isPersonalized, activityCount }
