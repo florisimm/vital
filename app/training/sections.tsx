@@ -2788,7 +2788,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     if (focus.action === 'Rest & recover' || focus.action === 'Recovery day') return 'Rest & recover'
     if (readinessPct < 50) return 'Rest — prioritise recovery'
     if (readinessPct < 65) return 'Take it easy today'
-    return 'Good work — you\'re on track'
+    return toSimpleLabel()
   }
 
   const headline = simplified
@@ -2830,7 +2830,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
             </div>
             <div className="flex flex-col gap-2 flex-1 min-w-0">
               <span className="text-[22px] font-bold text-white leading-[1.12] tracking-[-0.01em]">{headline}</span>
-              {isRestAdvice ? null : isDone ? (
+              {isRestAdvice ? null : isDone && (focus.action === 'Rest & recover' || focus.action === 'Recovery day') ? (
                 <span className="self-start inline-flex items-center gap-1 pl-2 pr-2.5 py-[3px] rounded-full text-[11px] font-bold"
                   style={{ background: 'rgba(74,222,128,0.16)', color: '#4ade80' }}>
                   <Check size={11} strokeWidth={3.5} /> Done
