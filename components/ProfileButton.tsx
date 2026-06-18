@@ -5,6 +5,7 @@ import useSWR, { mutate } from 'swr'
 import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { computeAdvice } from '@/lib/training-algorithm'
 
 type Services = { strava: boolean; hevy: boolean; google: boolean; fitbit: boolean }
 type Units = 'metric' | 'imperial'
@@ -69,6 +70,7 @@ export function ProfileButton() {
   const [activeSport, setActiveSport] = useState<string | null>(null)
   const [weeklyDoneIdx, setWeeklyDoneIdx] = useState<Record<string, number[]>>({})
   const [personalZones, setPersonalZones] = useState<Record<string, { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }>>({})
+  const [sportActivities, setSportActivities] = useState<any[]>([])
   const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
   const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
   const dragGoalKeyRef = useRef<string | null>(null)
@@ -488,11 +490,11 @@ export function ProfileButton() {
       return 0                                              // Easy run: default
     }
 
-    // Classify a cycling activity to a template index (0=Endurance, 1=FTP, 2=Recovery, 3=VO2, 4=Long)
+    // Classify a cycling activity to a template index (0=Endurance, 1=FTP, 2=Long, 3=Recovery, 4=VO2)
     function classifyRide(speed: number, dur: number): number {
-      if (dur >= 5400) return 4                            // Long ride: 90+ min
-      if (dur < 2700) return 2                             // Recovery: under 45 min
-      if (speed * 3.6 >= 32) return 3                     // VO2max: 32km/h+
+      if (dur >= 5400) return 2                            // Long ride: 90+ min
+      if (dur < 2700) return 3                             // Recovery: under 45 min
+      if (speed * 3.6 >= 32) return 4                     // VO2max: 32km/h+
       if (speed * 3.6 >= 26 && dur < 4500) return 1      // FTP: 26km/h+ and under 75 min
       return 0                                              // Endurance: default
     }
@@ -557,11 +559,13 @@ export function ProfileButton() {
       }
       const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
       supabase.from('strava_activities')
-        .select('average_speed, average_heartrate, moving_time, distance')
+        .select('average_speed, average_heartrate, moving_time, distance, start_date, sport_type')
         .eq('user_id', userId)
         .gte('start_date', sixtyDaysAgo)
         .in('sport_type', sportTypes[activeSport] ?? [])
+        .order('start_date', { ascending: false })
         .then(({ data }) => {
+          setSportActivities(data ?? [])
           const withHR = (data ?? []).filter(a => a.average_heartrate && a.average_speed)
           if (withHR.length < 3) return
 
@@ -603,7 +607,7 @@ export function ProfileButton() {
   type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string }
   type Zones = { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }
 
-  function getSessionTemplates(sport: string, freq: number, zones?: Zones): SessionTemplate[] {
+  function getSessionTemplates(sport: string, freq: number, zones?: Zones, activities?: any[]): SessionTemplate[] {
     const n = Math.max(1, Math.min(freq, 7))
 
     const kmh = (mps: number | null | undefined) => mps ? `${Math.round(mps * 3.6)} km/h` : null
@@ -614,16 +618,25 @@ export function ProfileButton() {
     }
     const km = (m: number | null | undefined) => m ? `${Math.round(m / 1000)} km` : null
 
+    // Compute session duration from user history via the training algorithm
+    const dur = (title: string): string => {
+      if (!activities?.length || (sport !== 'running' && sport !== 'cycling')) return '–'
+      const res = computeAdvice(sport as any, activities, title.replace(/\+/g, ' '))
+      return `${res.advice.durationMin} min`
+    }
+
     if (sport === 'running') {
       const z2Pace  = pace(zones?.z2Speed)
       const thrPace = pace(zones?.thresholdSpeed)
       const longKm  = km(zones?.longDist)
+      // Polarized order: Easy(0) → Intervals(1) → Long(2) → Tempo(3) → Hills(4)
+      // Matches classifyRun indices so done-detection works correctly.
       const all: SessionTemplate[] = [
-        { title: 'Easy run',          subtitle: z2Pace ? `Zone 2 — ${z2Pace} — conversational pace` : 'Zone 2 aerobic — conversational pace',                      duration: '40–50 min', emoji: '🏃', href: '/training/session?title=Easy+Run' },
-        { title: 'Interval training', subtitle: thrPace ? `5×1 km at ${thrPace} — VO2max boost` : '5×1 km at 5K pace — VO2max boost',                              duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Running+Intervals' },
-        { title: 'Long run',          subtitle: longKm ? `Slow & steady — target ${longKm}` : 'Slow & steady — builds endurance base',                             duration: '60–90 min', emoji: '🛣️', href: '/training/session?title=Long+Run' },
-        { title: 'Tempo run',         subtitle: thrPace ? `Comfortably hard — ${thrPace} — lactate threshold` : 'Comfortably hard — lactate threshold',             duration: '35–45 min', emoji: '🔥', href: '/training/session?title=Tempo+Run' },
-        { title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',                                                                              duration: '40–50 min', emoji: '⛰️', href: '/training/session?title=Hill+Repeats' },
+        { title: 'Easy run',          subtitle: z2Pace  ? `Zone 2 — ${z2Pace} — conversational pace`          : 'Zone 2 aerobic — conversational pace',    emoji: '🏃', href: '/training/session?title=Easy+Run',           duration: dur('Easy Run') },
+        { title: 'Interval training', subtitle: thrPace ? `5×1 km at ${thrPace} — VO2max boost`                : '5×1 km at 5K pace — VO2max boost',        emoji: '⚡', href: '/training/session?title=Running+Intervals', duration: dur('Running Intervals') },
+        { title: 'Long run',          subtitle: longKm  ? `Slow & steady — target ${longKm}`                  : 'Slow & steady — builds endurance base',   emoji: '🛣️', href: '/training/session?title=Long+Run',           duration: dur('Long Run') },
+        { title: 'Tempo run',         subtitle: thrPace ? `Comfortably hard — ${thrPace} — lactate threshold` : 'Comfortably hard — lactate threshold',    emoji: '🔥', href: '/training/session?title=Tempo+Run',          duration: dur('Tempo Run') },
+        { title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',                                                                       emoji: '⛰️', href: '/training/session?title=Hill+Repeats',       duration: dur('Hill Repeats') },
       ]
       return all.slice(0, n)
     }
@@ -631,12 +644,15 @@ export function ProfileButton() {
       const z2Kmh  = kmh(zones?.z2Speed)
       const thrKmh = kmh(zones?.thresholdSpeed)
       const longKm = km(zones?.longDist)
+      // Polarized order: Endurance(0) → FTP(1) → Long(2) → Recovery(3) → VO2(4)
+      // VO2max only appears at 5×+ so hard sessions stay ≤25% of volume.
+      // Matches updated classifyRide indices so done-detection works correctly.
       const all: SessionTemplate[] = [
-        { title: 'Endurance ride', subtitle: z2Kmh  ? `Zone 2 — ${z2Kmh} — fat metabolism & aerobic base`     : 'Zone 2 — fat metabolism & aerobic base',     duration: '60–90 min',  emoji: '🚴', href: '/training/session?title=Endurance+Ride' },
-        { title: 'FTP intervals',  subtitle: thrKmh ? `3×10 min at ${thrKmh} — raise FTP`                      : '3×10 min threshold — raise FTP',             duration: '55–65 min',  emoji: '⚡', href: '/training/session?title=FTP+Intervals' },
-        { title: 'Recovery ride',  subtitle: z2Kmh  ? `Easy spin onder ${z2Kmh} — flush legs`                  : 'Easy spin — flush legs & recover',           duration: '30–45 min',  emoji: '🌱', href: '/training/session?title=Recovery+Ride' },
-        { title: 'VO₂max effort',  subtitle: thrKmh ? `5×3 min boven ${thrKmh} — aerobic ceiling`              : '5×3 min at 110% FTP — aerobic ceiling',      duration: '50–60 min',  emoji: '🔥', href: '/training/session?title=VO2max+Cycling' },
-        { title: 'Long ride',      subtitle: longKm ? `Steady endurance — target ${longKm}`                     : 'Steady endurance — big aerobic volume',      duration: '90–120 min', emoji: '🛣️', href: '/training/session?title=Long+Ride' },
+        { title: 'Endurance ride', subtitle: z2Kmh  ? `Zone 2 — ${z2Kmh} — fat metabolism & aerobic base` : 'Zone 2 — fat metabolism & aerobic base',   emoji: '🚴', href: '/training/session?title=Endurance+Ride', duration: dur('Endurance Ride') },
+        { title: 'FTP intervals',  subtitle: thrKmh ? `3×10 min at ${thrKmh} — raise FTP`                : '3×10 min threshold — raise FTP',             emoji: '⚡', href: '/training/session?title=FTP+Intervals',  duration: dur('FTP Intervals') },
+        { title: 'Long ride',      subtitle: longKm ? `Steady endurance — target ${longKm}`              : 'Steady endurance — big aerobic volume',      emoji: '🛣️', href: '/training/session?title=Long+Ride',       duration: dur('Long Ride') },
+        { title: 'Recovery ride',  subtitle: z2Kmh  ? `Easy spin onder ${z2Kmh} — flush legs`            : 'Easy spin — flush legs & recover',           emoji: '🌱', href: '/training/session?title=Recovery+Ride',  duration: dur('Recovery Ride') },
+        { title: 'VO₂max effort',  subtitle: thrKmh ? `5×3 min boven ${thrKmh} — aerobic ceiling`        : '5×3 min at 110% FTP — aerobic ceiling',      emoji: '🔥', href: '/training/session?title=VO2max+Cycling', duration: dur('VO2max Cycling') },
       ]
       return all.slice(0, n)
     }
@@ -1005,7 +1021,7 @@ export function ProfileButton() {
                 }
                 const meta = SPORT_META[activeSport]
                 const freq = trainingFrequencies[activeSport] ?? 0
-                const templates = getSessionTemplates(activeSport, freq, personalZones[activeSport])
+                const templates = getSessionTemplates(activeSport, freq, personalZones[activeSport], sportActivities)
                 return (
                   <div className="absolute inset-0 z-20 flex flex-col"
                     style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
