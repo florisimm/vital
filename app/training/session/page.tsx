@@ -11,6 +11,7 @@ import {
   detectSport, computeAdvice, TYPE_LABEL, TYPE_COLOR,
   type SportType, type Advice, type ComputeAdviceResult,
 } from '@/lib/training-algorithm'
+import { computeRecoveryDetail } from '../sections'
 
 const RouteMap = dynamic(() => import('./RouteMap').then(m => m.RouteMap), { ssr: false })
 
@@ -361,6 +362,7 @@ function SessionContent() {
   const time = params.get('time')
   const sport = detectSport(title)
   const [result, setResult] = useState<ComputeAdviceResult | null>(null)
+  const [recoveryPct, setRecoveryPct] = useState<number | null>(null)
 
   const timeLabel = time ? formatClockTime(new Date(time)) : null
 
@@ -369,14 +371,34 @@ function SessionContent() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+
       const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
-      const { data: activities } = await supabase
-        .from('strava_activities')
-        .select('sport_type,distance,moving_time,average_speed,average_heartrate,start_date')
-        .eq('user_id', user.id)
-        .gte('start_date', sixtyDaysAgo)
-        .order('start_date', { ascending: false })
-      setResult(computeAdvice(sport, activities ?? [], title))
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+
+      const [{ data: activities }, { data: settings }, { data: hevy }] = await Promise.all([
+        supabase
+          .from('strava_activities')
+          .select('sport_type,distance,moving_time,average_speed,average_heartrate,start_date')
+          .eq('user_id', user.id)
+          .gte('start_date', sixtyDaysAgo)
+          .order('start_date', { ascending: false }),
+        supabase
+          .from('user_settings')
+          .select('training_intensity,age')
+          .eq('user_id', user.id)
+          .single(),
+        supabase
+          .from('hevy_workouts')
+          .select('id,title,start_time,end_time,duration,volume_kg,sets')
+          .eq('user_id', user.id)
+          .gte('start_time', sevenDaysAgo),
+      ])
+
+      const intensity = settings?.training_intensity ?? 'moderate'
+      const maxHr = settings?.age ? Math.round(208 - 0.7 * settings.age) : null
+      const recovery = computeRecoveryDetail(activities ?? [], hevy ?? [], maxHr)
+      setRecoveryPct(recovery.pct)
+      setResult(computeAdvice(sport, activities ?? [], title, intensity, recovery.pct))
     }
     load()
   }, [sport, title])
@@ -408,6 +430,18 @@ function SessionContent() {
           </div>
         </div>
       </div>
+
+      {/* Recovery warning banner */}
+      {recoveryPct !== null && recoveryPct < 65 && (
+        <div className="mb-5 rounded-[14px] px-4 py-3 flex items-start gap-3"
+          style={{ background: recoveryPct < 50 ? 'rgba(239,68,68,0.15)' : 'rgba(251,146,60,0.15)', border: `1px solid ${recoveryPct < 50 ? 'rgba(239,68,68,0.3)' : 'rgba(251,146,60,0.3)'}` }}>
+          <span className="text-[18px] leading-none mt-0.5">{recoveryPct < 50 ? '🔴' : '🟠'}</span>
+          <div>
+            <p className="text-[14px] font-semibold text-white">{recoveryPct < 50 ? 'Low recovery — consider resting' : 'Partial recovery — take it easier'}</p>
+            <p className="text-[13px] text-white/50 mt-0.5">Recovery {recoveryPct}% · Duration shortened to reflect your current fatigue</p>
+          </div>
+        </div>
+      )}
 
       {!result ? (
         <div className="flex flex-col gap-4">

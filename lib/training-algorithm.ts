@@ -204,7 +204,9 @@ export const TYPE_COLOR: Record<TrainingType, string> = {
 
 // ─── Core algorithm ───────────────────────────────────────────────────────────
 
-export function computeAdvice(sport: SportType, activities: any[], title: string): ComputeAdviceResult {
+const INTENSITY_SCALE: Record<string, number> = { easy: 0.9, moderate: 1.0, hard: 1.1, all_out: 1.2 }
+
+export function computeAdvice(sport: SportType, activities: any[], title: string, intensity?: string, recoveryPct?: number): ComputeAdviceResult {
   const matching = activities.filter(a => matchesSport(a, sport))
   const activityCount = matching.length
 
@@ -266,6 +268,17 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
     // Fewer than 2 activities total — plain matrix with volume adjustment
     if (wkly > 60) durationMin = Math.round(durationMin * 1.1)
     if (wkly > 0 && wkly < 20) durationMin = Math.round(durationMin * 0.9)
+  }
+
+  // Scale duration by intensity preference (herstel sessions are never stretched)
+  if (trainingType !== 'herstel' && intensity && INTENSITY_SCALE[intensity]) {
+    durationMin = Math.round(durationMin * INTENSITY_SCALE[intensity])
+  }
+
+  // Scale down when recovery is poor — always applied regardless of intensity
+  if (recoveryPct !== undefined && recoveryPct < 65) {
+    const recoveryScale = recoveryPct < 50 ? 0.8 : 0.9
+    durationMin = Math.round(durationMin * recoveryScale)
   }
 
   const zone = ZONE[trainingType]

@@ -621,7 +621,7 @@ export function ProfileButton() {
     // Compute session duration from user history via the training algorithm
     const dur = (title: string): string => {
       if (!activities?.length || (sport !== 'running' && sport !== 'cycling')) return '–'
-      const res = computeAdvice(sport as any, activities, title.replace(/\+/g, ' '))
+      const res = computeAdvice(sport as any, activities, title.replace(/\+/g, ' '), intensity)
       return `${res.advice.durationMin} min`
     }
 
