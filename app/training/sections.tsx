@@ -6,6 +6,7 @@ import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity as ActivityIcon, Calendar, Check, ArrowRight } from 'lucide-react'
 import { Card, SectionHeader } from '@/components/ui'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
+import { computeAdvice } from '@/lib/training-algorithm'
 import {
   type Activity, type HevyWorkout,
   isRun, isRide, isSwim, isWeightTraining, isCycling,
@@ -4081,43 +4082,22 @@ function SwimmingPaceTrendCard({ pace }: { pace: ReturnType<typeof computeSwimmi
 
 // ─── Running ──────────────────────────────────────────────────────────────────
 
-function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntensity = 'moderate' }: {
-  readinessPct: number; suggestion: string; activities: Activity[]; trainingIntensity?: string
+function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntensity = 'moderate', recoveryPct }: {
+  readinessPct: number; suggestion: string; activities: Activity[]; trainingIntensity?: string; recoveryPct?: number
 }) {
   const c = readinessPct >= 85 ? '#4ade80' : readinessPct >= 70 ? '#facc15' : '#fb923c'
   const trend = computeRunning7DayTrend(activities)
   const allRuns = activities.filter(isRun).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRun = allRuns[0]
   const hoursSince = lastRun ? Math.round((Date.now() - new Date(lastRun.start_date).getTime()) / 3600000) : null
-
-  // Compute personal pace + distance from recent runs
-  const recentRuns = allRuns.slice(0, 6).filter(r => r.distance && r.moving_time && r.distance > 1000)
-  const avgPaceSec = recentRuns.length > 0
-    ? recentRuns.reduce((s, r) => s + r.moving_time! / (r.distance! / 1000), 0) / recentRuns.length
-    : null
+  const recentRuns = allRuns.slice(0, 6).filter(r => r.distance && r.distance > 1000)
   const avgDistKm = recentRuns.length > 0
-    ? recentRuns.reduce((s, r) => s + r.distance!, 0) / recentRuns.length / 1000
+    ? recentRuns.reduce((s, r) => s + (r.distance ?? 0), 0) / recentRuns.length / 1000
     : null
-  const distFactor = trainingIntensity === 'all_out' ? 1.25
-    : trainingIntensity === 'hard'    ? 1.10
-    : trainingIntensity === 'easy'    ? 0.75
-    : readinessPct >= 85 ? 1.05 : readinessPct >= 70 ? 1.0 : 0.70
-  const targetKm = avgDistKm
-    ? Math.max(1, Math.round(avgDistKm * distFactor * 2) / 2)
-    : (trainingIntensity === 'all_out' ? 14 : trainingIntensity === 'hard' ? 10 : trainingIntensity === 'easy' ? 5 : readinessPct >= 85 ? 9 : readinessPct >= 70 ? 7 : 4)
-  const paceMod = trainingIntensity === 'all_out' ? 0.88
-    : trainingIntensity === 'hard' ? 0.93
-    : trainingIntensity === 'easy' ? 1.12
-    : readinessPct >= 85 ? 0.95 : 1.08
-  const targetPaceSec = avgPaceSec ? avgPaceSec * paceMod : null
-  const paceStr = targetPaceSec
-    ? `${Math.floor(targetPaceSec / 60)}:${Math.round(targetPaceSec % 60).toString().padStart(2, '0')}/km`
-    : null
-  const zone = trainingIntensity === 'all_out' ? 'Zone 4–5'
-    : trainingIntensity === 'hard' ? 'Zone 3–4'
-    : trainingIntensity === 'easy' ? 'Zone 2'
-    : readinessPct >= 85 ? 'Zone 3–4' : 'Zone 2'
-  const specific = paceStr ? `${targetKm} km · ${paceStr} · ${zone}` : `${targetKm} km · ${zone}`
+
+  const { advice } = computeAdvice('running', activities as any[], suggestion, trainingIntensity, recoveryPct)
+  const paceStr = advice.targetPace ? `${advice.targetPace}/km` : null
+  const specific = paceStr ? `${advice.targetKm} km · ${paceStr} · ${advice.zone}` : `${advice.targetKm} km · ${advice.zone}`
 
   const reasons: string[] = []
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Last run ${hoursSince}h ago`)
@@ -4197,7 +4177,7 @@ export function RunningSection({ activities, hevy = [], todaySport = null, train
         <span className="text-[17px] font-semibold text-white">Running</span>
         <InjuryToggle sport="running" injuries={injuries} />
       </div>
-      <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} trainingIntensity={trainingIntensity} />
+      <RunningCoachCard readinessPct={readinessPct} suggestion={runningSuggestion} activities={activities} trainingIntensity={trainingIntensity} recoveryPct={recoveryDetail.pct} />
 
       {lastRun && <LastRunCard run={lastRun} allRuns={allRuns} />}
 
@@ -4280,42 +4260,22 @@ export function RunningSection({ activities, hevy = [], todaySport = null, train
 
 // ─── Cycling ──────────────────────────────────────────────────────────────────
 
-function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingIntensity = 'moderate' }: {
-  readinessPct: number; suggestion: string; activities: Activity[]; trainingIntensity?: string
+function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingIntensity = 'moderate', recoveryPct }: {
+  readinessPct: number; suggestion: string; activities: Activity[]; trainingIntensity?: string; recoveryPct?: number
 }) {
   const c = readinessPct >= 85 ? '#4ade80' : readinessPct >= 70 ? '#facc15' : '#fb923c'
   const allRides = activities.filter(isRide).sort((a, b) => b.start_date.localeCompare(a.start_date))
   const lastRide = allRides[0]
   const hoursSince = lastRide ? Math.round((Date.now() - new Date(lastRide.start_date).getTime()) / 3600000) : null
-
-  // Compute personal speed + distance from recent rides
-  const recentRides = allRides.slice(0, 6).filter(r => r.distance && r.moving_time && r.distance > 5000)
-  const avgSpeedMps = recentRides.length > 0
-    ? recentRides.reduce((s, r) => s + r.distance! / r.moving_time!, 0) / recentRides.length
-    : null
+  const recentRides = allRides.slice(0, 6).filter(r => r.distance && r.distance > 5000)
   const avgDistKm = recentRides.length > 0
-    ? recentRides.reduce((s, r) => s + r.distance!, 0) / recentRides.length / 1000
+    ? recentRides.reduce((s, r) => s + (r.distance ?? 0), 0) / recentRides.length / 1000
     : null
-  const avgSpeedKmh = avgSpeedMps ? avgSpeedMps * 3.6 : null
-  const distFactor = trainingIntensity === 'all_out' ? 1.30
-    : trainingIntensity === 'hard'    ? 1.15
-    : trainingIntensity === 'easy'    ? 0.75
-    : readinessPct >= 85 ? 1.05 : readinessPct >= 70 ? 1.0 : 0.70
-  const targetKm = avgDistKm
-    ? Math.max(5, Math.round(avgDistKm * distFactor / 5) * 5)
-    : (trainingIntensity === 'all_out' ? 70 : trainingIntensity === 'hard' ? 55 : trainingIntensity === 'easy' ? 25 : readinessPct >= 85 ? 50 : readinessPct >= 70 ? 35 : 20)
-  const speedMod = trainingIntensity === 'all_out' ? 1.10
-    : trainingIntensity === 'hard' ? 1.05
-    : trainingIntensity === 'easy' ? 0.90
-    : readinessPct >= 85 ? 1.05 : readinessPct >= 70 ? 0.95 : 0.85
-  const targetSpeedKmh = avgSpeedKmh ? avgSpeedKmh * speedMod : null
-  const zone = trainingIntensity === 'all_out' ? 'Zone 4–5'
-    : trainingIntensity === 'hard' ? 'Zone 3–4'
-    : trainingIntensity === 'easy' ? 'Zone 2'
-    : readinessPct >= 85 ? 'Zone 3–4' : readinessPct >= 70 ? 'Zone 2' : 'Zone 1'
-  const specific = targetSpeedKmh
-    ? `${targetKm} km · ${targetSpeedKmh.toFixed(0)} km/h · ${zone}`
-    : `${targetKm} km · ${zone}`
+
+  const { advice } = computeAdvice('cycling', activities as any[], suggestion, trainingIntensity, recoveryPct)
+  const specific = advice.targetSpeed
+    ? `${advice.targetKm} km · ${advice.targetSpeed} km/h · ${advice.zone}`
+    : `${advice.targetKm} km · ${advice.zone}`
 
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Last ride ${hoursSince}h ago`)
@@ -4381,7 +4341,7 @@ export function CyclingSection({ activities, hevy = [], todaySport = null, train
         <span className="text-[17px] font-semibold text-white">Cycling</span>
         <InjuryToggle sport="cycling" injuries={injuries} />
       </div>
-      <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} trainingIntensity={trainingIntensity} />
+      <CyclingAdviceCard readinessPct={readinessPct} suggestion={cyclingSuggestion} activities={activities} trainingIntensity={trainingIntensity} recoveryPct={recoveryDetail.pct} />
 
       {lastRide && <LastRideCard ride={lastRide} allRides={allRides} />}
 
