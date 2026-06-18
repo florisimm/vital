@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ArrowUp, Loader2, Trash2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowUp, ChevronLeft, Loader2, Trash2 } from 'lucide-react'
 
 const MAX_TURNS = 10
 import useSWR from 'swr'
-import { PremiumScreen } from '@/components/PremiumScreen'
 import { CoachRecommendation } from '@/components/ui'
 import {
   computePhysiologyReadiness, computeIllnessFlag, computeHRVBaseline, type HealthRow,
@@ -285,6 +285,7 @@ function selectContext(question: string, s: Sections): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CoachPage() {
+  const router = useRouter()
   const [message, setMessage]           = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [sessionContext, setSessionContext] = useState<string | null>(null)
@@ -381,7 +382,23 @@ export default function CoachPage() {
   }
 
   return (
-    <PremiumScreen title="Coach" subtitle="Objective recommendations" contentGap={18}>
+    <div
+      className="min-h-screen px-5"
+      style={{
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      }}
+    >
+      {/* Header */}
+      <div className="relative flex items-center justify-between mb-7">
+        <button onClick={() => router.back()} className="text-white/70 active:text-white">
+          <ChevronLeft size={22} strokeWidth={2.2} />
+        </button>
+        <span className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-white">Coach</span>
+        <div className="w-6" />
+      </div>
+
+      <div className="flex flex-col" style={{ gap: 18 }}>
 
       {/* Recommendations */}
       {hasData ? (
@@ -468,6 +485,8 @@ export default function CoachPage() {
           }
         </button>
       </div>
-    </PremiumScreen>
+
+      </div>
+    </div>
   )
 }
