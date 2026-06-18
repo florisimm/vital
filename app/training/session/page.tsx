@@ -360,7 +360,14 @@ function SessionContent() {
   const router = useRouter()
   const title = params.get('title') ?? 'Training'
   const time = params.get('time')
-  const sport = detectSport(title)
+  // Prefer an explicit sport from the linking card; fall back to title keywords.
+  // Titles like "All-out intervals" or "Threshold training" would otherwise be
+  // misdetected (interval→running, threshold→other), causing the session plan to
+  // disagree with the cycling/running advice card it was opened from.
+  const sportParam = params.get('sport') as SportType | null
+  const sport = (sportParam && ['cycling', 'running', 'strength', 'other'].includes(sportParam))
+    ? sportParam
+    : detectSport(title)
   const [result, setResult] = useState<ComputeAdviceResult | null>(null)
   const [recoveryPct, setRecoveryPct] = useState<number | null>(null)
 
@@ -384,7 +391,7 @@ function SessionContent() {
           .order('start_date', { ascending: false }),
         supabase
           .from('user_settings')
-          .select('training_intensity,age')
+          .select('training_intensity,age,max_hr')
           .eq('user_id', user.id)
           .single(),
         supabase
@@ -395,7 +402,7 @@ function SessionContent() {
       ])
 
       const intensity = settings?.training_intensity ?? 'moderate'
-      const maxHr = settings?.age ? Math.round(208 - 0.7 * settings.age) : null
+      const maxHr = settings?.max_hr ?? (settings?.age ? Math.round(208 - 0.7 * settings.age) : null)
       const recovery = computeRecoveryDetail((activities ?? []) as any[], (hevy ?? []) as any[], maxHr)
       setRecoveryPct(recovery.pct)
       setResult(computeAdvice(sport, activities ?? [], title, intensity, recovery.pct))

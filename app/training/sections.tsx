@@ -4129,7 +4129,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntens
         </div>
       </div>
 
-      <a href={`/training/session?title=${encodeURIComponent(suggestion)}`}
+      <a href={`/training/session?title=${encodeURIComponent(suggestion)}&sport=running`}
         className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-[14px] text-[14px] font-semibold text-teal-400 active:opacity-70"
         style={{ background: 'rgba(45,212,191,0.10)', border: '1px solid rgba(45,212,191,0.20)' }}>
         Bekijk sessie &amp; route →
@@ -4306,7 +4306,7 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingInten
         </div>
       </div>
 
-      <a href={`/training/session?title=${encodeURIComponent(suggestion)}`}
+      <a href={`/training/session?title=${encodeURIComponent(suggestion)}&sport=cycling`}
         className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-[14px] text-[14px] font-semibold text-cyan-400 active:opacity-70"
         style={{ background: 'rgba(34,211,238,0.10)', border: '1px solid rgba(34,211,238,0.20)' }}>
         Bekijk sessie &amp; route →
