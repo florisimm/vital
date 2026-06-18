@@ -11,7 +11,7 @@ import {
   TodaysPlanCard, startOfWeek,
   type Activity as TrainingActivity, type HevyWorkout as TrainingHevyWorkout,
 } from '@/app/training/sections'
-import { effectiveLoad, hevyLoad, isAccessorySession } from '@/lib/training-load'
+import { computeRampRate } from '@/lib/training-load'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -565,16 +565,8 @@ export default function TodayPage() {
 
     const now         = Date.now()
     const weekStart   = startOfWeek()
-    const sevenDaysAgo    = new Date(now - 7  * 86400000).toISOString()
-    const fourteenDaysAgo = new Date(now - 14 * 86400000).toISOString()
-    const acute7kj = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-      + hevy.filter(h => h.start_time >= sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
-    const prev7kj  = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a), 0)
-      + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
-    const rampRate = prev7kj > 5
-      ? Math.max(-100, Math.min(200, Math.round((acute7kj - prev7kj) / prev7kj * 100)))
-      : null
-    const acwrDetail = computeACWRDetail(activities, hevy, now, rampRate)
+    const rampRate    = computeRampRate(activities, hevy)
+    const acwrDetail  = computeACWRDetail(activities, hevy, now, rampRate)
 
     const weekActivities = activities.filter(a => a.start_date >= weekStart)
     const weekHevy       = hevy.filter(h => h.start_time >= weekStart)

@@ -180,10 +180,10 @@ export function isAccessorySession(h: HevyWorkout): boolean {
 // Export keyword constants for exercises
 export { COMPOUND_KEYWORDS, ISOLATION_KEYWORDS, RECOVERY_TITLE_KEYWORDS, ACCESSORY_TITLE_KEYWORDS }
 
-// Ramp rate: % change in intensity-weighted load, last 7 days vs prior 7 days.
-// Accessory/recovery strength sessions are excluded (same rule as the Training tab).
-// Returns null when the prior week's load is too low to be meaningful.
-export function computeRampRate(activities: Activity[], hevy: HevyWorkout[], hrMax?: number | null): number | null {
+// Week-over-week load ratio (acute7 / prev7) and ramp rate (%). Both exclude
+// accessory/recovery sessions for a consistent apples-to-apples comparison.
+// rampRate is null when prior-week load is too low to be meaningful (<5 load units).
+export function computeLoadRatio(activities: Activity[], hevy: HevyWorkout[], hrMax?: number | null): { ratio: number; rampRate: number | null } {
   const now = Date.now()
   const t7  = new Date(now - 7  * 86400000).toISOString()
   const t14 = new Date(now - 14 * 86400000).toISOString()
@@ -193,8 +193,13 @@ export function computeRampRate(activities: Activity[], hevy: HevyWorkout[], hrM
   const prev7  = activities.filter(a => a.start_date >= t14 && a.start_date < t7).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
     + hevy.filter(h => h.start_time >= t14 && h.start_time < t7 && !isAccessorySession(h)).reduce((s, h) => s + hevyLoad(h), 0)
 
-  if (prev7 <= 5) return null
-  return Math.max(-100, Math.min(200, Math.round((acute7 - prev7) / prev7 * 100)))
+  const ratio = prev7 > 0 ? acute7 / prev7 : 1
+  const rampRate = prev7 > 5 ? Math.max(-100, Math.min(200, Math.round((acute7 - prev7) / prev7 * 100))) : null
+  return { ratio, rampRate }
+}
+
+export function computeRampRate(activities: Activity[], hevy: HevyWorkout[], hrMax?: number | null): number | null {
+  return computeLoadRatio(activities, hevy, hrMax).rampRate
 }
 
 // Banister-style fitness / fatigue / form from a daily training-load series.

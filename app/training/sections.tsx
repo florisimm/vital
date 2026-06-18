@@ -11,7 +11,7 @@ import {
   isRun, isRide, isSwim, isWeightTraining, isCycling,
   cardioZoneMultiplier, effectiveLoad, hevyLoad,
   setIntensityFactor, sessionLoadFactor, sessionLoadBreakdown, isAccessorySession,
-  epley1RM, COMPOUND_KEYWORDS, computeRampRate, computeTrainingForm,
+  epley1RM, COMPOUND_KEYWORDS, computeRampRate, computeLoadRatio, computeTrainingForm,
 } from '@/lib/training-load'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
@@ -31,7 +31,7 @@ type SportBreakdown = {
   loadComposition: { primary: number; isolation: number; accessory: number } | null
 }
 export type ACWRDetail = {
-  total: number | null; confidence: 'low' | 'medium' | 'high'
+  total: number | null; rollingAcwr: number | null; confidence: 'low' | 'medium' | 'high'
   sports: SportBreakdown[]; explanation: string
   ewmaTotal?: number | null
 }
@@ -200,12 +200,10 @@ export function computeACWRDetail(activities: Activity[], hevy: HevyWorkout[], n
       ea = λa * load + (1 - λa) * ea
       ec = λc * load + (1 - λc) * ec
     }
-    const val = ec > 0.5 ? Math.round((ea / ec) * 10) / 10 : null
-    if (process.env.NODE_ENV !== 'production') console.log('[ACWR] rolling:', total.acwr, 'EWMA:', val)
-    return val
+    return ec > 0.5 ? Math.round((ea / ec) * 10) / 10 : null
   })()
 
-  return { total: total.acwr, confidence: total.confidence, sports, explanation, ewmaTotal }
+  return { total: ewmaTotal ?? total.acwr, rollingAcwr: total.acwr, confidence: total.confidence, sports, explanation, ewmaTotal }
 }
 
 function formatPace100m(speedMs: number): string {
@@ -227,11 +225,7 @@ export function computePerformanceScore(activities: Activity[], hevy: HevyWorkou
   ]
   const consistency = Math.min(recent14.length / 6, 1)
 
-  const kj7 = activities.filter(a => a.start_date >= sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
-    + hevy.filter(h => h.start_time >= sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const kj14to7 = activities.filter(a => a.start_date >= fourteenDaysAgo && a.start_date < sevenDaysAgo).reduce((s, a) => s + effectiveLoad(a, hrMax), 0)
-    + hevy.filter(h => h.start_time >= fourteenDaysAgo && h.start_time < sevenDaysAgo).reduce((s, h) => s + hevyLoad(h), 0)
-  const loadRatio = kj14to7 > 0 ? kj7 / kj14to7 : 1
+  const { ratio: loadRatio } = computeLoadRatio(activities, hevy, hrMax)
   // Smooth load-balance score. Steady load (0.8–1.1) is ideal; a planned down-week
   // (0.6–0.8) is still good rather than punished; only big spikes or near-zero
   // weeks score low. Removes the old hard cliff at 0.7 that penalised deloads.
@@ -1148,6 +1142,15 @@ function RunningReadinessCard({ readiness }: { readiness: { pct: number; suggest
   )
 }
 
+// Normal distribution CDF approximation (Abramowitz & Stegun, max error 1.5e-7).
+function normalCDF(x: number, mu: number, sigma: number): number {
+  const z = (x - mu) / (sigma * Math.SQRT2)
+  const t = 1 / (1 + 0.3275911 * Math.abs(z))
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
+  const erf = Math.sign(z) * (1 - poly * Math.exp(-z * z))
+  return 0.5 * (1 + erf)
+}
+
 function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
   const t = (a.sport_type ?? '').toLowerCase()
   const isRide = t.includes('ride') || t.includes('cycl')
@@ -1168,7 +1171,7 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
     ? isRide ? `${Math.round(a.average_cadence)} rpm` : `${Math.round(a.average_cadence * 2)} spm`
     : null
   const kj = a.kilojoules && a.kilojoules > 0 ? `${Math.round(a.kilojoules)} kJ` : null
-  const accentColor = isSwimA ? '#60a5fa' : isRide ? '#22d3ee' : '#2dd4bf'
+  const watts = (a.average_watts ?? 0) > 0 ? `${Math.round(a.average_watts!)} W` : (a.weighted_average_watts ?? 0) > 0 ? `${Math.round(a.weighted_average_watts!)} W NP` : null
 
   const tiles = [
     dist    && { label: 'Distance',  value: dist,           color: 'text-white' },
@@ -1180,14 +1183,43 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
     hr      && { label: 'Avg HR',    value: hr,             color: 'text-red-400' },
     cadence && { label: 'Cadence',   value: cadence,        color: 'text-white/70' },
     kj      && { label: 'Energy',    value: kj,             color: 'text-yellow-400' },
+    watts   && { label: 'Power',     value: watts,          color: 'text-purple-400' },
   ].filter(Boolean) as { label: string; value: string; color: string }[]
+
+  // HR zone breakdown using Gaussian model (σ=12 bpm around average HR)
+  const hrZones = (() => {
+    const avgHR = a.average_heartrate
+    const movingMin = a.moving_time ? a.moving_time / 60 : null
+    if (!avgHR || !movingMin) return null
+    const boundaries = [0, 130, 150, 165, 175, 300]
+    const zoneLabels = ['Z1 Recovery', 'Z2 Aerobic', 'Z3 Tempo', 'Z4 Threshold', 'Z5 Max']
+    const zoneColors = ['#60a5fa', '#4ade80', '#facc15', '#fb923c', '#f87171']
+    const σ = 12
+    const fractions = boundaries.slice(0, -1).map((lo, i) =>
+      normalCDF(boundaries[i + 1], avgHR, σ) - normalCDF(lo, avgHR, σ)
+    )
+    const total = fractions.reduce((a, b) => a + b, 0)
+    return fractions.map((frac, i) => ({
+      label: zoneLabels[i],
+      color: zoneColors[i],
+      minutes: Math.round((frac / total) * movingMin),
+      pct: Math.round((frac / total) * 100),
+    })).filter(z => z.pct > 0)
+  })()
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
       <div className="flex items-center justify-between px-5 py-4 shrink-0">
         <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
         <span className="text-[17px] font-semibold text-white">{isSwimA ? '🏊 Swim' : isRide ? '🚴 Ride' : '🏃 Run'}</span>
-        <div className="w-[70px]" />
+        <a
+          href={`https://www.strava.com/activities/${a.id}`}
+          target="_blank" rel="noopener noreferrer"
+          className="px-3 h-[34px] rounded-full text-[13px] font-semibold flex items-center"
+          style={{ background: 'rgba(252,100,45,0.18)', color: '#fc642d', border: '1px solid rgba(252,100,45,0.35)' }}
+        >
+          Strava
+        </a>
       </div>
       <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
         <div className="flex flex-col gap-5">
@@ -1203,6 +1235,22 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
               </div>
             ))}
           </div>
+          {hrZones && (
+            <div className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate Zones (est.)</span>
+              {hrZones.map(z => (
+                <div key={z.label} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-medium" style={{ color: z.color }}>{z.label}</span>
+                    <span className="text-[13px] text-white/50">{z.minutes} min · {z.pct}%</span>
+                  </div>
+                  <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${z.pct}%`, background: z.color }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1246,19 +1294,30 @@ function StrengthDetailScreen({ workout: w, onBack }: { workout: HevyWorkout; on
           </div>
           {exList.length > 0 ? (
             <div className="flex flex-col gap-3">
-              {exList.map(ex => (
-                <div key={ex.title} className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <span className="text-[15px] font-semibold text-white">{ex.title}</span>
-                  <div className="flex flex-wrap gap-2">
-                    {ex.sets.map((s, i) => (
-                      <span key={i} className="text-[13px] font-semibold px-3 py-1 rounded-full"
-                        style={{ background: 'rgba(251,146,60,0.12)', color: 'rgb(251,146,60)', border: '1px solid rgba(251,146,60,0.25)' }}>
-                        {s.weight_kg > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
-                      </span>
-                    ))}
+              {exList.map(ex => {
+                const isCompound = COMPOUND_KEYWORDS.some(k => ex.title.toLowerCase().includes(k))
+                const best1RM = isCompound && ex.sets?.length
+                  ? Math.max(0, ...ex.sets.map(s => s.weight_kg > 0 && s.reps > 0 ? epley1RM(s.weight_kg, s.reps) : 0))
+                  : 0
+                return (
+                  <div key={ex.title} className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[15px] font-semibold text-white">{ex.title}</span>
+                      {best1RM > 0 && (
+                        <span className="text-[12px] font-semibold text-purple-400">e1RM {Math.round(best1RM)} kg</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {ex.sets.map((s, i) => (
+                        <span key={i} className="text-[13px] font-semibold px-3 py-1 rounded-full"
+                          style={{ background: 'rgba(251,146,60,0.12)', color: 'rgb(251,146,60)', border: '1px solid rgba(251,146,60,0.25)' }}>
+                          {s.weight_kg > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="text-[13px] text-white/30 text-center pt-4">No exercise detail available from Hevy</p>

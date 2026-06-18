@@ -89,25 +89,31 @@ function HeroCard({ label, value, diff, formatDiff, tint }: {
   )
 }
 
-// 30-day bar trend chart
-function TrendChart({ label, values, color, avg7, avg30, format }: {
+// 30-day bar trend chart with optional SVG trend-line overlay
+function TrendChart({ label, values, color, avg7, avg30, format, trendLine, badge }: {
   label: string; values: (number | null)[]; color: string
   avg7: number | null; avg30: number | null; format: (v: number) => string
+  trendLine?: (number | null)[]; badge?: string
 }) {
   const nonNull = values.filter((v): v is number => v !== null)
   const maxV = nonNull.length ? Math.max(...nonNull) : 1
+  const chartH = 48
+  const n = values.length
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-[13px] font-semibold text-white/50">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-semibold text-white/50">{label}</span>
+          {badge && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)' }}>{badge}</span>}
+        </div>
         <div className="flex gap-3">
           {avg7  !== null && <span className="text-[11px] text-white/40">7d <span className="text-white/65 font-medium">{format(avg7)}</span></span>}
           {avg30 !== null && <span className="text-[11px] text-white/40">30d <span className="text-white/65 font-medium">{format(avg30)}</span></span>}
         </div>
       </div>
-      <div className="flex items-end gap-[2px] h-14">
+      <div className="relative flex items-end gap-[2px] h-14">
         {values.map((v, i) => {
-          const h = v ? Math.max((v / maxV) * 48, 4) : 3
+          const h = v ? Math.max((v / maxV) * chartH, 4) : 3
           const isLast = i === values.length - 1
           return (
             <div key={i} className="flex-1 rounded-sm transition-all" style={{
@@ -116,6 +122,23 @@ function TrendChart({ label, values, color, avg7, avg30, format }: {
             }} />
           )
         })}
+        {trendLine && trendLine.some(v => v !== null) && (() => {
+          const tMax = Math.max(...trendLine.filter((v): v is number => v !== null))
+          const tMin = Math.min(...trendLine.filter((v): v is number => v !== null))
+          const range = tMax - tMin || 1
+          const pts = trendLine.map((v, i) => {
+            if (v === null) return null
+            const x = (i / (n - 1)) * 100
+            const y = chartH - ((v - tMin) / range) * (chartH - 4)
+            return `${x},${y}`
+          }).filter(Boolean)
+          if (pts.length < 2) return null
+          return (
+            <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox={`0 0 100 ${chartH}`}>
+              <polyline points={pts.join(' ')} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )
+        })()}
       </div>
     </div>
   )
@@ -352,6 +375,24 @@ export function SleepSection() {
   const scoreValues    = [...last30].reverse().map(r => r.slaap_score ?? computeSleepScore(r))
   const durationValues = [...last30].reverse().map(r => r.slaap_minuten)
 
+  // 7-day rolling average for score trend line
+  const scoreTrendLine = scoreValues.map((_, i, arr) => {
+    const window = arr.slice(Math.max(0, i - 6), i + 1).filter((v): v is number => v !== null)
+    return window.length ? Math.round(window.reduce((a, b) => a + b, 0) / window.length) : null
+  })
+
+  // Week-over-week score delta
+  const thisWeekScores = last7.map(r => r.slaap_score ?? computeSleepScore(r)).filter((v): v is number => v !== null)
+  const prevWeekRows   = sleepRows.slice(7, 14)
+  const prevWeekScores = prevWeekRows.map(r => r.slaap_score ?? computeSleepScore(r)).filter((v): v is number => v !== null)
+  const weekDelta = thisWeekScores.length >= 3 && prevWeekScores.length >= 3
+    ? Math.round(thisWeekScores.reduce((a, b) => a + b, 0) / thisWeekScores.length)
+      - Math.round(prevWeekScores.reduce((a, b) => a + b, 0) / prevWeekScores.length)
+    : null
+  const weekBadge = weekDelta !== null
+    ? `${weekDelta > 0 ? '↑' : weekDelta < 0 ? '↓' : '→'} ${weekDelta > 0 ? '+' : ''}${weekDelta} vs last week`
+    : undefined
+
   // AI quality
   const quality = score === null ? null
     : score >= 85 ? 'Excellent' : score >= 70 ? 'Good' : score >= 55 ? 'Fair' : 'Poor'
@@ -510,6 +551,8 @@ export function SleepSection() {
               avg7={avg7Score}
               avg30={avg30Score}
               format={v => String(v)}
+              trendLine={scoreTrendLine}
+              badge={weekBadge}
             />
             <TrendChart
               label="Sleep Duration"
@@ -896,6 +939,12 @@ export function HeartSection() {
                     </button>
                   ))}
                 </div>
+                {hrvBaseline.deviationPct !== null && (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.08)', color: hrvBaseline.deviationPct >= 0 ? '#4ade80' : '#f87171' }}>
+                    {hrvBaseline.deviationPct > 0 ? '+' : ''}{hrvBaseline.deviationPct}%
+                  </span>
+                )}
               </div>
               {hrvBaseline.baseline !== null && (
                 <div className="flex gap-3">
@@ -922,6 +971,21 @@ export function HeartSection() {
                   style={{ bottom: `${baselineH}px` }}
                 />
               )}
+              {(() => {
+                const vals = hrv30.map(r => r.hrv_rmssd as number)
+                const n = vals.length
+                if (n < 4) return null
+                const rolling = vals.map((_, i, arr) => {
+                  const w = arr.slice(Math.max(0, i - 6), i + 1)
+                  return w.reduce((a, b) => a + b, 0) / w.length
+                })
+                const pts = rolling.map((v, i) => `${(i / (n - 1)) * 100},${48 - Math.max((v / maxHRV) * 48, 4)}`).join(' ')
+                return (
+                  <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 48">
+                    <polyline points={pts} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )
+              })()}
             </div>
           </div>
         </Card>
@@ -1058,23 +1122,54 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
             </div>
           </div>
 
-          <div className="flex items-end justify-between gap-1 h-32">
-            {weights.map((v, i) => {
-              const h = chartMax === chartMin ? 0.5 : (v - chartMin) / (chartMax - chartMin)
-              const isLast = i === weights.length - 1
-              return (
-                <div
-                  key={i}
-                  className="flex-1 rounded-sm transition-all hover:opacity-80 group relative"
-                  style={{ height: `${h * 96 + 16}px`, background: isLast ? '#2dd4bf' : 'rgba(255,255,255,0.2)' }}
-                >
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-[11px] text-white opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                    {v.toFixed(1)} kg
-                  </div>
+          {(() => {
+            const n = weights.length
+            // bar height: min 16px, max 112px (container h-32=128px, bottom-aligned)
+            const toPx = (v: number) => chartMax === chartMin
+              ? 16 + 96 * 0.5
+              : 16 + (v - chartMin) / (chartMax - chartMin) * 96
+            // 7-day rolling average; SVG viewBox 0 0 100 100, Y = (128-barH)/128*100
+            const rolling = weights.map((_, i, arr) => {
+              const w = arr.slice(Math.max(0, i - 6), i + 1)
+              return w.reduce((a, b) => a + b, 0) / w.length
+            })
+            const pts = rolling.map((v, i) =>
+              `${n > 1 ? (i / (n - 1)) * 100 : 50},${(128 - toPx(v)) / 128 * 100}`
+            ).join(' ')
+            // Week-over-week delta
+            const last7w = weights.slice(-7)
+            const prev7w = weights.slice(-14, -7)
+            const wkDelta = last7w.length >= 3 && prev7w.length >= 3
+              ? (last7w.reduce((a, b) => a + b, 0) / last7w.length) - (prev7w.reduce((a, b) => a + b, 0) / prev7w.length)
+              : null
+            return (
+              <>
+                {wkDelta !== null && (
+                  <span className="text-[12px] font-semibold" style={{ color: wkDelta < -0.05 ? '#4ade80' : wkDelta > 0.05 ? '#f87171' : 'rgba(255,255,255,0.4)' }}>
+                    {wkDelta > 0 ? '+' : ''}{wkDelta.toFixed(2)} kg vs last week
+                  </span>
+                )}
+                <div className="relative flex items-end justify-between gap-1 h-32">
+                  {weights.map((v, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 rounded-sm transition-all hover:opacity-80 group relative"
+                      style={{ height: `${toPx(v)}px`, background: i === n - 1 ? '#2dd4bf' : 'rgba(255,255,255,0.2)' }}
+                    >
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-[11px] text-white opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                        {v.toFixed(1)} kg
+                      </div>
+                    </div>
+                  ))}
+                  {n > 1 && (
+                    <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <polyline points={pts} fill="none" stroke="rgba(45,212,191,0.85)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
                 </div>
-              )
-            })}
-          </div>
+              </>
+            )
+          })()}
 
           <div className="flex justify-between text-[13px] text-white/50 pt-2">
             <span>Avg: {wavg ? wavg.toFixed(1) : '–'} kg</span>
