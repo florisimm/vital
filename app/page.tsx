@@ -373,7 +373,7 @@ function ProgressCard({ data }: { data: any }) {
   )
 }
 
-function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise<void> }) {
+function UpcomingCard({ events, onSync, hevy, acts }: { events: any[]; onSync: () => Promise<void>; hevy: any[]; acts: any[] }) {
   const [syncing, setSyncing] = useState(false)
   const [showAll, setShowAll] = useState(false)
 
@@ -404,7 +404,9 @@ function UpcomingCard({ events, onSync }: { events: any[]; onSync: () => Promise
     groups.get(key)!.evts.push(e)
   }
 
-  const allEvts = [...groups.entries()].flatMap(([, { label, evts }]) => evts.map(e => ({ ...e, _label: label })))
+  const allEvts = [...groups.entries()]
+    .flatMap(([, { label, evts }]) => evts.map(e => ({ ...e, _label: label })))
+    .filter(e => isToday(e) ? !workoutDone(e.title, hevy, acts) : true)
   const next = allEvts[0] ?? null
   const moreCount = allEvts.length - 1
   const dayGroups = [...groups.entries()]
@@ -631,6 +633,8 @@ export default function TodayPage() {
         <ProgressCard data={effectiveData} />
         <UpcomingCard
           events={(effectiveData?.calendarEvents ?? []).filter(isSport)}
+          hevy={effectiveData?.todayHevy ?? []}
+          acts={effectiveData?.todayActivities ?? []}
           onSync={async () => {
             try {
               const supabase = createClient()
