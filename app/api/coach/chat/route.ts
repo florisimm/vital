@@ -23,12 +23,20 @@ export async function POST(req: Request) {
 
   const { messages } = await req.json()
 
-  const stream = await openai.chat.completions.create({
-    model: 'gpt-4.1-mini',
-    max_tokens: 120,
-    messages: [{ role: 'system', content: SYSTEM }, ...toOpenAIMessages(messages)],
-    stream: true,
-  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stream: any
+  try {
+    stream = await openai.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      max_tokens: 120,
+      messages: [{ role: 'system', content: SYSTEM }, ...toOpenAIMessages(messages)],
+      stream: true,
+    })
+  } catch (err: any) {
+    const msg = err?.message ?? String(err)
+    console.error('[coach/chat] OpenAI error:', msg)
+    return new Response(`OpenAI error: ${msg}`, { status: 502 })
+  }
 
   const readable = new ReadableStream({
     async start(controller) {
