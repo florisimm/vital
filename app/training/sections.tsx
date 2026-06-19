@@ -4447,7 +4447,9 @@ function matchMuscle(name: string): string | null {
   return null
 }
 
-export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
+const STRENGTH_KEYWORDS = /kracht|gym|strength|chest|back|legs?|push|pull|squat|deadlift|bench|shoulder|arm|upper|lower|full.?body|torso|split/i
+
+export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorkout[]; calendarEvents?: any[] }) {
   const muscleAdvice = computeMuscleGroupAdvice(hevy)
   const keyLifts     = extractKeyLifts(hevy)
   const lastWorkout  = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))[0] ?? null
@@ -4456,8 +4458,32 @@ export function StrengthSection({ hevy }: { hevy: HevyWorkout[] }) {
   const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
   const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
 
+  const now = new Date().toISOString()
+  const nextStrength = calendarEvents
+    .filter(e => (e.start_datetime || e.start_date) >= now && STRENGTH_KEYWORDS.test(e.title ?? ''))
+    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0] ?? null
+
+  const nsDateStr = nextStrength ? (nextStrength.start_datetime || nextStrength.start_date) : null
+  const nsWhen    = nsDateStr ? new Date(nsDateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' }) : null
+  const nsTime    = nextStrength?.start_datetime ? formatClockTime(nextStrength.start_datetime) : null
+  const nsToday   = nsDateStr?.slice(0, 10) === now.slice(0, 10)
+  const nsTomorrow = nsDateStr?.slice(0, 10) === new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const nsLabel   = nsToday ? 'Vandaag' : nsTomorrow ? 'Morgen' : nsWhen
+
   return (
     <div className="flex flex-col gap-6">
+
+      {nextStrength && (
+        <Card>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Volgende workout</span>
+            {nsLabel && <span className="text-[12px] font-semibold text-teal-400 mt-1">{nsLabel}</span>}
+            <span className="text-[17px] font-semibold text-white">{nextStrength.title}</span>
+            {nsWhen && <span className="text-[13px] text-white/50">{nsWhen}{nsTime ? ` · ${nsTime}` : ''}</span>}
+          </div>
+        </Card>
+      )}
+
       <SplitRecommendationCard hevy={hevy} />
 
       {muscleAdvice.length > 0 && (
