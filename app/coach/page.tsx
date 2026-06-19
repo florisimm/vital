@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowUp, ChevronLeft, Dumbbell, Loader2, Trash2 } from 'lucide-react'
+import { ArrowUp, ChevronLeft, Loader2, Trash2 } from 'lucide-react'
 
 const MAX_TURNS = 10
 import useSWR from 'swr'
@@ -389,26 +389,48 @@ export default function CoachPage() {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: '100dvh' }}>
+    <div className="flex flex-col relative" style={{ height: '100dvh', overflow: 'hidden' }}>
+
+      {/* Animated background blobs */}
+      <style>{`
+        @keyframes blob1 { from { transform: translate(0,0) scale(1); } to { transform: translate(8%,12%) scale(1.12); } }
+        @keyframes blob2 { from { transform: translate(0,0) scale(1); } to { transform: translate(-10%,-8%) scale(1.08); } }
+        @keyframes blob3 { from { transform: translate(0,0) scale(1); } to { transform: translate(6%,-10%) scale(0.92); } }
+      `}</style>
+      <div className="absolute inset-0 pointer-events-none" aria-hidden>
+        <div style={{ position:'absolute', top:'-15%', left:'-10%', width:'65%', height:'65%', borderRadius:'50%', background:'radial-gradient(circle, rgba(45,212,191,0.18) 0%, transparent 70%)', filter:'blur(48px)', animation:'blob1 9s ease-in-out infinite alternate' }} />
+        <div style={{ position:'absolute', bottom:'5%', right:'-15%', width:'60%', height:'60%', borderRadius:'50%', background:'radial-gradient(circle, rgba(129,140,248,0.14) 0%, transparent 70%)', filter:'blur(56px)', animation:'blob2 11s ease-in-out infinite alternate' }} />
+        <div style={{ position:'absolute', top:'38%', left:'15%', width:'45%', height:'45%', borderRadius:'50%', background:'radial-gradient(circle, rgba(251,146,60,0.09) 0%, transparent 70%)', filter:'blur(64px)', animation:'blob3 13s ease-in-out infinite alternate' }} />
+      </div>
 
       {/* Top bar */}
       <div
-        className="flex items-center gap-3 px-4 shrink-0"
+        className="flex items-center gap-3 px-4 shrink-0 relative z-10"
         style={{
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
           paddingBottom: '12px',
-          background: 'rgba(18,18,22,0.97)',
+          background: 'rgba(8,8,12,0.80)',
+          backdropFilter: 'blur(20px)',
           borderBottom: '1px solid rgba(255,255,255,0.07)',
         }}
       >
         <button onClick={() => router.back()} className="text-white/70 active:text-white mr-1">
           <ChevronLeft size={22} strokeWidth={2.2} />
         </button>
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-          style={{ background: 'linear-gradient(135deg, rgb(45,212,191) 0%, rgb(20,160,140) 100%)' }}
-        >
-          <Dumbbell size={18} className="text-white" strokeWidth={2} />
+        <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <defs>
+              <linearGradient id="ag" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#2dd4bf"/>
+                <stop offset="0.5" stopColor="#818cf8"/>
+                <stop offset="1" stopColor="#f472b6"/>
+              </linearGradient>
+            </defs>
+            <circle cx="20" cy="20" r="20" fill="url(#ag)"/>
+            <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
+            {/* spark / AI bolt */}
+            <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag)"/>
+          </svg>
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-semibold text-white leading-tight">Coach</div>
@@ -422,26 +444,44 @@ export default function CoachPage() {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 relative z-10">
 
         {/* Recommendations as coach bubbles */}
         {recs.map((rec, i) => (
-          <div key={i} className="flex justify-start">
+          <div key={i} className="flex justify-start gap-2 items-end">
+            <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
+              <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+                <defs><linearGradient id="ag2" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stopColor="#2dd4bf"/><stop offset="0.5" stopColor="#818cf8"/><stop offset="1" stopColor="#f472b6"/></linearGradient></defs>
+                <circle cx="20" cy="20" r="20" fill="url(#ag2)"/>
+                <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
+                <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag2)"/>
+              </svg>
+            </div>
             <div
-              className="max-w-[82%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed"
-              style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}
+              className="max-w-[78%] rounded-[18px] rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.88)', border: '1px solid rgba(255,255,255,0.06)' }}
             >
               <div className="font-semibold text-white mb-0.5">{rec.title}</div>
-              <div className="text-white/70">{rec.text}</div>
+              <div className="text-white/65 text-[14px]">{rec.text}</div>
             </div>
           </div>
         ))}
 
         {/* Chat messages */}
         {chatMessages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={i} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {msg.role === 'assistant' && (
+              <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
+                <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+                  <defs><linearGradient id="ag3" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stopColor="#2dd4bf"/><stop offset="0.5" stopColor="#818cf8"/><stop offset="1" stopColor="#f472b6"/></linearGradient></defs>
+                  <circle cx="20" cy="20" r="20" fill="url(#ag3)"/>
+                  <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
+                  <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag3)"/>
+                </svg>
+              </div>
+            )}
             <div
-              className="max-w-[82%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+              className={`max-w-[78%] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? 'rounded-[18px] rounded-br-[4px]' : 'rounded-[18px] rounded-bl-[4px]'}`}
               style={msg.role === 'user'
                 ? { background: 'rgb(45,212,191)', color: 'rgb(5,6,8)' }
                 : { background: msg.direct ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }
@@ -454,11 +494,17 @@ export default function CoachPage() {
 
         {/* Streaming bubble */}
         {streaming && (
-          <div className="flex justify-start">
-            <div
-              className="max-w-[82%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
-              style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}
-            >
+          <div className="flex items-end gap-2 justify-start">
+            <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
+              <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+                <defs><linearGradient id="ag4" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stopColor="#2dd4bf"/><stop offset="0.5" stopColor="#818cf8"/><stop offset="1" stopColor="#f472b6"/></linearGradient></defs>
+                <circle cx="20" cy="20" r="20" fill="url(#ag4)"/>
+                <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
+                <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag4)"/>
+              </svg>
+            </div>
+            <div className="max-w-[78%] rounded-[18px] rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+              style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}>
               {streamText || <Loader2 size={16} className="animate-spin text-white/40" />}
             </div>
           </div>
@@ -479,11 +525,12 @@ export default function CoachPage() {
 
       {/* Bottom input bar */}
       <div
-        className="shrink-0 flex items-center gap-2 px-3"
+        className="shrink-0 flex items-center gap-2 px-3 relative z-10"
         style={{
           paddingTop: '10px',
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
-          background: 'rgba(18,18,22,0.97)',
+          background: 'rgba(8,8,12,0.80)',
+          backdropFilter: 'blur(20px)',
           borderTop: '1px solid rgba(255,255,255,0.07)',
         }}
       >
