@@ -41,12 +41,13 @@ const COMPARE = [
   { feature: 'Costs a fraction of a coach',                 kern: true,  apps: true,  pt: false },
 ]
 
-const INTEGRATIONS = ['Strava', 'Hevy', 'Fitbit', 'Google Calendar', 'Apple Health']
+const INTEGRATIONS = ['Strava', 'Hevy', 'Fitbit', 'Garmin', 'Apple Health', 'Google Calendar', '+ any wearable']
 
 const FAQ = [
-  { q: 'Do I need a wearable?', a: 'A wearable like Fitbit unlocks recovery, sleep and HRV insights, but it\'s not required. You can still track training, nutrition and your calendar — and add a device anytime.' },
+  { q: 'Do I need a wearable?', a: 'No — you can track training, nutrition and your calendar without one. But any wearable you own unlocks recovery, sleep and HRV insights, and you can add it anytime.' },
+  { q: 'Which wearables work with Kern?', a: 'Any of them. Fitbit, Garmin, Apple Watch, Whoop, Oura, Polar, Suunto and more — connect whatever you already use, and mix multiple devices if you like.' },
   { q: 'What does it cost?', a: 'Kern is free to get started. You can connect your apps and use the dashboard and AI coach right away — no credit card needed.' },
-  { q: 'Which apps does it connect to?', a: 'Strava and Hevy for training, Fitbit for recovery and sleep, and Google Calendar for your schedule. More integrations are on the way.' },
+  { q: 'Which apps does it connect to?', a: 'Strava and Hevy for training, Fitbit and other wearables for recovery and sleep, and Google Calendar for your schedule. More integrations are on the way.' },
   { q: 'How is this different from a personal trainer?', a: 'A coach isn\'t there at 6am and can\'t read your HRV overnight. Kern combines all your data with your calendar and gives instant, personalised advice 24/7 — at a fraction of the cost.' },
   { q: 'Is my health data private?', a: 'Your data is yours. It\'s used only to power your dashboard and personal advice — never sold. You stay in control of every connection.' },
 ]

@@ -2,26 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, Activity, ArrowRight, User } from 'lucide-react'
+import { Mail, Lock, Activity, ArrowRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
-
-type Mode = 'signin' | 'signup'
+import { SignupOnboarding } from '@/components/SignupOnboarding'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>('signin')
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-
-  function switchMode(next: Mode) {
-    setMode(next)
-    setError(null)
-    setNotice(null)
-  }
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   async function handleForgotPassword() {
     if (!email) { setError('Enter your email address first'); return }
@@ -35,37 +27,14 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setNotice(null)
-    const supabase = createClient()
-
-    if (mode === 'signin') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) { setError(error.message); setLoading(false); return }
-      router.push('/')
-      router.refresh()
-    } else {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name || undefined },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) { setError(error.message); setLoading(false); return }
-      // If email confirmation is required, no active session is returned.
-      if (data.session) {
-        router.push('/')
-        router.refresh()
-      } else {
-        setLoading(false)
-        setNotice('Account created — check your email to confirm and sign in.')
-        setMode('signin')
-      }
-    }
+    setLoading(true); setError(null); setNotice(null)
+    const { error } = await createClient().auth.signInWithPassword({ email, password })
+    if (error) { setError(error.message); setLoading(false); return }
+    router.push('/')
+    router.refresh()
   }
+
+  if (showOnboarding) return <SignupOnboarding onClose={() => setShowOnboarding(false)} />
 
   return (
     <div
@@ -102,53 +71,13 @@ export default function LoginPage() {
             <Activity size={32} className="text-teal-400" strokeWidth={2} />
           </div>
 
-          <h1 className="text-[40px] font-bold leading-none text-white tracking-tight">
-            {mode === 'signin' ? 'Welcome back' : 'Create account'}
-          </h1>
-          <p className="text-[16px] text-white/40 mt-2.5 font-medium">
-            {mode === 'signin'
-              ? 'Sign in to your Kern account'
-              : 'Start training on data with Kern'}
-          </p>
-        </div>
-
-        {/* Mode toggle */}
-        <div
-          className="flex p-1 rounded-[16px] mb-5"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          {(['signin', 'signup'] as Mode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => switchMode(m)}
-              className="flex-1 h-[42px] rounded-[12px] text-[15px] font-semibold transition-all"
-              style={mode === m
-                ? { background: 'rgba(255,255,255,0.95)', color: 'rgb(5,6,8)' }
-                : { background: 'transparent', color: 'rgba(255,255,255,0.5)' }}
-            >
-              {m === 'signin' ? 'Sign in' : 'Sign up'}
-            </button>
-          ))}
+          <h1 className="text-[40px] font-bold leading-none text-white tracking-tight">Welcome back</h1>
+          <p className="text-[16px] text-white/40 mt-2.5 font-medium">Sign in to your Kern account</p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2.5">
-            {/* Name — signup only */}
-            {mode === 'signup' && (
-              <Field icon={<User size={18} className="text-white/30 shrink-0" />}>
-                <input
-                  type="text"
-                  placeholder="Name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
-                />
-              </Field>
-            )}
-
-            {/* Email */}
             <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
               <input
                 type="email"
@@ -161,7 +90,6 @@ export default function LoginPage() {
               />
             </Field>
 
-            {/* Password */}
             <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
               <input
                 type="password"
@@ -169,8 +97,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                minLength={6}
+                autoComplete="current-password"
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
               />
             </Field>
@@ -184,38 +111,35 @@ export default function LoginPage() {
             disabled={loading}
             className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
           >
-            {loading
-              ? (mode === 'signin' ? 'Signing in…' : 'Creating account…')
-              : (
-                <>
-                  {mode === 'signin' ? 'Sign in' : 'Create account'}
-                  <ArrowRight size={18} strokeWidth={2.3} />
-                </>
-              )}
+            {loading ? 'Signing in…' : <>Sign in <ArrowRight size={18} strokeWidth={2.3} /></>}
           </button>
 
-          {mode === 'signin' && (
-            <button
-              type="button"
-              onClick={handleForgotPassword}
-              disabled={loading}
-              className="text-[14px] text-white/35 text-center disabled:opacity-50 mt-0.5"
-            >
-              Forgot password?
-            </button>
-          )}
-        </form>
-
-        <p className="text-[14px] text-white/35 text-center mt-6">
-          {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
           <button
             type="button"
-            onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
-            className="text-teal-400 font-semibold"
+            onClick={handleForgotPassword}
+            disabled={loading}
+            className="text-[14px] text-white/35 text-center disabled:opacity-50 mt-0.5"
           >
-            {mode === 'signin' ? 'Sign up' : 'Sign in'}
+            Forgot password?
           </button>
-        </p>
+        </form>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-white/[0.08]" />
+          <span className="text-[12px] text-white/25">new to Kern?</span>
+          <div className="flex-1 h-px bg-white/[0.08]" />
+        </div>
+
+        {/* Sign up — launches onboarding (no real account yet) */}
+        <button
+          type="button"
+          onClick={() => setShowOnboarding(true)}
+          className="h-[56px] rounded-[18px] font-semibold text-[17px] text-white active:scale-[0.98] transition-transform"
+          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          Create your account
+        </button>
       </div>
 
       <p className="text-[13px] text-white/20 text-center">
