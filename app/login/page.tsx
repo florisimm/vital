@@ -124,7 +124,7 @@ export default function LoginPage() {
         )}
 
         {signupNotice && (
-          <p className="text-teal-400 text-[14px] text-center px-2">Account aanmaken komt binnenkort — neem voorlopig contact op voor toegang.</p>
+          <p className="text-teal-400 text-[14px] text-center px-2">Sign up is coming soon — reach out for access in the meantime.</p>
         )}
 
         <button
@@ -147,7 +147,7 @@ export default function LoginPage() {
         {/* Divider */}
         <div className="flex items-center gap-3 my-1">
           <div className="flex-1 h-px bg-white/[0.08]" />
-          <span className="text-[12px] text-white/25">of</span>
+          <span className="text-[12px] text-white/25">or</span>
           <div className="flex-1 h-px bg-white/[0.08]" />
         </div>
 
@@ -158,7 +158,7 @@ export default function LoginPage() {
           className="h-[56px] rounded-[18px] font-semibold text-[17px] text-white active:scale-[0.98] transition-transform"
           style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
         >
-          Account aanmaken
+          Sign up
         </button>
 
         <button
@@ -166,7 +166,7 @@ export default function LoginPage() {
           onClick={() => router.push('/')}
           className="text-[13px] text-white/30 text-center mt-1"
         >
-          ← Terug naar home
+          ← Back to home
         </button>
       </div>
     </div>

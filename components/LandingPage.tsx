@@ -10,25 +10,25 @@ import {
 // Logged-in users get the dashboard instead (gated in app/page.tsx).
 
 const FEATURES = [
-  { Icon: Brain,      title: 'AI Coach',        desc: 'Rico, je persoonlijke coach, leest je data en geeft direct antwoord op elke vraag over training, herstel en voeding.' },
-  { Icon: HeartPulse, title: 'Herstel & Readiness', desc: 'HRV, rusthartslag en slaap worden gecombineerd tot één readiness-score zodat je weet wanneer je gas kunt geven.' },
-  { Icon: Dumbbell,   title: 'Slimme training', desc: 'Automatische trainingsadviezen op basis van je belasting, ramp rate en geplande sessies — nooit meer over- of ondertrainen.' },
-  { Icon: Utensils,   title: 'Voeding & Macro\'s', desc: 'Scan barcodes, log maaltijden en houd je eiwit- en caloriedoelen moeiteloos bij.' },
-  { Icon: Moon,       title: 'Slaap-inzichten',  desc: 'Diepe slaap, REM en efficiëntie per nacht — met concrete tips om beter te herstellen.' },
-  { Icon: Activity,   title: 'Alles op één plek', desc: 'Strava, Hevy, Fitbit en Google Calendar synchroniseren automatisch in één overzicht.' },
+  { Icon: Brain,      title: 'AI Coach',          desc: 'Rico, your personal coach, reads your data and answers any question about training, recovery and nutrition — instantly.' },
+  { Icon: HeartPulse, title: 'Recovery & Readiness', desc: 'HRV, resting heart rate and sleep combine into a single readiness score, so you know exactly when to push.' },
+  { Icon: Dumbbell,   title: 'Smart Training',    desc: 'Automatic training advice based on your load, ramp rate and planned sessions — never over- or under-train again.' },
+  { Icon: Utensils,   title: 'Nutrition & Macros', desc: 'Scan barcodes, log meals and effortlessly stay on top of your protein and calorie goals.' },
+  { Icon: Moon,       title: 'Sleep Insights',    desc: 'Deep sleep, REM and efficiency every night — with concrete tips to recover better.' },
+  { Icon: Activity,   title: 'All in One Place',  desc: 'Strava, Hevy, Fitbit and Google Calendar sync automatically into one overview.' },
 ]
 
 const STEPS = [
-  { n: '01', title: 'Verbind je apps', desc: 'Koppel Strava, Hevy, Fitbit en je agenda in één tap.' },
-  { n: '02', title: 'Krijg inzicht',    desc: 'Je data wordt automatisch geanalyseerd tot heldere scores en adviezen.' },
-  { n: '03', title: 'Presteer beter',   desc: 'Volg de aanbevelingen van je AI-coach en zie je vooruitgang elke dag.' },
+  { n: '01', title: 'Connect your apps', desc: 'Link Strava, Hevy, Fitbit and your calendar in a single tap.' },
+  { n: '02', title: 'Get insights',      desc: 'Your data is automatically analysed into clear scores and advice.' },
+  { n: '03', title: 'Perform better',    desc: 'Follow your AI coach\'s recommendations and watch your progress every day.' },
 ]
 
 const BENEFITS = [
-  'Persoonlijke AI-coach die je data écht begrijpt',
-  'Eén dashboard voor training, herstel, slaap en voeding',
-  'Automatische synchronisatie met je favoriete apps',
-  'Adviezen op maat — geen generieke schema\'s',
+  'A personal AI coach that truly understands your data',
+  'One dashboard for training, recovery, sleep and nutrition',
+  'Automatic sync with your favourite apps',
+  'Tailored advice — no generic programs',
 ]
 
 export function LandingPage() {
@@ -64,7 +64,7 @@ export function LandingPage() {
             onClick={() => router.push('/login')}
             className="h-[40px] px-5 rounded-full bg-white text-black font-semibold text-[15px] active:scale-[0.97] transition-transform"
           >
-            Inloggen
+            Log in
           </button>
         </div>
       </header>
@@ -87,14 +87,14 @@ export function LandingPage() {
           </div>
 
           <h1 className="text-[44px] sm:text-[68px] font-bold leading-[1.04] tracking-tight max-w-4xl">
-            Jouw lichaam, <span className="text-teal-400">begrepen</span>.
+            Your body, <span className="text-teal-400">understood</span>.
             <br />
-            Elke dag opnieuw.
+            Every single day.
           </h1>
 
           <p className="text-[17px] sm:text-[20px] text-white/55 mt-6 max-w-2xl font-medium leading-relaxed">
-            Kern combineert je training, slaap, herstel en voeding in één slim dashboard —
-            met een AI-coach die precies weet wat jij vandaag nodig hebt.
+            Kern combines your training, sleep, recovery and nutrition into one smart dashboard —
+            with an AI coach that knows exactly what you need today.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 mt-10 w-full sm:w-auto">
@@ -102,7 +102,7 @@ export function LandingPage() {
               onClick={() => router.push('/login')}
               className="w-full sm:w-auto h-[54px] px-8 rounded-full bg-white text-black font-semibold text-[17px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              Begin gratis
+              Start free
               <ArrowRight size={19} strokeWidth={2.2} />
             </button>
             <button
@@ -110,21 +110,21 @@ export function LandingPage() {
               className="w-full sm:w-auto h-[54px] px-8 rounded-full font-semibold text-[17px] text-white active:scale-[0.98] transition-transform"
               style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
             >
-              Inloggen
+              Log in
             </button>
           </div>
 
-          <p className="text-[13px] text-white/30 mt-5">Geen creditcard nodig · Direct aan de slag</p>
+          <p className="text-[13px] text-white/30 mt-5">No credit card required · Get started instantly</p>
         </div>
       </section>
 
       {/* ── Features ────────────────────────────────────────────── */}
       <section className="relative max-w-6xl mx-auto px-5 sm:px-8 py-20">
         <div className="text-center mb-14">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-teal-400/80 mb-3">Functies</p>
-          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">Alles wat je nodig hebt</h2>
+          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-teal-400/80 mb-3">Features</p>
+          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">Everything you need</h2>
           <p className="text-[17px] text-white/50 mt-4 max-w-2xl mx-auto">
-            Eén app die al je gezondheidsdata samenbrengt en omzet in concrete actie.
+            One app that brings all your health data together and turns it into concrete action.
           </p>
         </div>
 
@@ -151,8 +151,8 @@ export function LandingPage() {
       {/* ── How it works ────────────────────────────────────────── */}
       <section className="relative max-w-6xl mx-auto px-5 sm:px-8 py-20">
         <div className="text-center mb-14">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-orange-400/80 mb-3">Zo werkt het</p>
-          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">In drie stappen</h2>
+          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-orange-400/80 mb-3">How it works</p>
+          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">In three steps</h2>
         </div>
 
         <div className="grid sm:grid-cols-3 gap-6">
@@ -178,7 +178,7 @@ export function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-10 items-center">
             <div>
               <h2 className="text-[32px] sm:text-[42px] font-bold tracking-tight leading-tight">
-                Stop met gokken.<br />Train op data.
+                Stop guessing.<br />Train on data.
               </h2>
               <div className="flex flex-col gap-3.5 mt-8">
                 {BENEFITS.map((b) => (
@@ -197,11 +197,11 @@ export function LandingPage() {
                 onClick={() => router.push('/login')}
                 className="w-full lg:w-auto h-[56px] px-10 rounded-full bg-white text-black font-semibold text-[18px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
               >
-                Maak je account
+                Create your account
                 <ArrowRight size={20} strokeWidth={2.2} />
               </button>
               <p className="text-[14px] text-white/40 lg:text-right">
-                Sluit je aan en haal het maximale uit elke training.
+                Join in and get the most out of every workout.
               </p>
             </div>
           </div>
@@ -222,7 +222,7 @@ export function LandingPage() {
           </div>
           <p className="text-[13px] text-white/30">© {new Date().getFullYear()} Kern — AI Fitness & Health Coaching</p>
           <button onClick={() => router.push('/login')} className="text-[14px] text-white/50 hover:text-white transition-colors font-medium">
-            Inloggen →
+            Log in →
           </button>
         </div>
       </footer>
