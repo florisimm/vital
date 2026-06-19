@@ -482,7 +482,7 @@ export default function CoachPage() {
           <div className="text-[16px] font-semibold text-white leading-tight">Rico</div>
           <div className="text-[12px] leading-tight flex items-center gap-1">
             {status === 'typing' ? (
-              <span className="text-white/50" style={{ animation: 'typingPulse 1.2s ease-in-out infinite' }}>aan het typen...</span>
+              <span className="text-white/50" style={{ animation: 'typingPulse 1.2s ease-in-out infinite' }}>typing...</span>
             ) : status === 'online' ? (
               <><span className="w-1.5 h-1.5 rounded-full bg-teal-400 inline-block" /><span className="text-teal-400">Online</span></>
             ) : (
