@@ -289,6 +289,40 @@ function selectContext(question: string, s: Sections): string {
   ].filter(Boolean).join('\n\n')
 }
 
+// ─── Parrot avatar ──────────────────────────────────────────────────────────
+
+function ParrotAvatar({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+      <defs>
+        <linearGradient id="parrotBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#38bdf8" />
+          <stop offset="1" stopColor="#14b8a6" />
+        </linearGradient>
+      </defs>
+      {/* tropical background */}
+      <circle cx="20" cy="20" r="20" fill="url(#parrotBg)" />
+      {/* crest feathers */}
+      <ellipse cx="13.5" cy="9" rx="2" ry="4.6" fill="#ef4444" transform="rotate(-28 13.5 9)" />
+      <ellipse cx="20" cy="6.5" rx="2" ry="5" fill="#f97316" />
+      <ellipse cx="26.5" cy="9" rx="2" ry="4.6" fill="#facc15" transform="rotate(28 26.5 9)" />
+      {/* head */}
+      <circle cx="20" cy="22" r="11.6" fill="#16a34a" />
+      <circle cx="20" cy="23.2" r="9.2" fill="#4ade80" />
+      {/* eyes */}
+      <circle cx="15.4" cy="20" r="3.3" fill="#fff" />
+      <circle cx="24.6" cy="20" r="3.3" fill="#fff" />
+      <circle cx="15.8" cy="20.3" r="1.7" fill="#1e1e1e" />
+      <circle cx="24.2" cy="20.3" r="1.7" fill="#1e1e1e" />
+      <circle cx="16.4" cy="19.5" r="0.65" fill="#fff" />
+      <circle cx="24.8" cy="19.5" r="0.65" fill="#fff" />
+      {/* hooked beak */}
+      <path d="M16.4 24 Q20 23.6 23.6 24 Q22.4 30 20 31.4 Q17.6 30 16.4 24 Z" fill="#fbbf24" />
+      <path d="M18.4 28.4 Q20 29.6 21.6 28.4 Q21 30.6 20 31.4 Q19 30.6 18.4 28.4 Z" fill="#f59e0b" />
+    </svg>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CoachPage() {
@@ -418,19 +452,7 @@ export default function CoachPage() {
           <ChevronLeft size={22} strokeWidth={2.2} />
         </button>
         <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden">
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <defs>
-              <linearGradient id="ag" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#2dd4bf"/>
-                <stop offset="0.5" stopColor="#818cf8"/>
-                <stop offset="1" stopColor="#f472b6"/>
-              </linearGradient>
-            </defs>
-            <circle cx="20" cy="20" r="20" fill="url(#ag)"/>
-            <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
-            {/* spark / AI bolt */}
-            <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag)"/>
-          </svg>
+          <ParrotAvatar size={40} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-semibold text-white leading-tight">Coach</div>
@@ -450,12 +472,7 @@ export default function CoachPage() {
         {recs.map((rec, i) => (
           <div key={i} className="flex justify-start gap-2 items-end">
             <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
-              <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
-                <defs><linearGradient id="ag2" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stopColor="#2dd4bf"/><stop offset="0.5" stopColor="#818cf8"/><stop offset="1" stopColor="#f472b6"/></linearGradient></defs>
-                <circle cx="20" cy="20" r="20" fill="url(#ag2)"/>
-                <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
-                <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag2)"/>
-              </svg>
+              <ParrotAvatar size={28} />
             </div>
             <div
               className="max-w-[78%] rounded-[18px] rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed"
@@ -472,12 +489,7 @@ export default function CoachPage() {
           <div key={i} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
               <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
-                <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
-                  <defs><linearGradient id="ag3" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stopColor="#2dd4bf"/><stop offset="0.5" stopColor="#818cf8"/><stop offset="1" stopColor="#f472b6"/></linearGradient></defs>
-                  <circle cx="20" cy="20" r="20" fill="url(#ag3)"/>
-                  <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
-                  <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag3)"/>
-                </svg>
+                <ParrotAvatar size={28} />
               </div>
             )}
             <div
@@ -496,12 +508,7 @@ export default function CoachPage() {
         {streaming && (
           <div className="flex items-end gap-2 justify-start">
             <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
-              <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
-                <defs><linearGradient id="ag4" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stopColor="#2dd4bf"/><stop offset="0.5" stopColor="#818cf8"/><stop offset="1" stopColor="#f472b6"/></linearGradient></defs>
-                <circle cx="20" cy="20" r="20" fill="url(#ag4)"/>
-                <circle cx="20" cy="20" r="15.5" fill="rgb(10,10,16)"/>
-                <path d="M22 11L12.5 22.5H19L16.5 30L27.5 18H21L22 11Z" fill="url(#ag4)"/>
-              </svg>
+              <ParrotAvatar size={28} />
             </div>
             <div className="max-w-[78%] rounded-[18px] rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
               style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}>
