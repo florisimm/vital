@@ -343,15 +343,37 @@ export default function CoachPage() {
 
   useEffect(() => { scheduleOffline(); return () => { if (offlineTimer.current) clearTimeout(offlineTimer.current) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load today's chat from localStorage on mount; prune stale days
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`rico-chat-${today}`)
+      if (saved) {
+        const { messages, context } = JSON.parse(saved)
+        if (messages?.length) setChatMessages(messages)
+        if (context) setSessionContext(context)
+      }
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('rico-chat-') && key !== `rico-chat-${today}`) localStorage.removeItem(key)
+      }
+    } catch {}
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist chat to localStorage whenever messages change
+  useEffect(() => {
+    if (chatMessages.length === 0) return
+    try { localStorage.setItem(`rico-chat-${today}`, JSON.stringify({ messages: chatMessages, context: sessionContext })) } catch {}
+  }, [chatMessages, sessionContext]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const userTurns = chatMessages.filter(m => m.role === 'user').length
   const atLimit   = userTurns >= MAX_TURNS
+
+  const today = new Date().toISOString().slice(0, 10)
 
   function clearChat() {
     setChatMessages([])
     setSessionContext(null)
+    try { localStorage.removeItem(`rico-chat-${today}`) } catch {}
   }
-
-  const today = new Date().toISOString().slice(0, 10)
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: training }        = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: foodData }        = useSWR(`food-log-${today}`, () => fetchFoodData(today), { revalidateOnFocus: false, dedupingInterval: 60_000 })
@@ -373,16 +395,13 @@ export default function CoachPage() {
     const q = message.trim()
     setMessage('')
 
-    // Status: online → typing
     if (offlineTimer.current) clearTimeout(offlineTimer.current)
     setStatus('online')
-    const typingDelay = setTimeout(() => setStatus('typing'), 1800)
 
     // Direct answers skip the API entirely
     const direct = tryDirectAnswer(q, healthRows, activities, hevy, foodForRecs)
     if (direct) {
       setTimeout(() => {
-        clearTimeout(typingDelay)
         setChatMessages(prev => [...prev, { role: 'user', content: q }, { role: 'assistant', content: direct, direct: true }])
         setStatus('online')
         scheduleOffline()
@@ -398,29 +417,36 @@ export default function CoachPage() {
 
     const updated = [...chatMessages, { role: 'user' as const, content: q }]
     setChatMessages(updated)
-    setStreaming(true)
     setStreamText('')
 
-    try {
-      // ctx is identical every turn → Anthropic caches it after turn 1 (~10× cheaper input)
-      const apiMessages = updated.map((msg, i) => {
-        if (i === 0 && msg.role === 'user') {
-          return {
-            role: 'user' as const,
-            content: [
-              { type: 'text' as const, text: `## User context\n\n${ctx}`, cache_control: { type: 'ephemeral' as const } },
-              { type: 'text' as const, text: msg.content },
-            ],
-          }
+    // ctx is identical every turn → Anthropic caches it after turn 1 (~10× cheaper input)
+    const apiMessages = updated.map((msg, i) => {
+      if (i === 0 && msg.role === 'user') {
+        return {
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: `## User context\n\n${ctx}`, cache_control: { type: 'ephemeral' as const } },
+            { type: 'text' as const, text: msg.content },
+          ],
         }
-        return { role: msg.role, content: msg.content }
-      })
+      }
+      return { role: msg.role, content: msg.content }
+    })
 
-      const resp = await fetch('/api/coach/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages }),
-      })
+    // Start fetch immediately to avoid adding latency on top of the visual delay
+    const fetchPromise = fetch('/api/coach/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: apiMessages }),
+    })
+
+    // Show "Online" for 900ms first, then switch to typing + show streaming bubble
+    await new Promise(r => setTimeout(r, 900))
+    setStatus('typing')
+    setStreaming(true)
+
+    try {
+      const resp = await fetchPromise
       if (!resp.ok) throw new Error(await resp.text())
 
       const reader  = resp.body!.getReader()
