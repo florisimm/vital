@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   try {
     stream = await openai.chat.completions.create({
       model: 'gpt-5-mini',
-      max_tokens: 120,
+      max_completion_tokens: 120,
       messages: [{ role: 'system', content: SYSTEM }, ...toOpenAIMessages(messages)],
       stream: true,
     })
