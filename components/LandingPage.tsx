@@ -2,33 +2,43 @@
 
 import { useRouter } from 'next/navigation'
 import {
-  Activity, Brain, HeartPulse, Utensils, Dumbbell, Moon,
-  ArrowRight, Check, Sparkles,
+  Activity, Brain, HeartPulse, Utensils, Dumbbell, Moon, CalendarDays,
+  ArrowRight, Check, X, Sparkles, Zap, TrendingUp,
 } from 'lucide-react'
 
 // Professional public marketing page shown to logged-out visitors on `/`.
 // Logged-in users get the dashboard instead (gated in app/page.tsx).
 
 const FEATURES = [
-  { Icon: Brain,      title: 'AI Coach',          desc: 'Rico, your personal coach, reads your data and answers any question about training, recovery and nutrition — instantly.' },
-  { Icon: HeartPulse, title: 'Recovery & Readiness', desc: 'HRV, resting heart rate and sleep combine into a single readiness score, so you know exactly when to push.' },
-  { Icon: Dumbbell,   title: 'Smart Training',    desc: 'Automatic training advice based on your load, ramp rate and planned sessions — never over- or under-train again.' },
-  { Icon: Utensils,   title: 'Nutrition & Macros', desc: 'Scan barcodes, log meals and effortlessly stay on top of your protein and calorie goals.' },
-  { Icon: Moon,       title: 'Sleep Insights',    desc: 'Deep sleep, REM and efficiency every night — with concrete tips to recover better.' },
-  { Icon: Activity,   title: 'All in One Place',  desc: 'Strava, Hevy, Fitbit and Google Calendar sync automatically into one overview.' },
+  { Icon: Brain,       title: 'AI Coach',            desc: 'Rico, your personal coach, reads all your data and answers any question about training, recovery and nutrition — instantly, in plain language.' },
+  { Icon: CalendarDays, title: 'Calendar-Aware',     desc: 'Kern syncs with your calendar and reads your planned sessions, so every piece of advice fits around the workouts you actually have scheduled.' },
+  { Icon: HeartPulse,  title: 'Recovery & Readiness', desc: 'HRV, resting heart rate and sleep combine into a single readiness score, so you know exactly when to push and when to hold back.' },
+  { Icon: Dumbbell,    title: 'Smart Training Advice', desc: 'Daily recommendations based on your load, ramp rate and scheduled sessions — telling you what to do today, not a generic weekly template.' },
+  { Icon: Utensils,    title: 'Nutrition & Macros',  desc: 'Scan barcodes, log meals and effortlessly stay on top of your protein and calorie goals — tied back to your training demands.' },
+  { Icon: Moon,        title: 'Sleep Insights',      desc: 'Deep sleep, REM and efficiency every night — with concrete, personalised tips to recover better.' },
 ]
 
 const STEPS = [
-  { n: '01', title: 'Connect your apps', desc: 'Link Strava, Hevy, Fitbit and your calendar in a single tap.' },
-  { n: '02', title: 'Get insights',      desc: 'Your data is automatically analysed into clear scores and advice.' },
-  { n: '03', title: 'Perform better',    desc: 'Follow your AI coach\'s recommendations and watch your progress every day.' },
+  { n: '01', title: 'Connect everything', desc: 'Link Strava, Hevy, Fitbit and your calendar in a single tap. Your training, health and schedule flow in automatically.' },
+  { n: '02', title: 'We analyse it for you', desc: 'Kern combines your readiness, training load, sleep, nutrition and planned sessions into clear scores — no spreadsheets, no guesswork.' },
+  { n: '03', title: 'Get daily advice',    desc: 'Your AI coach tells you what to do today: push, hold back or rest — adapted to what your calendar already has planned.' },
 ]
 
 const BENEFITS = [
-  'A personal AI coach that truly understands your data',
+  'A personal AI coach that actually understands your data',
+  'Advice that adapts to your calendar and planned sessions',
   'One dashboard for training, recovery, sleep and nutrition',
-  'Automatic sync with your favourite apps',
-  'Tailored advice — no generic programs',
+  'Tailored recommendations — never a generic program',
+]
+
+// Why Kern is better — comparison rows
+const COMPARE = [
+  { feature: 'Reads your real health & training data',     kern: true,  apps: false, pt: false },
+  { feature: 'Adapts advice to your calendar',             kern: true,  apps: false, pt: false },
+  { feature: 'Combines readiness, load, sleep & nutrition', kern: true,  apps: false, pt: true  },
+  { feature: 'Tells you what to do today',                 kern: true,  apps: false, pt: true  },
+  { feature: 'Available 24/7, answers instantly',          kern: true,  apps: true,  pt: false },
+  { feature: 'Costs a fraction of a coach',                kern: true,  apps: true,  pt: false },
 ]
 
 export function LandingPage() {
@@ -89,12 +99,12 @@ export function LandingPage() {
           <h1 className="text-[44px] sm:text-[68px] font-bold leading-[1.04] tracking-tight max-w-4xl">
             Your body, <span className="text-teal-400">understood</span>.
             <br />
-            Every single day.
+            Advice that fits your day.
           </h1>
 
           <p className="text-[17px] sm:text-[20px] text-white/55 mt-6 max-w-2xl font-medium leading-relaxed">
-            Kern combines your training, sleep, recovery and nutrition into one smart dashboard —
-            with an AI coach that knows exactly what you need today.
+            Kern connects your training, sleep, recovery, nutrition <span className="text-white/80">and your calendar</span> —
+            then an AI coach tells you exactly what to do today, around the sessions you already have planned.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 mt-10 w-full sm:w-auto">
@@ -121,10 +131,11 @@ export function LandingPage() {
       {/* ── Features ────────────────────────────────────────────── */}
       <section className="relative max-w-6xl mx-auto px-5 sm:px-8 py-20">
         <div className="text-center mb-14">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-teal-400/80 mb-3">Features</p>
-          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">Everything you need</h2>
+          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-teal-400/80 mb-3">What Kern does</p>
+          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">Everything, working together</h2>
           <p className="text-[17px] text-white/50 mt-4 max-w-2xl mx-auto">
-            One app that brings all your health data together and turns it into concrete action.
+            Kern brings all your health data <span className="text-white/75">and your schedule</span> together,
+            then turns it into clear, daily advice.
           </p>
         </div>
 
@@ -152,7 +163,7 @@ export function LandingPage() {
       <section className="relative max-w-6xl mx-auto px-5 sm:px-8 py-20">
         <div className="text-center mb-14">
           <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-orange-400/80 mb-3">How it works</p>
-          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">In three steps</h2>
+          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">From data to daily advice</h2>
         </div>
 
         <div className="grid sm:grid-cols-3 gap-6">
@@ -161,6 +172,43 @@ export function LandingPage() {
               <div className="text-[56px] font-bold leading-none text-white/[0.08] mb-3">{n}</div>
               <h3 className="text-[21px] font-bold mb-2">{title}</h3>
               <p className="text-[15px] text-white/50 leading-relaxed">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Why Kern is better ──────────────────────────────────── */}
+      <section className="relative max-w-5xl mx-auto px-5 sm:px-8 py-20">
+        <div className="text-center mb-12">
+          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-teal-400/80 mb-3">Why Kern</p>
+          <h2 className="text-[34px] sm:text-[46px] font-bold tracking-tight">Why we&apos;re different</h2>
+          <p className="text-[17px] text-white/50 mt-4 max-w-2xl mx-auto">
+            Most apps just show you numbers. A coach isn&apos;t there at 6am. Kern reads your data,
+            your calendar and your recovery — and actually tells you what to do.
+          </p>
+        </div>
+
+        <div
+          className="rounded-[24px] overflow-hidden"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          {/* Header row */}
+          <div className="grid grid-cols-[1fr_auto_auto_auto] sm:grid-cols-[1fr_120px_120px_120px] items-center px-4 sm:px-6 py-4 border-b border-white/[0.07]">
+            <span className="text-[13px] sm:text-[14px] font-semibold text-white/40">Capability</span>
+            <span className="text-[12px] sm:text-[14px] font-bold text-teal-400 text-center px-2">Kern</span>
+            <span className="text-[12px] sm:text-[14px] font-semibold text-white/40 text-center px-2">Fitness apps</span>
+            <span className="text-[12px] sm:text-[14px] font-semibold text-white/40 text-center px-2">Personal trainer</span>
+          </div>
+
+          {COMPARE.map((row, i) => (
+            <div
+              key={row.feature}
+              className={`grid grid-cols-[1fr_auto_auto_auto] sm:grid-cols-[1fr_120px_120px_120px] items-center px-4 sm:px-6 py-4 ${i < COMPARE.length - 1 ? 'border-b border-white/[0.05]' : ''}`}
+            >
+              <span className="text-[14px] sm:text-[15px] text-white/80 font-medium pr-3">{row.feature}</span>
+              <Cell on={row.kern} highlight />
+              <Cell on={row.apps} />
+              <Cell on={row.pt} />
             </div>
           ))}
         </div>
@@ -226,6 +274,27 @@ export function LandingPage() {
           </button>
         </div>
       </footer>
+    </div>
+  )
+}
+
+// Comparison cell — check for yes, dash for no
+function Cell({ on, highlight = false }: { on: boolean; highlight?: boolean }) {
+  return (
+    <div className="flex justify-center px-2">
+      {on ? (
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center"
+          style={{
+            background: highlight ? 'rgba(45,212,191,0.18)' : 'rgba(255,255,255,0.08)',
+            border: highlight ? '1px solid rgba(45,212,191,0.35)' : '1px solid rgba(255,255,255,0.12)',
+          }}
+        >
+          <Check size={14} className={highlight ? 'text-teal-400' : 'text-white/60'} strokeWidth={3} />
+        </div>
+      ) : (
+        <X size={16} className="text-white/15" strokeWidth={2.5} />
+      )}
     </div>
   )
 }
