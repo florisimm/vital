@@ -13,6 +13,7 @@ export type HealthRow = {
   slaap_score?: number | null
   slaap_diep: number | null
   slaap_rem: number | null
+  slaap_licht: number | null
   wakker_minuten: number | null
   wakker_count: number | null
   spo2: number | null
