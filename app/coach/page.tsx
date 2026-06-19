@@ -238,7 +238,6 @@ function buildSections(
         r.slaap_score != null ? `score ${r.slaap_score}` : null,
         r.slaap_diep != null ? `deep ${fmtMin(r.slaap_diep)}` : null,
         r.slaap_rem  != null ? `REM ${fmtMin(r.slaap_rem)}`  : null,
-        r.slaap_licht != null ? `light ${fmtMin(r.slaap_licht)}` : null,
         r.hrv_rmssd != null ? `HRV ${r.hrv_rmssd} ms` : null,
       ].filter(Boolean).join(', ')),
     ].join('\n'),
