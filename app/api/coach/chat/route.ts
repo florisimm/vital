@@ -43,7 +43,8 @@ export async function POST(req: Request) {
       const enc = new TextEncoder()
       try {
         for await (const chunk of stream) {
-          const text = chunk.choices[0]?.delta?.content ?? ''
+          console.error("[coach] chunk:", JSON.stringify(chunk.choices?.[0]))
+          const text = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? ''
           if (text) controller.enqueue(enc.encode(text))
         }
       } finally {
