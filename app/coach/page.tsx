@@ -332,7 +332,16 @@ export default function CoachPage() {
   const [sessionContext, setSessionContext] = useState<string | null>(null)
   const [streaming, setStreaming]       = useState(false)
   const [streamText, setStreamText]     = useState('')
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const [status, setStatus]             = useState<'online' | 'typing' | 'offline'>('online')
+  const bottomRef    = useRef<HTMLDivElement>(null)
+  const offlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function scheduleOffline() {
+    if (offlineTimer.current) clearTimeout(offlineTimer.current)
+    offlineTimer.current = setTimeout(() => setStatus('offline'), 30_000)
+  }
+
+  useEffect(() => { scheduleOffline(); return () => { if (offlineTimer.current) clearTimeout(offlineTimer.current) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const userTurns = chatMessages.filter(m => m.role === 'user').length
   const atLimit   = userTurns >= MAX_TURNS
@@ -364,10 +373,20 @@ export default function CoachPage() {
     const q = message.trim()
     setMessage('')
 
+    // Status: online → typing
+    if (offlineTimer.current) clearTimeout(offlineTimer.current)
+    setStatus('online')
+    const typingDelay = setTimeout(() => setStatus('typing'), 800)
+
     // Direct answers skip the API entirely
     const direct = tryDirectAnswer(q, healthRows, activities, hevy, foodForRecs)
     if (direct) {
-      setChatMessages(prev => [...prev, { role: 'user', content: q }, { role: 'assistant', content: direct, direct: true }])
+      setTimeout(() => {
+        clearTimeout(typingDelay)
+        setChatMessages(prev => [...prev, { role: 'user', content: q }, { role: 'assistant', content: direct, direct: true }])
+        setStatus('online')
+        scheduleOffline()
+      }, 900)
       return
     }
 
@@ -414,8 +433,12 @@ export default function CoachPage() {
         setStreamText(full)
       }
       setChatMessages(prev => [...prev, { role: 'assistant', content: full }])
+      setStatus('online')
+      scheduleOffline()
     } catch {
       setChatMessages(prev => [...prev, { role: 'assistant', content: 'Er is iets misgegaan — probeer het opnieuw.' }])
+      setStatus('online')
+      scheduleOffline()
     } finally {
       setStreaming(false)
       setStreamText('')
@@ -427,6 +450,7 @@ export default function CoachPage() {
 
       {/* Animated background blobs */}
       <style>{`
+        @keyframes typingPulse { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
         @keyframes blob1 { from { transform: translate(0,0) scale(1); } to { transform: translate(8%,12%) scale(1.12); } }
         @keyframes blob2 { from { transform: translate(0,0) scale(1); } to { transform: translate(-10%,-8%) scale(1.08); } }
         @keyframes blob3 { from { transform: translate(0,0) scale(1); } to { transform: translate(6%,-10%) scale(0.92); } }
@@ -456,7 +480,15 @@ export default function CoachPage() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-semibold text-white leading-tight">Rico</div>
-          <div className="text-[12px] text-teal-400 leading-tight">Online</div>
+          <div className="text-[12px] leading-tight flex items-center gap-1">
+            {status === 'typing' ? (
+              <span className="text-white/50" style={{ animation: 'typingPulse 1.2s ease-in-out infinite' }}>aan het typen...</span>
+            ) : status === 'online' ? (
+              <><span className="w-1.5 h-1.5 rounded-full bg-teal-400 inline-block" /><span className="text-teal-400">Online</span></>
+            ) : (
+              <><span className="w-1.5 h-1.5 rounded-full bg-white/25 inline-block" /><span className="text-white/35">Offline</span></>
+            )}
+          </div>
         </div>
         {chatMessages.length > 0 && (
           <button onClick={clearChat} className="text-white/35 active:text-white/70">
