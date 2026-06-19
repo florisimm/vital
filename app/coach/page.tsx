@@ -6,7 +6,6 @@ import { ArrowUp, ChevronLeft, Dumbbell, Loader2, Trash2 } from 'lucide-react'
 
 const MAX_TURNS = 10
 import useSWR from 'swr'
-import { CoachRecommendation } from '@/components/ui'
 import {
   computePhysiologyReadiness, computeIllnessFlag, computeHRVBaseline, type HealthRow,
 } from '@/lib/readiness'
@@ -417,18 +416,18 @@ export default function CoachPage() {
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
 
-        {/* Recommendations */}
-        {hasData ? (
-          recs.length > 0
-            ? recs.map((rec, i) => <CoachRecommendation key={i} rank={String(i + 1).padStart(2, '0')} title={rec.title} text={rec.text} />)
-            : <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                <p className="text-[15px] text-white/40">All signals look good — no specific actions needed today.</p>
-              </div>
-        ) : (
-          <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-            <p className="text-[15px] text-white/40">Connect Fitbit and log training to see personalised recommendations.</p>
+        {/* Recommendations as coach bubbles */}
+        {recs.map((rec, i) => (
+          <div key={i} className="flex justify-start">
+            <div
+              className="max-w-[82%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed"
+              style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              <div className="font-semibold text-white mb-0.5">{rec.title}</div>
+              <div className="text-white/70">{rec.text}</div>
+            </div>
           </div>
-        )}
+        ))}
 
         {/* Chat messages */}
         {chatMessages.map((msg, i) => (
