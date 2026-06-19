@@ -452,10 +452,10 @@ export default function CoachPage() {
           <ChevronLeft size={22} strokeWidth={2.2} />
         </button>
         <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden">
-          <ParrotAvatar size={40} />
+          <img src="/rico.png" alt="Rico" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[16px] font-semibold text-white leading-tight">Coach</div>
+          <div className="text-[16px] font-semibold text-white leading-tight">Rico</div>
           <div className="text-[12px] text-teal-400 leading-tight">Online</div>
         </div>
         {chatMessages.length > 0 && (
@@ -472,7 +472,7 @@ export default function CoachPage() {
         {recs.map((rec, i) => (
           <div key={i} className="flex justify-start gap-2 items-end">
             <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
-              <ParrotAvatar size={28} />
+              <img src="/rico.png" alt="Rico" className="w-full h-full object-cover" />
             </div>
             <div
               className="max-w-[78%] rounded-[18px] rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed"
@@ -489,7 +489,7 @@ export default function CoachPage() {
           <div key={i} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
               <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
-                <ParrotAvatar size={28} />
+                <img src="/rico.png" alt="Rico" className="w-full h-full object-cover" />
               </div>
             )}
             <div
@@ -508,7 +508,7 @@ export default function CoachPage() {
         {streaming && (
           <div className="flex items-end gap-2 justify-start">
             <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden mb-0.5">
-              <ParrotAvatar size={28} />
+              <img src="/rico.png" alt="Rico" className="w-full h-full object-cover" />
             </div>
             <div className="max-w-[78%] rounded-[18px] rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
               style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}>
