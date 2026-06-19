@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Home, MessageSquare, PersonStanding, Heart, Utensils } from 'lucide-react'
+import { createClient } from '@/lib/supabase'
 
 const tabs = [
   { href: '/',         label: 'Today',    Icon: Home },
@@ -14,7 +16,22 @@ const tabs = [
 
 export function BottomNav() {
   const pathname = usePathname()
+  const [authed, setAuthed] = useState<boolean | null>(null)
 
+  useEffect(() => {
+    const supabase = createClient()
+    let active = true
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (active) setAuthed(!!user)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (active) setAuthed(!!session?.user)
+    })
+    return () => { active = false; subscription.unsubscribe() }
+  }, [])
+
+  // Hide for logged-out visitors (e.g. the marketing landing page on `/`)
+  if (authed === null || authed === false) return null
   if (pathname === '/training/session' || pathname === '/login' || pathname === '/coach') return null
 
   return (

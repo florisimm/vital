@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
+import { LandingPage } from '@/components/LandingPage'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { formatTime, localDateStr } from '@/lib/timeFormat'
@@ -501,7 +502,30 @@ function UpcomingCard({ events, onSync, hevy, acts }: { events: any[]; onSync: (
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function TodayPage() {
+// Auth gate: logged-out visitors see the marketing landing page, logged-in
+// users see their Today dashboard. Keeps the dashboard at `/` so the bottom
+// nav Today tab is unchanged.
+export default function HomePage() {
+  const [authState, setAuthState] = useState<'loading' | 'in' | 'out'>('loading')
+
+  useEffect(() => {
+    const supabase = createClient()
+    let active = true
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (active) setAuthState(user ? 'in' : 'out')
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (active) setAuthState(session?.user ? 'in' : 'out')
+    })
+    return () => { active = false; subscription.unsubscribe() }
+  }, [])
+
+  if (authState === 'loading') return null
+  if (authState === 'out') return <LandingPage />
+  return <TodayDashboard />
+}
+
+function TodayDashboard() {
   const { data } = useSWR('today', fetchTodayData, {
     revalidateOnFocus: true,
     revalidateOnMount: true,

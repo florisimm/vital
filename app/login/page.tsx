@@ -12,6 +12,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resetSent, setResetSent] = useState(false)
+  const [signupNotice, setSignupNotice] = useState(false)
+
+  function handleSignUp() {
+    // Sign-up flow not wired up yet — placeholder.
+    setSignupNotice(true)
+  }
 
   async function handleForgotPassword() {
     if (!email) { setError('Vul eerst je e-mailadres in'); return }
@@ -117,6 +123,10 @@ export default function LoginPage() {
           <p className="text-teal-400 text-[14px] text-center px-2">Reset link verstuurd — check je e-mail</p>
         )}
 
+        {signupNotice && (
+          <p className="text-teal-400 text-[14px] text-center px-2">Account aanmaken komt binnenkort — neem voorlopig contact op voor toegang.</p>
+        )}
+
         <button
           onClick={handleLogin}
           disabled={loading}
@@ -134,9 +144,30 @@ export default function LoginPage() {
           Wachtwoord vergeten?
         </button>
 
-        <p className="text-[13px] text-white/25 text-center mt-1">
-          Kern — AI Fitness & Health Coaching
-        </p>
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-1">
+          <div className="flex-1 h-px bg-white/[0.08]" />
+          <span className="text-[12px] text-white/25">of</span>
+          <div className="flex-1 h-px bg-white/[0.08]" />
+        </div>
+
+        {/* Sign up — placeholder, not wired up yet */}
+        <button
+          type="button"
+          onClick={handleSignUp}
+          className="h-[56px] rounded-[18px] font-semibold text-[17px] text-white active:scale-[0.98] transition-transform"
+          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          Account aanmaken
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          className="text-[13px] text-white/30 text-center mt-1"
+        >
+          ← Terug naar home
+        </button>
       </div>
     </div>
   )
