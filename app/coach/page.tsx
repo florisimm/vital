@@ -376,7 +376,7 @@ export default function CoachPage() {
     // Status: online → typing
     if (offlineTimer.current) clearTimeout(offlineTimer.current)
     setStatus('online')
-    const typingDelay = setTimeout(() => setStatus('typing'), 800)
+    const typingDelay = setTimeout(() => setStatus('typing'), 1800)
 
     // Direct answers skip the API entirely
     const direct = tryDirectAnswer(q, healthRows, activities, hevy, foodForRecs)
