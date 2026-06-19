@@ -4365,7 +4365,15 @@ export function CyclingSection({ activities, hevy = [], todaySport = null, train
 
 // ─── Strength ─────────────────────────────────────────────────────────────────
 
-function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
+function detectSplitFromTitle(title: string): 'Push' | 'Pull' | 'Legs' | null {
+  const t = title.toLowerCase()
+  if (/push|chest|bench|pec|shoulder|press/.test(t)) return 'Push'
+  if (/pull|back|row|lat|bicep|arm|chin|deadlift/.test(t)) return 'Pull'
+  if (/leg|squat|quad|glute|hamstring|calf|lunge|hip thrust/.test(t)) return 'Legs'
+  return null
+}
+
+function SplitRecommendationCard({ hevy, calendarEvents = [] }: { hevy: HevyWorkout[]; calendarEvents?: any[] }) {
   const muscleAdvice = computeMuscleGroupAdvice(hevy)
   const get = (label: string) => muscleAdvice.find(g => g.label === label)
 
@@ -4373,14 +4381,39 @@ function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
   const pullScore = Math.round(((get('Back')?.recovery ?? 100) + (get('Arms')?.recovery ?? 100)) / 2)
   const legsScore = get('Legs')?.recovery ?? 100
 
-  const splits = [
-    { key: 'Push', score: pushScore, groups: 'Chest · Shoulders', color: '#60a5fa', emoji: '💪' },
-    { key: 'Pull', score: pullScore, groups: 'Back · Arms', color: '#2dd4bf', emoji: '🏋️' },
-    { key: 'Legs', score: legsScore, groups: 'Quads · Glutes', color: '#4ade80', emoji: '🦵' },
-  ].sort((a, b) => b.score - a.score)
+  const splitMap: Record<string, { key: string; score: number; groups: string; color: string; emoji: string }> = {
+    Push: { key: 'Push', score: pushScore, groups: 'Chest · Shoulders', color: '#60a5fa', emoji: '💪' },
+    Pull: { key: 'Pull', score: pullScore, groups: 'Back · Arms',        color: '#2dd4bf', emoji: '🏋️' },
+    Legs: { key: 'Legs', score: legsScore, groups: 'Quads · Glutes',    color: '#4ade80', emoji: '🦵' },
+  }
 
-  const best = splits[0]
-  const isRest = best.score < 60
+  // Find next calendar-planned gym event
+  const now = new Date().toISOString()
+  const nextEvent = calendarEvents
+    .filter(e => (e.start_datetime || e.start_date) >= now && STRENGTH_KEYWORDS.test(e.title ?? ''))
+    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0] ?? null
+
+  const plannedSplitKey = nextEvent ? detectSplitFromTitle(nextEvent.title ?? '') : null
+  const plannedSplit    = plannedSplitKey ? splitMap[plannedSplitKey] : null
+
+  // Sort: planned split first (if any), then rest by recovery score
+  const splits = Object.values(splitMap).sort((a, b) => {
+    if (plannedSplitKey) {
+      if (a.key === plannedSplitKey) return -1
+      if (b.key === plannedSplitKey) return 1
+    }
+    return b.score - a.score
+  })
+
+  const best   = plannedSplit ?? splits[0]
+  const isRest = !plannedSplit && best.score < 60
+
+  // When label for next event
+  const nsDateStr  = nextEvent ? (nextEvent.start_datetime || nextEvent.start_date) : null
+  const nsToday    = nsDateStr?.slice(0, 10) === now.slice(0, 10)
+  const nsTomorrow = nsDateStr?.slice(0, 10) === new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const nsWhen     = nsDateStr ? new Date(nsDateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' }) : null
+  const nsLabel    = nsToday ? 'Vandaag' : nsTomorrow ? 'Morgen' : nsWhen
 
   const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
   const sl = (pct: number) => pct >= 80 ? 'Klaar' : pct >= 55 ? 'Mogelijk' : 'Herstel'
@@ -4392,6 +4425,9 @@ function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
       <div className="flex items-center gap-3 mb-5">
         <span className="text-[42px] leading-none">{isRest ? '😴' : best.emoji}</span>
         <div>
+          {nextEvent && nsLabel && (
+            <span className="text-[11px] font-semibold text-teal-400 block mb-0.5">{nsLabel} — {nextEvent.title}</span>
+          )}
           <span className="text-[24px] font-bold text-white">{isRest ? 'Rustdag' : `${best.key} day`}</span>
           <p className="text-[13px] text-white/50 mt-0.5">
             {isRest ? 'Spieren herstellen' : `${best.groups} hersteld`}
@@ -4400,30 +4436,35 @@ function SplitRecommendationCard({ hevy }: { hevy: HevyWorkout[] }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        {splits.map((s, i) => (
-          <div key={s.key}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-[14px]"
-            style={{
-              background: i === 0 && !isRest ? `${s.color}15` : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${i === 0 && !isRest ? `${s.color}30` : 'rgba(255,255,255,0.05)'}`,
-            }}>
-            <span className="text-[20px] leading-none w-7 shrink-0">{s.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[14px] font-semibold text-white">{s.key} day</span>
-                {i === 0 && !isRest && (
-                  <span className="text-[9px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full"
-                    style={{ background: `${s.color}25`, color: s.color }}>volgende</span>
-                )}
+        {splits.map((s, i) => {
+          const isPlanned = plannedSplitKey ? s.key === plannedSplitKey : i === 0 && !isRest
+          return (
+            <div key={s.key}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-[14px]"
+              style={{
+                background: isPlanned ? `${s.color}15` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${isPlanned ? `${s.color}30` : 'rgba(255,255,255,0.05)'}`,
+              }}>
+              <span className="text-[20px] leading-none w-7 shrink-0">{s.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-white">{s.key} day</span>
+                  {isPlanned && (
+                    <span className="text-[9px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full"
+                      style={{ background: `${s.color}25`, color: s.color }}>
+                      {plannedSplit ? 'gepland' : 'volgende'}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-white/35">{s.groups}</span>
               </div>
-              <span className="text-[11px] text-white/35">{s.groups}</span>
+              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                <span className="text-[12px] font-semibold" style={{ color: sc(s.score) }}>{sl(s.score)}</span>
+                <span className="text-[10px] text-white/30">{s.score}%</span>
+              </div>
             </div>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="text-[12px] font-semibold" style={{ color: sc(s.score) }}>{sl(s.score)}</span>
-              <span className="text-[10px] text-white/30">{s.score}%</span>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -4458,33 +4499,10 @@ export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorko
   const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
   const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
 
-  const now = new Date().toISOString()
-  const nextStrength = calendarEvents
-    .filter(e => (e.start_datetime || e.start_date) >= now && STRENGTH_KEYWORDS.test(e.title ?? ''))
-    .sort((a, b) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0] ?? null
-
-  const nsDateStr = nextStrength ? (nextStrength.start_datetime || nextStrength.start_date) : null
-  const nsWhen    = nsDateStr ? new Date(nsDateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' }) : null
-  const nsTime    = nextStrength?.start_datetime ? formatClockTime(nextStrength.start_datetime) : null
-  const nsToday   = nsDateStr?.slice(0, 10) === now.slice(0, 10)
-  const nsTomorrow = nsDateStr?.slice(0, 10) === new Date(Date.now() + 86400000).toISOString().slice(0, 10)
-  const nsLabel   = nsToday ? 'Vandaag' : nsTomorrow ? 'Morgen' : nsWhen
-
   return (
     <div className="flex flex-col gap-6">
 
-      {nextStrength && (
-        <Card>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Volgende workout</span>
-            {nsLabel && <span className="text-[12px] font-semibold text-teal-400 mt-1">{nsLabel}</span>}
-            <span className="text-[17px] font-semibold text-white">{nextStrength.title}</span>
-            {nsWhen && <span className="text-[13px] text-white/50">{nsWhen}{nsTime ? ` · ${nsTime}` : ''}</span>}
-          </div>
-        </Card>
-      )}
-
-      <SplitRecommendationCard hevy={hevy} />
+      <SplitRecommendationCard hevy={hevy} calendarEvents={calendarEvents} />
 
       {muscleAdvice.length > 0 && (
         <Card>
