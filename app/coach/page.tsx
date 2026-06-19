@@ -233,7 +233,14 @@ function buildSections(
     sleep: [
       '### Sleep (last 7 nights)',
       `- 30-day avg: ${baselines.sleep != null ? fmtMin(baselines.sleep) : '–'}`,
-      ...sleepRows.map(r => `- ${r.datum}: ${r.slaap_minuten ? fmtMin(r.slaap_minuten) : '–'}${r.slaap_score != null ? `, score ${r.slaap_score}` : ''}${r.hrv_rmssd != null ? `, HRV ${r.hrv_rmssd} ms` : ''}`),
+      ...sleepRows.map(r => [
+        `- ${r.datum}: ${r.slaap_minuten ? fmtMin(r.slaap_minuten) : '–'}`,
+        r.slaap_score != null ? `score ${r.slaap_score}` : null,
+        r.slaap_diep != null ? `deep ${fmtMin(r.slaap_diep)}` : null,
+        r.slaap_rem  != null ? `REM ${fmtMin(r.slaap_rem)}`  : null,
+        r.slaap_licht != null ? `light ${fmtMin(r.slaap_licht)}` : null,
+        r.hrv_rmssd != null ? `HRV ${r.hrv_rmssd} ms` : null,
+      ].filter(Boolean).join(', ')),
     ].join('\n'),
 
     trainingLoad: `### Training load (last 7d)\n${loadLine}`,
