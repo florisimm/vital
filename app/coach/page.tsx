@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowUp, ChevronLeft, Loader2, Trash2 } from 'lucide-react'
+import { ArrowUp, ChevronLeft, Dumbbell, Loader2, Trash2 } from 'lucide-react'
 
 const MAX_TURNS = 10
 import useSWR from 'swr'
@@ -382,111 +382,128 @@ export default function CoachPage() {
   }
 
   return (
-    <div
-      className="min-h-screen px-5"
-      style={{
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)',
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
-      }}
-    >
-      {/* Header */}
-      <div className="relative flex items-center justify-between mb-7">
-        <button onClick={() => router.back()} className="text-white/70 active:text-white">
+    <div className="flex flex-col" style={{ height: '100dvh' }}>
+
+      {/* Top bar */}
+      <div
+        className="flex items-center gap-3 px-4 shrink-0"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          paddingBottom: '12px',
+          background: 'rgba(18,18,22,0.97)',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+        }}
+      >
+        <button onClick={() => router.back()} className="text-white/70 active:text-white mr-1">
           <ChevronLeft size={22} strokeWidth={2.2} />
         </button>
-        <span className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-white">Coach</span>
-        <div className="w-6" />
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: 'linear-gradient(135deg, rgb(45,212,191) 0%, rgb(20,160,140) 100%)' }}
+        >
+          <Dumbbell size={18} className="text-white" strokeWidth={2} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[16px] font-semibold text-white leading-tight">Coach</div>
+          <div className="text-[12px] text-teal-400 leading-tight">Online</div>
+        </div>
+        {chatMessages.length > 0 && (
+          <button onClick={clearChat} className="text-white/35 active:text-white/70">
+            <Trash2 size={18} />
+          </button>
+        )}
       </div>
 
-      <div className="flex flex-col" style={{ gap: 18 }}>
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
 
-      {/* Recommendations */}
-      {hasData ? (
-        recs.length > 0
-          ? recs.map((rec, i) => <CoachRecommendation key={i} rank={String(i + 1).padStart(2, '0')} title={rec.title} text={rec.text} />)
-          : <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-              <p className="text-[15px] text-white/40">All signals look good — no specific actions needed today.</p>
-            </div>
-      ) : (
-        <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <p className="text-[15px] text-white/40">Connect Fitbit and log training to see personalised recommendations.</p>
-        </div>
-      )}
-
-      {/* Chat history */}
-      {chatMessages.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {/* Header row: turn counter + clear button */}
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[12px] text-white/30">{userTurns}/{MAX_TURNS} vragen</span>
-            <button onClick={clearChat} className="flex items-center gap-1.5 text-[12px] text-white/40 active:text-white/70">
-              <Trash2 size={13} />
-              Wis gesprek
-            </button>
+        {/* Recommendations */}
+        {hasData ? (
+          recs.length > 0
+            ? recs.map((rec, i) => <CoachRecommendation key={i} rank={String(i + 1).padStart(2, '0')} title={rec.title} text={rec.text} />)
+            : <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[15px] text-white/40">All signals look good — no specific actions needed today.</p>
+              </div>
+        ) : (
+          <div className="px-4 py-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <p className="text-[15px] text-white/40">Connect Fitbit and log training to see personalised recommendations.</p>
           </div>
-          {chatMessages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className="max-w-[85%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
-                style={msg.role === 'user'
-                  ? { background: 'rgba(255,255,255,0.13)', color: 'white' }
-                  : { background: msg.direct ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.08)' }
-                }
-              >
-                {msg.content}
-              </div>
+        )}
+
+        {/* Chat messages */}
+        {chatMessages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div
+              className="max-w-[82%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+              style={msg.role === 'user'
+                ? { background: 'rgb(45,212,191)', color: 'rgb(5,6,8)' }
+                : { background: msg.direct ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }
+              }
+            >
+              {msg.content}
             </div>
-          ))}
+          </div>
+        ))}
 
-          {/* Streaming bubble */}
-          {streaming && (
-            <div className="flex justify-start">
-              <div className="max-w-[85%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
-                style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                {streamText || <Loader2 size={16} className="animate-spin text-white/40" />}
-              </div>
+        {/* Streaming bubble */}
+        {streaming && (
+          <div className="flex justify-start">
+            <div
+              className="max-w-[82%] rounded-[18px] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+              style={{ background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              {streamText || <Loader2 size={16} className="animate-spin text-white/40" />}
             </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Turn limit reached */}
-      {atLimit && (
-        <div className="rounded-[14px] px-4 py-3 text-center text-[14px] text-white/50"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          Limiet bereikt —{' '}
-          <button onClick={clearChat} className="text-teal-400 underline-offset-2 underline">wis het gesprek</button>
-          {' '}om door te gaan.
-        </div>
-      )}
+        {/* Turn limit */}
+        {atLimit && (
+          <div className="rounded-[14px] px-4 py-3 text-center text-[14px] text-white/50"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            Limiet bereikt —{' '}
+            <button onClick={clearChat} className="text-teal-400 underline-offset-2 underline">wis het gesprek</button>
+            {' '}om door te gaan.
+          </div>
+        )}
 
-      {/* Chat input */}
-      <div className="flex items-center gap-3 pt-2.5">
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Bottom input bar */}
+      <div
+        className="shrink-0 flex items-center gap-2 px-3"
+        style={{
+          paddingTop: '10px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+          background: 'rgba(18,18,22,0.97)',
+          borderTop: '1px solid rgba(255,255,255,0.07)',
+        }}
+      >
         <input
           type="text"
-          placeholder="Ask your coach…"
+          placeholder="Stel een vraag…"
           value={message}
           onChange={e => setMessage(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend()}
-          className="flex-1 h-[52px] px-4 rounded-[18px] text-white placeholder:text-white/30 outline-none text-[17px]"
+          className="flex-1 h-[44px] px-4 rounded-full text-white placeholder:text-white/30 outline-none text-[16px]"
           style={{ background: 'rgba(255,255,255,0.08)', opacity: atLimit ? 0.4 : 1 }}
           disabled={atLimit}
         />
         <button
           onClick={handleSend}
-          aria-label="Send message"
-          className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 disabled:opacity-30"
+          aria-label="Verstuur"
+          className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0 disabled:opacity-30"
+          style={{ background: 'rgb(45,212,191)' }}
           disabled={!message.trim() || streaming || atLimit}
         >
           {streaming
-            ? <Loader2 size={20} className="text-black animate-spin" />
-            : <ArrowUp size={20} className="text-black" strokeWidth={2.5} />
+            ? <Loader2 size={18} className="text-black animate-spin" />
+            : <ArrowUp size={18} className="text-black" strokeWidth={2.5} />
           }
         </button>
       </div>
 
-      </div>
     </div>
   )
 }
