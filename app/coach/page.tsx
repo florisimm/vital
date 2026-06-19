@@ -461,8 +461,9 @@ export default function CoachPage() {
       setChatMessages(prev => [...prev, { role: 'assistant', content: full }])
       setStatus('online')
       scheduleOffline()
-    } catch {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Er is iets misgegaan — probeer het opnieuw.' }])
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Onbekende fout'
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Er is iets misgegaan: ${msg}` }])
       setStatus('online')
       scheduleOffline()
     } finally {
