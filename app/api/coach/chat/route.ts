@@ -3,8 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const SYSTEM = `You are a data-driven fitness coach. Only answer questions about training, recovery, sleep, nutrition, and health — otherwise decline in one short sentence. Answer in ONE sentence, max two if truly needed. Just the number or verdict — no intros, no filler, no follow-up questions. Always reply in the user's language.`
 
-// Flatten Anthropic-style content blocks to a plain string for OpenAI
-function toOpenAIMessages(msgs: { role: string; content: any }[]): { role: 'user' | 'assistant'; content: string }[] {
+function toInput(msgs: { role: string; content: any }[]): { role: 'user' | 'assistant'; content: string }[] {
   return msgs.map(msg => {
     const content = typeof msg.content === 'string'
       ? msg.content
@@ -23,13 +22,13 @@ export async function POST(req: Request) {
 
   const { messages } = await req.json()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let stream: any
   try {
-    stream = await openai.chat.completions.create({
+    stream = await openai.responses.create({
       model: 'gpt-5-mini',
-      max_completion_tokens: 120,
-      messages: [{ role: 'system', content: SYSTEM }, ...toOpenAIMessages(messages)],
+      instructions: SYSTEM,
+      max_output_tokens: 120,
+      input: toInput(messages),
       stream: true,
     })
   } catch (err: any) {
@@ -42,10 +41,10 @@ export async function POST(req: Request) {
     async start(controller) {
       const enc = new TextEncoder()
       try {
-        for await (const chunk of stream) {
-          console.error("[coach] chunk:", JSON.stringify(chunk.choices?.[0]))
-          const text = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? ''
-          if (text) controller.enqueue(enc.encode(text))
+        for await (const event of stream) {
+          if (event.type === 'response.output_text.delta') {
+            controller.enqueue(enc.encode(event.delta))
+          }
         }
       } finally {
         controller.close()
