@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const SYSTEM = `You are a data-driven fitness coach. Only answer questions about training, recovery, sleep, nutrition, and health — otherwise decline in one sentence. Max 2 sentences per reply. Lead with the verdict or number, skip all intros and filler. Always reply in the user's language.`
+const SYSTEM = `You are a data-driven fitness coach. Only answer questions about training, recovery, sleep, nutrition, and health — otherwise decline in one short sentence. Answer in ONE sentence, max two if truly needed. Just the number or verdict — no intros, no filler, no follow-up questions. Always reply in the user's language.`
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) return new Response('ANTHROPIC_API_KEY not configured', { status: 503 })
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
   const stream = anthropic.messages.stream({
     model: 'claude-sonnet-4-6',
-    max_tokens: 200,
+    max_tokens: 120,
     system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages,
   })
