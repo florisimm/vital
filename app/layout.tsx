@@ -7,13 +7,15 @@ import { SWRProvider } from '@/components/SWRProvider'
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vital.app'
 
+const DESCRIPTION = 'Your AI fitness coach that reads your training, sleep, recovery, nutrition and calendar — then tells you exactly what to do today.'
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: 'Kern',
-  description: 'AI fitness & health coaching. Track training, nutrition and recovery — all in one place.',
+  title: 'Kern — AI Fitness & Health Coaching',
+  description: DESCRIPTION,
   openGraph: {
-    title: 'Kern — AI Fitness & Health Coaching',
-    description: 'Track training, nutrition and recovery — all in one place.',
+    title: 'Kern — Advice that fits your day',
+    description: DESCRIPTION,
     url: siteUrl,
     siteName: 'Kern',
     images: [{ url: '/og', width: 1200, height: 630, alt: 'Kern' }],
@@ -21,8 +23,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Kern — AI Fitness & Health Coaching',
-    description: 'Track training, nutrition and recovery — all in one place.',
+    title: 'Kern — Advice that fits your day',
+    description: DESCRIPTION,
     images: ['/og'],
   },
 }
