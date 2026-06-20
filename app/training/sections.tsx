@@ -3097,14 +3097,16 @@ function RecoveryDetailCard({
   recovery,
   physiology,
   form,
+  unifiedPct,
 }: {
   recovery: { pct: number; label: string; factors: string[] }
   physiology: { score: number | null; label: string; color: string; explanation: string }
   form?: { ctl: number; atl: number; tsb: number; label: string }
+  unifiedPct?: number
 }) {
-  const unified = physiology.score !== null
+  const unified = unifiedPct ?? (physiology.score !== null
     ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
-    : recovery.pct
+    : recovery.pct)
   // Plain-language tiers — no technical jargon for the average athlete
   const label = unified >= 80 ? 'Fresh' : unified >= 60 ? 'Ready' : unified >= 45 ? 'Take it easy' : 'Rest day'
   const c = unified >= 80 ? '#4ade80' : unified >= 60 ? '#2dd4bf' : unified >= 45 ? '#fb923c' : '#f87171'
@@ -3781,7 +3783,8 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
   const biasValues = Object.values(biasBySport)
   const avgBias = biasValues.length > 0 ? biasValues.reduce((s, v) => s + v, 0) / biasValues.length : 0
   const biasPoints = Math.round(avgBias * 100) // e.g. 0.05 bias → +5 points
-  const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints))
+  const INTENSITY_BIAS_OV: Record<string, number> = { easy: -15, moderate: 0, hard: 15, all_out: 25 }
+  const unifiedReadinessPct = Math.min(100, Math.max(0, rawReadinessPct + biasPoints + (INTENSITY_BIAS_OV[trainingIntensity ?? 'moderate'] ?? 0)))
 
   const todayStr    = new Date().toISOString().slice(0, 10)
   const todayActivities = activities.filter(a => a.start_date.slice(0, 10) === todayStr)
@@ -3890,7 +3893,7 @@ export function OverviewSection({ activities, hevy, calendarEvents, pastCalendar
       />
 
       {/* 5. Readiness detail */}
-      <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} form={trainingForm} />
+      <RecoveryDetailCard recovery={recoveryDetail} physiology={physiologyReadiness} form={trainingForm} unifiedPct={unifiedReadinessPct} />
 
       {/* 6. What Kern learned about you */}
       <LearnedAboutYouCard profile={personalProfile} />
