@@ -86,11 +86,12 @@ const SHEET_STYLE = `
   @keyframes fadeIn  { from { opacity: 0 }                  to { opacity: 1 } }
 `
 
-function ServingSheet({ servingPills, active, onPick, onClose }: {
+function ServingSheet({ servingPills, active, onPick, onClose, onAddServing }: {
   servingPills: { label: string; amount_g: number }[]
   active: { label: string; amount_g: number }
   onPick: (s: { label: string; amount_g: number }) => void
   onClose: () => void
+  onAddServing: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end"
@@ -113,6 +114,13 @@ function ServingSheet({ servingPills, active, onPick, onClose }: {
               {active.label === s.label && <span className="text-teal-400 text-[14px] font-semibold">✓</span>}
             </button>
           ))}
+          <button onClick={onAddServing}
+            className="flex items-center gap-3 px-5 py-4 text-left w-full border-t"
+            style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+            <span className="w-6 h-6 rounded-full flex items-center justify-center text-[14px] font-bold shrink-0"
+              style={{ background: 'rgba(45,212,191,0.15)', color: 'rgb(45,212,191)' }}>+</span>
+            <span className="text-[16px] text-white/60">Portie toevoegen</span>
+          </button>
         </div>
       </div>
     </div>
@@ -148,6 +156,65 @@ function MealSheet({ meal, setMeal, onClose }: { meal: string; setMeal: (m: stri
   )
 }
 
+function AddServingSheet({ onSave, onClose }: {
+  onSave: (serving: { label: string; amount_g: number }) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState('')
+  const [grams, setGrams] = useState('')
+  const canSave = name.trim().length > 0 && Number(grams) > 0
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end"
+      style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 0.2s ease' }} onClick={onClose}>
+      <style>{SHEET_STYLE}</style>
+      <div className="rounded-t-[24px] flex flex-col pb-8"
+        style={{ background: 'rgb(18,19,22)', animation: 'sheetUp 0.32s cubic-bezier(0.32,0.72,0,1)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 shrink-0">
+          <span className="text-[17px] font-semibold text-white">Portie toevoegen</span>
+          <button onClick={onClose} className="text-white/50 text-[15px] font-semibold px-3 py-1 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>Annuleer</button>
+        </div>
+        <div className="px-5 flex flex-col gap-3 pb-2">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.07em]">Naam</span>
+            <input
+              autoFocus
+              type="text"
+              placeholder="bijv. 1 sneetje, 1 kopje"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full h-[46px] px-4 rounded-[14px] text-white placeholder:text-white/25 outline-none text-[15px]"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.07em]">Gram</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="bijv. 35"
+              value={grams}
+              onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setGrams(v) }}
+              className="w-full h-[46px] px-4 rounded-[14px] text-white placeholder:text-white/25 outline-none text-[15px]"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
+            />
+          </div>
+          <button
+            disabled={!canSave}
+            onClick={() => onSave({ label: name.trim(), amount_g: Number(grams) })}
+            className="w-full h-[46px] mt-1 rounded-[14px] font-bold text-[15px] flex items-center justify-center disabled:opacity-30"
+            style={{ background: 'rgba(45,212,191,0.15)', color: 'rgb(45,212,191)', border: '1px solid rgba(45,212,191,0.25)' }}
+          >
+            Opslaan
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function ProductDetailView({ selected, meal, setMeal, userId, today, totals, targets, trainingCache, healthCache, onAdded }: {
   selected: Product
@@ -161,14 +228,15 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
   healthCache: any[]
   onAdded: (e: FoodLogEntry) => void
 }) {
-  const servings = selected.servings ?? []
   const GRAM_SERVING = { label: 'gram / ml', amount_g: 1 }
-  const servingPills = [...servings, GRAM_SERVING]
+  const [allServings, setAllServings] = useState<{ label: string; amount_g: number }[]>(selected.servings ?? [])
+  const servingPills = [...allServings, GRAM_SERVING]
 
-  const [grams, setGrams] = useState(() => servings[0] ? String(servings[0].amount_g) : '100')
-  const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(() => servings[0] ?? null)
+  const [grams, setGrams] = useState(() => allServings[0] ? String(allServings[0].amount_g) : '100')
+  const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(() => allServings[0] ?? null)
   const [showServings, setShowServings] = useState(false)
   const [showMeals, setShowMeals] = useState(false)
+  const [showAddServing, setShowAddServing] = useState(false)
   const [showImpact, setShowImpact] = useState(false)
   const [saving, setSaving] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
@@ -197,7 +265,7 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     return () => { cancelled = true }
   }, [selected.name, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const active = selectedServing ?? servings[0] ?? GRAM_SERVING
+  const active = selectedServing ?? allServings[0] ?? GRAM_SERVING
   const stepAmt = active.amount_g > 1 ? active.amount_g : 10
   const g = Math.max(0, Number(grams) || 0)
 
@@ -226,6 +294,23 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
   }
   function startRepeat(dir: 1 | -1) { applyStep(dir); repeatRef.current = setInterval(() => applyStep(dir), 110) }
   function stopRepeat() { if (repeatRef.current) { clearInterval(repeatRef.current); repeatRef.current = null } }
+
+  async function handleAddServing(serving: { label: string; amount_g: number }) {
+    const updated = [...allServings, serving]
+    setAllServings(updated)
+    setShowAddServing(false)
+    pickServing(serving)
+    // Persist new serving to user's products table
+    const supabase = createClient()
+    await supabase.from('products').upsert(
+      {
+        user_id: userId, name: selected.name, brand: selected.brand ?? null,
+        kcal: per100.kcal, protein: per100.protein, carbs: per100.carbs, fat: per100.fat,
+        servings: updated, image_url: selected.image_url ?? null, barcode: selected.barcode ?? null,
+      },
+      { onConflict: 'user_id,name' },
+    )
+  }
 
   async function handleSave() {
     if (!preview) return
@@ -293,8 +378,9 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
 
   return (
     <>
-      {showServings && <ServingSheet servingPills={servingPills} active={active} onPick={pickServing} onClose={() => setShowServings(false)} />}
+      {showServings && <ServingSheet servingPills={servingPills} active={active} onPick={pickServing} onClose={() => setShowServings(false)} onAddServing={() => { setShowServings(false); setShowAddServing(true) }} />}
       {showMeals    && <MealSheet meal={meal} setMeal={setMeal} onClose={() => setShowMeals(false)} />}
+      {showAddServing && <AddServingSheet onSave={handleAddServing} onClose={() => { setShowAddServing(false); setShowServings(true) }} />}
 
       <div className="flex flex-col flex-1 min-h-0">
 
