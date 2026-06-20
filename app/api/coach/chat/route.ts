@@ -10,7 +10,8 @@ Rules:
 - When you notice something unusual (low HRV, poor recovery, low sleep score), look at the "Observations" section in the context. It has pre-computed reasons. Use them to explain WHY, not just what.
 - When recommending something, briefly state the data that supports it (e.g. "HRV is above baseline and you slept 7h45m — green light for a threshold session").
 - Ask one short follow-up question only when genuinely needed to give better advice.
-- No intros, no filler, no bullet lists unless truly helpful.`
+- No intros, no filler, no bullet lists unless truly helpful.
+- If the user reveals something personal and durable (e.g. "I handle heat well", "I train best in the morning", "I'm lactose intolerant"), output on a new line at the very end: [LEARN: <fact in ≤6 words>]. Only one tag per reply, only for genuinely new facts.`
 
 function toInput(msgs: { role: string; content: any }[]): { role: 'user' | 'assistant'; content: string }[] {
   return msgs.map(msg => {
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
     stream = await openai.responses.create({
       model: 'gpt-5-mini',
       instructions: SYSTEM,
-      max_output_tokens: 120,
+      max_output_tokens: 160,
       input: toInput(messages),
       stream: true,
     })

@@ -252,15 +252,15 @@ export function FoodClient() {
           const dotColor = kcalForDay === 0
             ? 'rgba(255,255,255,0.12)'
             : targets.goalType === 'cut'
-              ? pct <= 0.80 ? '#4ade80'           // well under target = green (good deficit)
-              : pct <= 1.00 ? '#fb923c'           // approaching / hitting target = orange
-              : '#f87171'                          // over target = red
+              ? pct < 1.00 ? '#4ade80'            // under goal = green (deficit achieved)
+              : pct < 1.20 ? '#fb923c'            // just over goal = orange
+              : '#f87171'                          // far over goal = red
             : targets.goalType === 'bulk'
-              ? pct >= 1.05 ? '#4ade80'           // comfortably in surplus = green
-              : pct >= 0.90 ? '#fb923c'           // close to or just under target = orange
-              : '#f87171'                          // under target = red
+              ? pct >= 1.00 ? '#4ade80'           // at/over goal = green (surplus achieved)
+              : pct >= 0.80 ? '#fb923c'           // close but under = orange
+              : '#f87171'                          // far under goal = red
             : pct >= 0.85 && pct <= 1.15 ? 'rgb(45,212,191)'  // maintain: on target = teal
-            : pct >= 0.6 ? '#fb923c'
+            : pct >= 0.60 ? '#fb923c'
             : '#f87171'
           const d = new Date(day + 'T12:00:00')
           const dayLetter = d.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)

@@ -167,6 +167,7 @@ function buildSections(
   goal: string, trainingGoalKey: string, healthRows: HealthRow[],
   activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[], foodData: any,
   weather?: { temp_c: number | null; night_temp_c: number | null; city: string | null } | null,
+  memory?: string[],
 ): Sections {
   const today     = new Date().toISOString().slice(0, 10)
   const readiness = computePhysiologyReadiness(healthRows)
@@ -219,6 +220,8 @@ function buildSections(
   const weatherLine = weather?.temp_c != null
     ? `Current: ${Math.round(weather.temp_c)}°C${weather.city ? ` in ${weather.city}` : ''}${weather.night_temp_c != null ? ` · last night ${Math.round(weather.night_temp_c)}°C` : ''}`
     : null
+
+  const heatTolerant = memory?.some(m => /heat|warm|hitte|warmte/i.test(m) && /well|good|fine|handles|tolerates|geen probleem|prima/i.test(m)) ?? false
 
   // ── Pre-computed anomaly analysis ("WHY" block) ──
   const obsLines: string[] = ['### Observations & likely causes']
@@ -275,7 +278,9 @@ function buildSections(
   }
 
   if (weather?.temp_c != null && weather.temp_c >= 28)
-    obsLines.push(`- Heat alert: ${Math.round(weather.temp_c)}°C today — advise early/indoor training and extra hydration`)
+    obsLines.push(heatTolerant
+      ? `- Hot today (${Math.round(weather.temp_c)}°C) — user handles heat well, still advise hydration`
+      : `- Heat alert: ${Math.round(weather.temp_c)}°C today — advise early/indoor training and extra hydration`)
 
   return {
     profile: [
@@ -283,6 +288,7 @@ function buildSections(
       goal ? `Primary goal: ${goal}` : null,
       GOAL_PRIORITY[trainingGoalKey] ? `Priority: ${GOAL_PRIORITY[trainingGoalKey]}` : null,
       weatherLine ? `Weather: ${weatherLine}` : null,
+      memory?.length ? `Known about user: ${memory.join('; ')}` : null,
     ].filter(Boolean).join('\n'),
 
     readiness: [
@@ -400,6 +406,7 @@ export default function CoachPage() {
   const [streaming, setStreaming]       = useState(false)
   const [streamText, setStreamText]     = useState('')
   const [status, setStatus]             = useState<'online' | 'typing' | 'offline'>('online')
+  const [memory, setMemory]             = useState<string[]>([])
   const bottomRef    = useRef<HTMLDivElement>(null)
   const offlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -410,9 +417,11 @@ export default function CoachPage() {
 
   useEffect(() => { scheduleOffline(); return () => { if (offlineTimer.current) clearTimeout(offlineTimer.current) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load today's chat from localStorage on mount; prune stale days
+  // Load memory + today's chat from localStorage on mount
   useEffect(() => {
     try {
+      const mem = localStorage.getItem('rico-memory')
+      if (mem) setMemory(JSON.parse(mem))
       const saved = localStorage.getItem(`rico-chat-${today}`)
       if (saved) {
         const { messages, context } = JSON.parse(saved)
@@ -482,7 +491,7 @@ export default function CoachPage() {
 
     // Lock context on first turn; all subsequent turns reuse the same text so the
     // Anthropic cache_control hit fires on turns 2+ (identical content = cache hit).
-    const sections = buildSections(goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs, weatherData)
+    const sections = buildSections(goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs, weatherData, memory)
     const ctx = sessionContext ?? selectContext(q, sections)
     if (!sessionContext) setSessionContext(ctx)
 
@@ -527,9 +536,20 @@ export default function CoachPage() {
         const { done, value } = await reader.read()
         if (done) break
         full += decoder.decode(value, { stream: true })
-        setStreamText(full)
+        setStreamText(full.replace(/\[LEARN:[^\]]*\]/g, '').trimEnd())
       }
-      setChatMessages(prev => [...prev, { role: 'assistant', content: full }])
+      // Extract and save any [LEARN: ...] tag before storing message
+      const learnMatch = full.match(/\[LEARN:\s*([^\]]+)\]/)
+      const display = full.replace(/\[LEARN:[^\]]*\]/g, '').trimEnd()
+      if (learnMatch) {
+        const fact = learnMatch[1].trim()
+        setMemory(prev => {
+          const next = [...prev.filter(f => f !== fact), fact].slice(-20)
+          try { localStorage.setItem('rico-memory', JSON.stringify(next)) } catch {}
+          return next
+        })
+      }
+      setChatMessages(prev => [...prev, { role: 'assistant', content: display }])
       setStatus('online')
       scheduleOffline()
     } catch (err) {
