@@ -231,15 +231,36 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     if (!preview) return
     setSaving(true)
     const supabase = createClient()
-    const { data, error } = await supabase.from('food_log').insert({
-      user_id: userId, date: today, meal_category: meal,
-      food_name: selected.name, amount_g: Number(grams),
-      kcal: Math.round(preview.kcal),
-      protein: Math.round(preview.protein * 10) / 10,
-      carbs:   Math.round(preview.carbs   * 10) / 10,
-      fat:     Math.round(preview.fat     * 10) / 10,
-      sugars: 0, brand: selected.brand ?? '',
-    }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
+
+    const [{ data, error }] = await Promise.all([
+      supabase.from('food_log').insert({
+        user_id: userId, date: today, meal_category: meal,
+        food_name: selected.name, amount_g: Number(grams),
+        kcal: Math.round(preview.kcal),
+        protein: Math.round(preview.protein * 10) / 10,
+        carbs:   Math.round(preview.carbs   * 10) / 10,
+        fat:     Math.round(preview.fat     * 10) / 10,
+        sugars: 0, brand: selected.brand ?? '',
+      }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single(),
+
+      // Save product to personal library (macros per 100g + servings)
+      supabase.from('products').upsert(
+        {
+          user_id:   userId,
+          name:      selected.name,
+          brand:     selected.brand  ?? null,
+          kcal:      per100.kcal,
+          protein:   per100.protein,
+          carbs:     per100.carbs,
+          fat:       per100.fat,
+          servings:  selected.servings  ?? null,
+          image_url: selected.image_url ?? null,
+          barcode:   selected.barcode   ?? null,
+        },
+        { onConflict: 'user_id,name' },
+      ),
+    ])
+
     setSaving(false)
     if (!error && data) onAdded(data as FoodLogEntry)
   }
