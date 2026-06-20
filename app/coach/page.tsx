@@ -160,6 +160,7 @@ function tryDirectAnswer(
 type Sections = {
   profile: string; readiness: string; sleep: string; trainingLoad: string
   activities: string; muscle: string; nutrition: string; calendar: string
+  observations: string
 }
 
 function buildSections(
@@ -219,6 +220,63 @@ function buildSections(
     ? `Current: ${Math.round(weather.temp_c)}°C${weather.city ? ` in ${weather.city}` : ''}${weather.night_temp_c != null ? ` · last night ${Math.round(weather.night_temp_c)}°C` : ''}`
     : null
 
+  // ── Pre-computed anomaly analysis ("WHY" block) ──
+  const obsLines: string[] = ['### Observations & likely causes']
+
+  // HRV anomaly
+  if (hrvDev !== null && hrvDev <= -15) {
+    const reasons: string[] = []
+    const recentHard = activities.filter(a => {
+      const ageH = (Date.now() - new Date(a.start_date).getTime()) / 3600000
+      return ageH < 40 && (a.moving_time ?? 0) > 2400
+    })
+    if (recentHard.length > 0) {
+      const a = recentHard[0]
+      const sport = (a.sport_type ?? 'training').replace(/([A-Z])/g, ' $1').trim().toLowerCase()
+      const ageH = Math.round((Date.now() - new Date(a.start_date).getTime()) / 3600000)
+      reasons.push(`${sport} session ~${ageH}h ago`)
+    }
+    if (weather?.night_temp_c != null && weather.night_temp_c > 20)
+      reasons.push(`warm night (${Math.round(weather.night_temp_c)}°C raises core temp during sleep)`)
+    if (illness) reasons.push(`illness/strain flag: ${illness.reason}`)
+    const why = reasons.length ? ` — likely caused by: ${reasons.join('; ')}` : ''
+    obsLines.push(`- HRV is ${Math.abs(hrvDev)}% below baseline${why}`)
+  } else if (hrvDev !== null && hrvDev >= 15) {
+    obsLines.push(`- HRV is ${hrvDev}% above baseline — recovery is strong, body absorbed recent load well`)
+  }
+
+  // Recovery/readiness anomaly
+  const { acwr, consecutiveDays } = computeTrainingLoadScore(activities, hevy)
+  if (readiness.score !== null && readiness.score < 60) {
+    const reasons: string[] = []
+    if (acwr !== null && acwr > 1.2) reasons.push(`training load ${Math.round(acwr * 100)}% of recent baseline (overreaching zone)`)
+    if (consecutiveDays >= 4) reasons.push(`${consecutiveDays} consecutive training days without a rest day`)
+    const sleepAvg = sleepRows.length
+      ? sleepRows.slice(0, 3).reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / Math.min(sleepRows.length, 3)
+      : null
+    if (sleepAvg !== null && sleepAvg < 420) reasons.push(`avg sleep last 3 nights only ${Math.floor(sleepAvg/60)}h ${Math.round(sleepAvg%60)}m`)
+    const why = reasons.length ? ` — likely reasons: ${reasons.join('; ')}` : ''
+    obsLines.push(`- Readiness is low (${readiness.score}/100)${why}`)
+  }
+
+  // Today's recommendation rationale
+  const todayEventObs = calendarEvents.find(e => (e.start_datetime || e.start_date || '').slice(0, 10) === today)
+  if (readiness.score !== null) {
+    const rec = readiness.score >= 80 ? `full intensity${todayEventObs ? ` — ${todayEventObs.title} looks achievable` : ''}`
+      : readiness.score >= 65 ? 'moderate intensity (Zone 2 / technique work)'
+      : readiness.score >= 50 ? 'light session or rest'
+      : 'rest today'
+    const support = [
+      hrvDev !== null ? `HRV ${hrvDev > 0 ? '+' : ''}${hrvDev}% vs baseline` : null,
+      sleepRows[0]?.slaap_minuten ? `slept ${fmtMin(sleepRows[0].slaap_minuten)}` : null,
+      acwr !== null ? `ACWR ${Math.round(acwr * 100) / 100}` : null,
+    ].filter(Boolean).join(', ')
+    obsLines.push(`- Today's recommendation: ${rec}${support ? ` (${support})` : ''}`)
+  }
+
+  if (weather?.temp_c != null && weather.temp_c >= 28)
+    obsLines.push(`- Heat alert: ${Math.round(weather.temp_c)}°C today — advise early/indoor training and extra hydration`)
+
   return {
     profile: [
       `### Profile — ${today}`,
@@ -272,6 +330,8 @@ function buildSections(
       '### Upcoming events',
       ...calendarEvents.filter(e => (e.start_datetime || e.start_date || '') >= today).slice(0, 5).map(e => `- ${(e.start_datetime || e.start_date || '').slice(0, 10)} ${e.title}`),
     ].join('\n'),
+
+    observations: obsLines.join('\n'),
   }
 }
 
@@ -285,6 +345,7 @@ function selectContext(question: string, s: Sections): string {
 
   return [
     s.profile,
+    s.observations,
     s.readiness,
     (isSleep || isRecovery || isComplex) ? s.sleep : null,
     (isRecovery || isComplex) ? s.muscle : null,
