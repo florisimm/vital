@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase'
 import type { FoodLogEntry, Product } from '@/lib/types'
 
-export type Targets = { kcal: number; protein: number; carbs: number; fat: number }
+export type Targets = { kcal: number; protein: number; carbs: number; fat: number; goalType: 'cut' | 'maintain' | 'bulk' }
 
 export type MealTemplate = {
   id: string; name: string; description: string | null
@@ -29,7 +29,7 @@ export async function fetchFoodData(date: string) {
       .order('logged_at', { ascending: true }),
     supabase
       .from('user_settings')
-      .select('macro_kcal, macro_protein, macro_carbs, macro_fat')
+      .select('macro_kcal, macro_protein, macro_carbs, macro_fat, training_goal')
       .eq('user_id', user.id)
       .single(),
   ])
@@ -41,6 +41,9 @@ export async function fetchFoodData(date: string) {
       protein: Number(settings?.macro_protein ?? 180),
       carbs:   Number(settings?.macro_carbs   ?? 250),
       fat:     Number(settings?.macro_fat     ?? 80),
+      goalType: settings?.training_goal === 'lose_weight' ? 'cut'
+              : settings?.training_goal === 'build_muscle' ? 'bulk'
+              : 'maintain',
     } as Targets,
     userId: user.id,
     today: date,

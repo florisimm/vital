@@ -139,7 +139,7 @@ export function FoodClient() {
   }
 
   const log     = data?.foodLog ?? []
-  const targets: Targets = data?.targets ?? { kcal: 2500, protein: 180, carbs: 250, fat: 80 }
+  const targets: Targets = data?.targets ?? { kcal: 2500, protein: 180, carbs: 250, fat: 80, goalType: 'maintain' }
   const userId  = data?.userId  ?? ''
 
   const totals = useMemo(() => ({
@@ -251,7 +251,15 @@ export function FoodClient() {
           const isSelected = day === selectedDate
           const dotColor = kcalForDay === 0
             ? 'rgba(255,255,255,0.12)'
-            : pct >= 0.85 && pct <= 1.15 ? 'rgb(45,212,191)'
+            : targets.goalType === 'cut'
+              ? pct <= 0.80 ? '#4ade80'           // well under target = green (good deficit)
+              : pct <= 1.00 ? '#fb923c'           // approaching / hitting target = orange
+              : '#f87171'                          // over target = red
+            : targets.goalType === 'bulk'
+              ? pct >= 1.05 ? '#4ade80'           // comfortably in surplus = green
+              : pct >= 0.90 ? '#fb923c'           // close to or just under target = orange
+              : '#f87171'                          // under target = red
+            : pct >= 0.85 && pct <= 1.15 ? 'rgb(45,212,191)'  // maintain: on target = teal
             : pct >= 0.6 ? '#fb923c'
             : '#f87171'
           const d = new Date(day + 'T12:00:00')

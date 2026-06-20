@@ -827,12 +827,47 @@ function buildSleepInsight({ score, quality, totalMin, avg30Min, deepPct, remPct
   return 'Disrupted sleep tonight. Prioritise an earlier, consistent bedtime for better recovery.'
 }
 
-function buildHeartInsight(restingHR: number | null, hrv: number | null, trend: number | null, hrvBaseline: { baseline: number | null; deviationPct: number | null }): string {
+interface HeartContext {
+  recentActivities?: { start_date: string; moving_time: number; sport_type?: string | null; average_heartrate?: number | null }[]
+  nightTempC?: number | null
+}
+
+function buildHeartInsight(
+  restingHR: number | null,
+  hrv: number | null,
+  trend: number | null,
+  hrvBaseline: { baseline: number | null; deviationPct: number | null },
+  ctx: HeartContext = {}
+): string {
   if (!restingHR && !hrv) return 'Sync Fitbit to see your heart rate and HRV data.'
   const parts: string[] = []
   if (hrvBaseline.deviationPct !== null) {
-    if (hrvBaseline.deviationPct <= -15) parts.push(`HRV is ${Math.abs(hrvBaseline.deviationPct)}% below your baseline — your body is still recovering. Keep today easy.`)
-    else if (hrvBaseline.deviationPct >= 15) parts.push(`HRV is ${hrvBaseline.deviationPct}% above baseline — recovery looks strong.`)
+    if (hrvBaseline.deviationPct <= -15) {
+      const reasons: string[] = []
+
+      // Hard training in the last 36 hours?
+      const now = Date.now()
+      const recentHard = (ctx.recentActivities ?? []).filter(a => {
+        const ageH = (now - new Date(a.start_date).getTime()) / 3600000
+        return ageH < 36 && a.moving_time > 2400 // > 40 min
+      })
+      if (recentHard.length > 0) {
+        const a = recentHard[0]
+        const sport = (a.sport_type ?? 'training').replace(/([A-Z])/g, ' $1').trim().toLowerCase()
+        const ageH = Math.round((now - new Date(a.start_date).getTime()) / 3600000)
+        reasons.push(`${sport} session ~${ageH}h ago`)
+      }
+
+      // Warm night? (>20°C raises core temp, reduces HRV)
+      if (ctx.nightTempC != null && ctx.nightTempC > 20) {
+        reasons.push(`warm night (${Math.round(ctx.nightTempC)}°C)`)
+      }
+
+      const why = reasons.length > 0 ? ` — likely from ${reasons.join(' and ')}` : ''
+      parts.push(`HRV is ${Math.abs(hrvBaseline.deviationPct)}% below your baseline${why}. Keep today easy.`)
+    } else if (hrvBaseline.deviationPct >= 15) {
+      parts.push(`HRV is ${hrvBaseline.deviationPct}% above baseline — recovery looks strong.`)
+    }
   }
   if (trend !== null) {
     if (trend >= 4) parts.push(`Resting HR is ${trend} bpm above your 7-day average — consider an extra rest day or earlier sleep.`)
@@ -876,6 +911,12 @@ function buildWeightInsight(weights: number[], weeklyRate: number | null, change
 
 export function HeartSection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
+  const { data: trainingData } = useSWR<{ activities: { start_date: string; moving_time: number; sport_type?: string | null; average_heartrate?: number | null }[] }>('training')
+  const { data: weatherData } = useSWR<{ temp_c: number | null; night_temp_c: number | null; city: string | null }>(
+    'weather',
+    () => fetch('/api/weather').then(r => r.json()),
+    { revalidateOnFocus: false, dedupingInterval: 3600000 }
+  )
 
   const hrRows = rows.filter(r => r.hartslag_rust != null).slice(0, 7)
   const latest = hrRows[0]
@@ -907,7 +948,10 @@ export function HeartSection() {
 
   return (
     <div className="flex flex-col gap-6">
-      <AiInsight text={buildHeartInsight(restingHR, hrv, trend, hrvBaseline)} />
+      <AiInsight text={buildHeartInsight(restingHR, hrv, trend, hrvBaseline, {
+        recentActivities: trainingData?.activities,
+        nightTempC: weatherData?.night_temp_c,
+      })} />
       <div className="grid grid-cols-2 gap-3">
         <MetricTile title="Resting HR" value={restingHR ? String(restingHR) : '–'} unit={restingHR ? 'bpm' : ''} note={trend !== null ? `${trend > 0 ? '+' : ''}${trend} vs avg` : '–'} Icon={Heart}    tint="text-pink-400"  />
         <MetricTile title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'} unit={hrv ? 'ms' : ''} note={deviationText} Icon={Activity} tint="text-green-400" />
