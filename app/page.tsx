@@ -113,7 +113,8 @@ function buildLifestyleFocus({
   rows,
   effectiveData,
   unifiedReadinessPct,
-}: { rows: HealthRow[]; effectiveData: any; unifiedReadinessPct: number }): FocusTip[] {
+  weatherData,
+}: { rows: HealthRow[]; effectiveData: any; unifiedReadinessPct: number; weatherData?: { temp_c: number | null; night_temp_c: number | null } | null }): FocusTip[] {
   const tips: FocusTip[] = []
 
   // ── Bedtime = 07:00 − needed sleep ──
@@ -192,7 +193,11 @@ function buildLifestyleFocus({
 
   // ── Hydration nudge on training days ──
   const hasTrainingToday = (effectiveData?.calendarEvents ?? []).some((e: any) => isToday(e) && isSport(e))
-  if (hasTrainingToday && tips.length < 3) {
+  const tempC = weatherData?.temp_c
+  if (tempC != null && tempC >= 28) {
+    tips.push({ emoji: '🌡️', label: `Train early — it's ${Math.round(tempC)}°C today`, sub: 'Heat raises HR and reduces performance. Morning or indoor training recommended.' })
+    if (tips.length < 4) tips.push({ emoji: '💧', label: 'Drink 3L+ today', sub: `${Math.round(tempC)}°C increases fluid loss significantly` })
+  } else if (hasTrainingToday && tips.length < 3) {
     tips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
   }
 
@@ -534,6 +539,10 @@ function TodayDashboard() {
 
   const { data: gezondheid } = useSWR<HealthRow[]>('health-gezondheid', null)
   const { data: training } = useSWR('training', null)
+  const { data: weatherData } = useSWR<{ temp_c: number | null; night_temp_c: number | null; city: string | null }>(
+    'weather', () => fetch('/api/weather').then(r => r.json()),
+    { revalidateOnFocus: false, dedupingInterval: 3600000 },
+  )
   const rows = gezondheid ?? []
 
   useEffect(() => {
@@ -629,8 +638,8 @@ function TodayDashboard() {
   }, [training, rows, effectiveData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const lifestyleFocus = useMemo(
-    () => buildLifestyleFocus({ rows, effectiveData, unifiedReadinessPct }),
-    [rows, effectiveData, unifiedReadinessPct], // eslint-disable-line react-hooks/exhaustive-deps
+    () => buildLifestyleFocus({ rows, effectiveData, unifiedReadinessPct, weatherData }),
+    [rows, effectiveData, unifiedReadinessPct, weatherData], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   return (

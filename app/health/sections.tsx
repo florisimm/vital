@@ -298,6 +298,10 @@ function nightLabel(datum: string): string {
 
 export function SleepSection() {
   const { data: rows = [] } = useSWR<GezondheidsRow[]>('health-gezondheid', healthFetcher, SWR_OPTS)
+  const { data: weatherData } = useSWR<{ temp_c: number | null; night_temp_c: number | null; city: string | null }>(
+    'weather', () => fetch('/api/weather').then(r => r.json()),
+    { revalidateOnFocus: false, dedupingInterval: 3600000 },
+  )
 
   const sleepRows = rows.filter(r => r.slaap_minuten != null)
   const nights = Array.from({ length: 7 }, (_, i) => {
@@ -403,7 +407,7 @@ export function SleepSection() {
 
   const insightText = noData
     ? (selectedRow === null ? 'No Fitbit data for this night — Fitbit was not worn.' : 'Sync Fitbit to see your sleep quality data.')
-    : buildSleepInsight({ score, quality, totalMin, avg7Min, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows })
+    : buildSleepInsight({ score, quality, totalMin, avg7Min, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows, nightTempC: weatherData?.night_temp_c })
 
   // Sleep → next-day HRV correlation pairs
   const correlationPairs: { sleep: number; hrv: number }[] = []
@@ -721,11 +725,11 @@ export function RecoverySection() {
 
 // ─── Heart ────────────────────────────────────────────────────────────────────
 
-function buildSleepInsight({ score, quality, totalMin, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows }: {
+function buildSleepInsight({ score, quality, totalMin, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows, nightTempC }: {
   score: number | null; quality: string | null; totalMin: number | null; avg7Min: number | null
   avg30Min: number | null; deepPct: number | null; remPct: number | null; efficiency: number | null
   consistency: number | null; spo2: number | null; resp: number | null; durationDiff: number | null
-  sleepRows: GezondheidsRow[]
+  sleepRows: GezondheidsRow[]; nightTempC?: number | null
 }): string {
   type Finding = { priority: number; text: string }
   const findings: Finding[] = []
@@ -800,6 +804,12 @@ function buildSleepInsight({ score, quality, totalMin, avg30Min, deepPct, remPct
       findings.push({ priority: 2, text: `Wake time is very consistent this week (${consistency}%) — a stable schedule strengthens your circadian rhythm.` })
     else if (consistency < 55)
       findings.push({ priority: 3, text: `Wake times vary a lot this week — inconsistent timing disrupts your circadian rhythm and reduces sleep quality.` })
+  }
+
+  // Warm night — heat suppresses deep sleep and HRV recovery
+  if (nightTempC != null && nightTempC > 21 && (deepPct === null || deepPct < 22)) {
+    const warmth = nightTempC >= 26 ? 'very warm' : nightTempC >= 23 ? 'warm' : 'mild'
+    findings.push({ priority: 5, text: `It was a ${warmth} night (${Math.round(nightTempC)}°C) — heat raises core body temperature, which suppresses deep sleep and reduces overnight HRV recovery. Keep your bedroom cool tonight.` })
   }
 
   // Score trend over last 3–4 nights

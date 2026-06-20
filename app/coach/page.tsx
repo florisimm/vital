@@ -165,6 +165,7 @@ type Sections = {
 function buildSections(
   goal: string, trainingGoalKey: string, healthRows: HealthRow[],
   activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[], foodData: any,
+  weather?: { temp_c: number | null; night_temp_c: number | null; city: string | null } | null,
 ): Sections {
   const today     = new Date().toISOString().slice(0, 10)
   const readiness = computePhysiologyReadiness(healthRows)
@@ -214,11 +215,16 @@ function buildSections(
     performance:  '1. Performance · 2. Recovery · 3. Specificity · 4. Volume management',
   }
 
+  const weatherLine = weather?.temp_c != null
+    ? `Current: ${Math.round(weather.temp_c)}°C${weather.city ? ` in ${weather.city}` : ''}${weather.night_temp_c != null ? ` · last night ${Math.round(weather.night_temp_c)}°C` : ''}`
+    : null
+
   return {
     profile: [
       `### Profile — ${today}`,
       goal ? `Primary goal: ${goal}` : null,
       GOAL_PRIORITY[trainingGoalKey] ? `Priority: ${GOAL_PRIORITY[trainingGoalKey]}` : null,
+      weatherLine ? `Weather: ${weatherLine}` : null,
     ].filter(Boolean).join('\n'),
 
     readiness: [
@@ -377,6 +383,10 @@ export default function CoachPage() {
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: training }        = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: foodData }        = useSWR(`food-log-${today}`, () => fetchFoodData(today), { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data: weatherData }     = useSWR<{ temp_c: number | null; night_temp_c: number | null; city: string | null }>(
+    'weather', () => fetch('/api/weather').then(r => r.json()),
+    { revalidateOnFocus: false, dedupingInterval: 3600000 },
+  )
 
   const activities     = training?.activities ?? []
   const hevy           = training?.hevy ?? []
@@ -411,7 +421,7 @@ export default function CoachPage() {
 
     // Lock context on first turn; all subsequent turns reuse the same text so the
     // Anthropic cache_control hit fires on turns 2+ (identical content = cache hit).
-    const sections = buildSections(goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs)
+    const sections = buildSections(goal, training?.trainingGoal ?? '', healthRows, activities, hevy, calendarEvents, foodForRecs, weatherData)
     const ctx = sessionContext ?? selectContext(q, sections)
     if (!sessionContext) setSessionContext(ctx)
 
