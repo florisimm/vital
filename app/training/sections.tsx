@@ -2814,7 +2814,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
               )}
               <div className="flex items-center gap-1.5 pl-2 pr-2.5 py-[3px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
                 <div className="w-1.5 h-1.5 rounded-full" style={{ background: rc }} suppressHydrationWarning />
-                <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>{readinessPct}%</span>
+                <span className="text-[11px] font-semibold" style={{ color: rc }} suppressHydrationWarning>{readinessPct}% Readiness</span>
               </div>
             </div>
           </div>
@@ -3118,7 +3118,10 @@ function RecoveryDetailCard({
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Recovery</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Readiness</span>
+          <span className="text-[11px] text-white/30">Body + training load</span>
+        </div>
         <div className="flex items-end justify-between">
           <span className="text-[40px] font-bold text-white leading-none">{unified}%</span>
           <span className="text-[15px] font-semibold pb-1" style={{ color: c }}>{label}</span>

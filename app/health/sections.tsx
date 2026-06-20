@@ -657,6 +657,7 @@ export function RecoverySection() {
         Icon={Heart}
         tint="text-teal-400"
       />
+      <p className="text-[12px] text-white/35 text-center -mt-3">Body readiness: sleep, HRV &amp; resting HR</p>
       <div className="grid grid-cols-2 gap-3">
         <SmallCard title="HRV"        value={hrv ? Math.round(hrv).toString() : '–'}  unit={hrv ? 'ms' : ''}        detail={hrvBaseline.baseline ? `baseline ${hrvBaseline.baseline} ms` : 'Daily RMSSD'} Icon={Activity} tint="text-green-400" />
         <SmallCard title="Resting HR" value={restingHR ? String(restingHR) : '–'}     unit={restingHR ? 'bpm' : ''} detail="Last night"  Icon={Heart} tint="text-pink-400" />
