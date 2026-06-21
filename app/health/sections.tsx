@@ -1060,8 +1060,10 @@ function WeightSwipeRow({ label, value, onEdit, onDelete }: {
 }) {
   const [dx, setDx] = useState(0)
   const startX = useRef(0)
-  const dragging = useRef(false)
+  const startY = useRef(0)
+  const isHoriz = useRef<boolean | null>(null)
   const SNAP = 72
+
   return (
     <div className="relative overflow-hidden border-b border-white/[0.07]">
       <div className="absolute right-0 inset-y-0 flex items-center justify-center"
@@ -1070,20 +1072,27 @@ function WeightSwipeRow({ label, value, onEdit, onDelete }: {
       </div>
       <div
         className="relative flex items-center justify-between py-4"
-        style={{
-          transform: `translateX(${Math.min(0, dx)}px)`,
-          transition: dragging.current ? 'none' : 'transform 0.22s ease',
-          background: 'rgb(5,6,8)',
+        style={{ transform: `translateX(${Math.min(0, dx)}px)`, transition: dx === 0 ? 'transform 0.22s ease' : 'none', background: 'rgb(5,6,8)' }}
+        onTouchStart={e => {
+          startX.current = e.touches[0].clientX
+          startY.current = e.touches[0].clientY
+          isHoriz.current = null
         }}
-        onTouchStart={e => { startX.current = e.touches[0].clientX; dragging.current = true }}
         onTouchMove={e => {
-          if (!dragging.current) return
-          setDx(Math.min(0, e.touches[0].clientX - startX.current))
+          const moveX = e.touches[0].clientX - startX.current
+          const moveY = e.touches[0].clientY - startY.current
+          if (isHoriz.current === null) {
+            if (Math.abs(moveX) < 4 && Math.abs(moveY) < 4) return
+            isHoriz.current = Math.abs(moveX) > Math.abs(moveY)
+          }
+          if (!isHoriz.current) return
+          e.preventDefault()
+          setDx(Math.min(0, moveX))
         }}
         onTouchEnd={() => {
-          dragging.current = false
-          if (dx < -(SNAP / 2)) { setDx(0); onDelete() }
+          if (isHoriz.current && dx < -(SNAP / 2)) { setDx(0); onDelete() }
           else setDx(0)
+          isHoriz.current = null
         }}
       >
         <span className="text-[15px] font-medium text-white">{label}</span>

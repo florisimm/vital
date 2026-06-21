@@ -359,11 +359,11 @@ function selectContext(question: string, s: Sections): string {
     s.profile,
     s.observations,
     s.readiness,
+    s.trainingLoad,
+    s.activities,
     (isSleep || isRecovery || isComplex) ? s.sleep : null,
     (isRecovery || isComplex) ? s.muscle : null,
     (isFood || isComplex) ? s.nutrition : null,
-    (isTraining || isComplex) ? s.trainingLoad : null,
-    (isTraining || isComplex) ? s.activities : null,
     (isTraining || isComplex) ? s.calendar : null,
   ].filter(Boolean).join('\n\n')
 }
@@ -430,9 +430,10 @@ export default function CoachPage() {
       if (mem) setMemory(JSON.parse(mem))
       const saved = localStorage.getItem(`rico-chat-${today}`)
       if (saved) {
-        const { messages, context } = JSON.parse(saved)
+        const { messages } = JSON.parse(saved)
         if (messages?.length) setChatMessages(messages)
-        if (context) setSessionContext(context)
+        // sessionContext is intentionally NOT restored — always rebuilt fresh
+        // from current SWR data so Rico always has up-to-date activities/health
       }
       for (const key of Object.keys(localStorage)) {
         if (key.startsWith('rico-chat-') && key !== `rico-chat-${today}`) localStorage.removeItem(key)
@@ -440,11 +441,11 @@ export default function CoachPage() {
     } catch {}
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist chat to localStorage whenever messages change
+  // Persist chat messages (not context) to localStorage
   useEffect(() => {
     if (chatMessages.length === 0) return
-    try { localStorage.setItem(`rico-chat-${today}`, JSON.stringify({ messages: chatMessages, context: sessionContext })) } catch {}
-  }, [chatMessages, sessionContext]) // eslint-disable-line react-hooks/exhaustive-deps
+    try { localStorage.setItem(`rico-chat-${today}`, JSON.stringify({ messages: chatMessages })) } catch {}
+  }, [chatMessages]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const userTurns = chatMessages.filter(m => m.role === 'user').length
   const atLimit   = userTurns >= MAX_TURNS
