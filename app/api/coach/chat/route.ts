@@ -37,7 +37,9 @@ export async function POST(req: Request) {
     stream = await openai.responses.create({
       model: 'gpt-5-mini',
       instructions: SYSTEM,
-      max_output_tokens: 160,
+      max_output_tokens: 700,
+      reasoning: { effort: 'minimal' },
+      text: { verbosity: 'low' },
       input: toInput(messages),
       stream: true,
     })
