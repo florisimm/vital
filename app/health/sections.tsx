@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
-import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight } from 'lucide-react'
+import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight, Trash2 } from 'lucide-react'
 import { Card, SectionHeader, MetricTile } from '@/components/ui'
 import { healthFetcher } from './fetcher'
 import { fetchWeeklyNutrition } from '@/app/food/fetchers'
@@ -1055,12 +1055,54 @@ export function HeartSection() {
 
 // ─── Weight ───────────────────────────────────────────────────────────────────
 
+function WeightSwipeRow({ label, value, onEdit, onDelete }: {
+  label: string; value: number | null; onEdit: () => void; onDelete: () => void
+}) {
+  const [dx, setDx] = useState(0)
+  const startX = useRef(0)
+  const dragging = useRef(false)
+  const SNAP = 72
+  return (
+    <div className="relative overflow-hidden border-b border-white/[0.07]">
+      <div className="absolute right-0 inset-y-0 flex items-center justify-center"
+        style={{ width: SNAP, background: '#ef4444' }}>
+        <Trash2 size={17} className="text-white" />
+      </div>
+      <div
+        className="relative flex items-center justify-between py-4"
+        style={{
+          transform: `translateX(${Math.min(0, dx)}px)`,
+          transition: dragging.current ? 'none' : 'transform 0.22s ease',
+          background: 'rgb(5,6,8)',
+        }}
+        onTouchStart={e => { startX.current = e.touches[0].clientX; dragging.current = true }}
+        onTouchMove={e => {
+          if (!dragging.current) return
+          setDx(Math.min(0, e.touches[0].clientX - startX.current))
+        }}
+        onTouchEnd={() => {
+          dragging.current = false
+          if (dx < -(SNAP / 2)) { setDx(0); onDelete() }
+          else setDx(0)
+        }}
+      >
+        <span className="text-[15px] font-medium text-white">{label}</span>
+        <button onClick={onEdit} className="flex items-center gap-2">
+          <span className="text-[15px] font-semibold text-white">{value?.toFixed(1)} kg</span>
+          <span className="text-[12px] text-white/30">edit</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
   const [period, setPeriod] = useState<7 | 14 | 30>(14)
   const [showList, setShowList] = useState(false)
   const [editDate, setEditDate] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { data: nutrition } = useSWR('food-weekly-nutrition', fetchWeeklyNutrition)
   const avgProtein = nutrition?.avgProtein ?? 0
@@ -1108,11 +1150,26 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('gezondheid').upsert({ user_id: user.id, datum: editDate, gewicht: kg }, { onConflict: 'user_id,datum' })
-      mutate('health-gezondheid')
+      await supabase.from('gezondheid').upsert(
+        { user_id: user.id, datum: editDate, gewicht: kg },
+        { onConflict: 'user_id,datum' },
+      )
+      await mutate('health-gezondheid')
     }
     setSaving(false)
     setEditDate(null)
+  }
+
+  async function handleDelete() {
+    if (!deleteConfirm) return
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('gezondheid').update({ gewicht: null })
+        .eq('user_id', user.id).eq('datum', deleteConfirm)
+      await mutate('health-gezondheid')
+    }
+    setDeleteConfirm(null)
   }
 
   function openLogToday() {
@@ -1260,11 +1317,10 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
                   <span className="text-[15px] font-semibold text-white w-28 shrink-0">Today</span>
                   <input
                     ref={inputRef}
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="0.1"
                     value={editValue}
-                    onChange={e => setEditValue(e.target.value)}
+                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setEditValue(v) }}
                     onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
                     className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
                     placeholder="kg"
@@ -1289,38 +1345,63 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
 
             {/* Past entries */}
             {allWeightRows.filter(r => r.datum !== today).map(r => (
-              <div key={r.datum} className="py-4 border-b border-white/[0.07]">
-                {editDate === r.datum ? (
-                  <div className="flex items-center gap-3">
-                    <span className="text-[15px] font-medium text-white w-28 shrink-0">{fmtDate(r.datum)}</span>
-                    <input
-                      ref={inputRef}
-                      type="number"
-                      inputMode="decimal"
-                      step="0.1"
-                      value={editValue}
-                      onChange={e => setEditValue(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
-                      className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
-                      placeholder="kg"
-                    />
-                    <button onClick={saveWeight} disabled={saving} className="text-cyan-400 font-semibold text-[14px] disabled:opacity-40 shrink-0">
-                      {saving ? '…' : 'Save'}
-                    </button>
-                    <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[15px] font-medium text-white">{fmtDate(r.datum)}</span>
-                    <button onClick={() => openEdit(r.datum, r.gewicht)} className="flex items-center gap-2">
-                      <span className="text-[15px] font-semibold text-white">{r.gewicht?.toFixed(1)} kg</span>
-                      <span className="text-[12px] text-white/30">edit</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+              editDate === r.datum ? (
+                <div key={r.datum} className="flex items-center gap-3 py-4 border-b border-white/[0.07]">
+                  <span className="text-[15px] font-medium text-white w-28 shrink-0">{fmtDate(r.datum)}</span>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="decimal"
+                    value={editValue}
+                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setEditValue(v) }}
+                    onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
+                    className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
+                    placeholder="kg"
+                  />
+                  <button onClick={saveWeight} disabled={saving} className="text-cyan-400 font-semibold text-[14px] disabled:opacity-40 shrink-0">
+                    {saving ? '…' : 'Save'}
+                  </button>
+                  <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
+                </div>
+              ) : (
+                <WeightSwipeRow
+                  key={r.datum}
+                  label={fmtDate(r.datum)}
+                  value={r.gewicht}
+                  onEdit={() => openEdit(r.datum, r.gewicht)}
+                  onDelete={() => setDeleteConfirm(r.datum)}
+                />
+              )
             ))}
           </div>
+
+          {/* Delete confirmation popup */}
+          {deleteConfirm && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center px-6"
+              style={{ background: 'rgba(0,0,0,0.75)' }}>
+              <div className="w-full max-w-xs rounded-[20px] p-5 flex flex-col gap-4"
+                style={{ background: 'rgb(22,23,28)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex flex-col gap-1 text-center">
+                  <span className="text-[17px] font-semibold text-white">Gewicht verwijderen?</span>
+                  <span className="text-[14px] text-white/45">
+                    {fmtDate(deleteConfirm)} · {rows.find(r => r.datum === deleteConfirm)?.gewicht?.toFixed(1)} kg
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setDeleteConfirm(null)}
+                    className="flex-1 h-11 rounded-[14px] text-[15px] font-semibold text-white"
+                    style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    Annuleer
+                  </button>
+                  <button onClick={handleDelete}
+                    className="flex-1 h-11 rounded-[14px] text-[15px] font-semibold text-white"
+                    style={{ background: '#ef4444' }}>
+                    Verwijder
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

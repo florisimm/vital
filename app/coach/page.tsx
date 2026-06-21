@@ -317,8 +317,14 @@ function buildSections(
     trainingLoad: `### Training load (last 7d)\n${loadLine}`,
 
     activities: [
-      '### Recent sessions (last 5)',
-      ...activities.slice(0, 5).map(a => `- ${a.start_date?.slice(0, 10)} ${a.sport_type ?? ''} "${a.name ?? ''}" — ${Math.round((a.moving_time ?? 0) / 60)} min${a.distance ? `, ${(a.distance / 1000).toFixed(1)} km` : ''}`),
+      '### Recent sessions (last 15) — use this data to answer questions about trends, improvement, and performance',
+      ...activities.slice(0, 15).map(a => [
+        `- ${a.start_date?.slice(0, 10)} ${a.sport_type ?? ''} "${a.name ?? ''}"`,
+        `${Math.round((a.moving_time ?? 0) / 60)} min`,
+        a.distance ? `${(a.distance / 1000).toFixed(1)} km` : null,
+        a.average_speed ? `avg ${(a.average_speed * 3.6).toFixed(1)} km/h` : null,
+        a.average_heartrate ? `avg HR ${Math.round(a.average_heartrate)} bpm` : null,
+      ].filter(Boolean).join(', ')),
     ].join('\n'),
 
     muscle: [
