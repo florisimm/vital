@@ -1070,7 +1070,8 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
   const allWeightRows = [...rows].filter(r => r.gewicht != null).sort((a, b) => b.datum.localeCompare(a.datum))
   const todayHasWeight = rows.some(r => r.datum === today && r.gewicht != null)
 
-  const weightRows = rows.filter(r => r.gewicht != null).slice(0, period).reverse()
+  const cutoffDate = new Date(Date.now() - period * 86400000).toISOString().slice(0, 10)
+  const weightRows = rows.filter(r => r.gewicht != null && r.datum >= cutoffDate).reverse()
   const weights = weightRows.map(r => Number(r.gewicht))
   const latest = weights[weights.length - 1]
   const oldest = weights[0]
@@ -1189,7 +1190,7 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
               return w.reduce((a, b) => a + b, 0) / w.length
             })
             const pts = rolling.map((v, i) =>
-              `${n > 1 ? (i / (n - 1)) * 100 : 50},${(128 - toPx(v)) / 128 * 100}`
+              `${(i + 0.5) / n * 100},${(128 - toPx(v)) / 128 * 100}`
             ).join(' ')
             // Week-over-week delta
             const last7w = weights.slice(-7)
