@@ -456,12 +456,9 @@ export function ProfileButton() {
     setSavedCalcGender(calcGender)
     setSavedMacroKcal(m.kcal); setSavedMacroProtein(m.protein)
     setSavedMacroCarbs(m.carbs); setSavedMacroFat(m.fat)
-    const newTargets = { kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat }
     const today = new Date().toISOString().split('T')[0]
-    mutate('food-log', (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
-    mutate(`food-log-${today}`, (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
-    // Age feeds the personalized HR-zone model — refresh training/today so the
-    // readiness, recovery and load calculations recompute with the new max HR.
+    mutate('food-log')
+    mutate(`food-log-${today}`)
     mutate('training')
     mutate('today')
     setCalcSaving(false)
@@ -481,10 +478,9 @@ export function ProfileButton() {
       .eq('user_id', userId)
     setSavedMacroKcal(kcal); setSavedMacroProtein(protein)
     setSavedMacroCarbs(carbs); setSavedMacroFat(fat)
-    const newTargets = { kcal, protein, carbs, fat }
     const today = new Date().toISOString().split('T')[0]
-    mutate('food-log', (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
-    mutate(`food-log-${today}`, (cur: any) => cur ? { ...cur, targets: newTargets } : cur, false)
+    mutate('food-log')
+    mutate(`food-log-${today}`)
     setManualSaving(false)
     setEditingMacroManual(false)
   }
