@@ -106,6 +106,7 @@ export function ProfileButton() {
   const [editingDevices, setEditingDevices] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [emailActionSheet, setEmailActionSheet] = useState(false)
+  const [editingAccountInfo, setEditingAccountInfo] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
@@ -843,6 +844,46 @@ export function ProfileButton() {
               Done
             </button>
           </div>
+
+          {/* Account Info subpage */}
+          {editingAccountInfo && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingAccountInfo(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Account</span>
+                <div className="w-16" />
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+                <ProfileSection>
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full gap-3"
+                      onClick={() => { setEditMsg(null); setEditingName(true) }}>
+                      <span className="text-[15px] text-white/40 shrink-0">Name</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[17px] text-white truncate">{editName || '—'}</span>
+                        <ChevronRight size={16} className="text-white/25 shrink-0" />
+                      </div>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow>
+                    <button className="flex items-center justify-between w-full gap-3"
+                      onClick={() => setEmailActionSheet(true)}>
+                      <span className="text-[15px] text-white/40 shrink-0">Email</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[17px] text-white truncate">{maskEmail(email ?? '—')}</span>
+                        <ChevronRight size={16} className="text-white/25 shrink-0" />
+                      </div>
+                    </button>
+                  </ProfileRow>
+                </ProfileSection>
+              </div>
+            </div>
+          )}
 
           {/* Name overlay */}
           {editingName && (
@@ -1971,24 +2012,19 @@ export function ProfileButton() {
           <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
             {/* Account info */}
-            <ProfileSection title="Account">
+            <ProfileSection>
               <ProfileRow separator>
-                <button className="flex items-center justify-between w-full gap-3"
-                  onClick={() => { setEditMsg(null); setEditingName(true) }}>
-                  <span className="text-[15px] text-white/40 shrink-0">Name</span>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[17px] text-white truncate">{editName || '—'}</span>
-                    <ChevronRight size={16} className="text-white/25 shrink-0" />
+                <button className="flex items-center gap-4 py-1 w-full text-left active:opacity-70"
+                  onClick={() => setEditingAccountInfo(true)}>
+                  <div className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: 'rgba(255,255,255,0.10)' }}>
+                    <User size={22} className="text-white/50" />
                   </div>
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full gap-3" onClick={() => setEmailActionSheet(true)}>
-                  <span className="text-[15px] text-white/40 shrink-0">Email</span>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[17px] text-white truncate">{maskEmail(email ?? '—')}</span>
-                    <ChevronRight size={16} className="text-white/25 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[17px] font-semibold text-white truncate">{editName || '—'}</p>
+                    <p className="text-[13px] text-white/40 truncate">{maskEmail(email ?? '—')}</p>
                   </div>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
               </ProfileRow>
               <ProfileRow>
