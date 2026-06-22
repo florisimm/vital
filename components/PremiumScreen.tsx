@@ -1,5 +1,14 @@
-import { Suspense, type ReactNode } from 'react'
-import { ProfileButton } from './ProfileButton'
+'use client'
+
+import dynamic from 'next/dynamic'
+import { type ReactNode } from 'react'
+
+// ProfileButton is 2270 lines — lazy-load it so it never blocks the initial page render.
+// The 34×34 placeholder matches the button size to avoid layout shift.
+const ProfileButton = dynamic(
+  () => import('./ProfileButton').then(m => ({ default: m.ProfileButton })),
+  { ssr: false, loading: () => <div className="w-[34px] h-[34px]" /> },
+)
 
 export function PremiumScreen({
   title,
@@ -35,9 +44,7 @@ export function PremiumScreen({
           </h1>
         </div>
         <div className="pt-1">
-          <Suspense fallback={<div className="w-[34px] h-[34px]" />}>
-            <ProfileButton />
-          </Suspense>
+          <ProfileButton />
         </div>
       </div>
 
