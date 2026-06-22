@@ -103,6 +103,8 @@ export function ProfileButton() {
   const [savedMacroProtein, setSavedMacroProtein] = useState(0)
   const [savedMacroCarbs, setSavedMacroCarbs] = useState(0)
   const [savedMacroFat, setSavedMacroFat] = useState(0)
+  const [editingDevices, setEditingDevices] = useState(false)
+  const [editingSettings, setEditingSettings] = useState(false)
 
   const { data: healthRows = [] } = useSWR<any[]>('health-gezondheid')
   const router = useRouter()
@@ -846,6 +848,182 @@ export function ProfileButton() {
                     {editMsg.text}
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Devices & Apps overlay */}
+          {editingDevices && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingDevices(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Devices & Apps</span>
+                <div className="w-16" />
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+                <ProfileSection title="Connected">
+                  <ProfileRow separator>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
+                        style={{ background: 'rgba(252,82,0,0.15)' }}>🏃</div>
+                      <div className="flex-1">
+                        <p className="text-[15px] font-medium text-white">Strava</p>
+                        <p className="text-[12px] text-white/40">Running & Cycling</p>
+                      </div>
+                      {services?.strava === true
+                        ? <button onClick={() => setConfirmDisconnect('strava')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
+                        : <span className="text-[14px] text-white/30">{services?.strava === undefined ? '…' : 'Not connected'}</span>}
+                    </div>
+                  </ProfileRow>
+                  <ProfileRow separator>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
+                        style={{ background: 'rgba(0,178,202,0.15)' }}>⌚</div>
+                      <div className="flex-1">
+                        <p className="text-[15px] font-medium text-white">Fitbit</p>
+                        <p className="text-[12px] text-white/40">Sleep, HRV & Activity</p>
+                      </div>
+                      {services?.fitbit === true ? (
+                        <div className="flex items-center gap-2">
+                          <button onClick={syncFitbit} disabled={fitbitSyncing}
+                            className="text-[14px] font-semibold text-teal-400 disabled:opacity-50 active:opacity-60">
+                            {fitbitSyncing ? 'Syncing…' : 'Sync'}
+                          </button>
+                          <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
+                        </div>
+                      ) : services?.fitbit === false
+                        ? <button onClick={connectFitbit} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
+                        : <span className="text-[14px] text-white/30">…</span>}
+                    </div>
+                  </ProfileRow>
+                  {fitbitSyncMessage && (
+                    <div className="px-4 pb-2">
+                      <p className={`text-[12px] ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
+                        {fitbitSyncMessage.text}
+                      </p>
+                    </div>
+                  )}
+                  <ProfileRow separator>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
+                        style={{ background: 'rgba(255,255,255,0.08)' }}>🏋️</div>
+                      <div className="flex-1">
+                        <p className="text-[15px] font-medium text-white">Hevy</p>
+                        <p className="text-[12px] text-white/40">Strength Training</p>
+                      </div>
+                      <span className={`text-[14px] ${services?.hevy ? 'text-green-400' : 'text-white/30'}`}>
+                        {services?.hevy === undefined ? '…' : services.hevy ? 'Connected' : 'Not connected'}
+                      </span>
+                    </div>
+                  </ProfileRow>
+                  <ProfileRow>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
+                        style={{ background: 'rgba(66,133,244,0.15)' }}>📅</div>
+                      <div className="flex-1">
+                        <p className="text-[15px] font-medium text-white">Google Calendar</p>
+                        <p className="text-[12px] text-white/40">Training Schedule</p>
+                      </div>
+                      {services?.google === true
+                        ? <button onClick={() => setConfirmDisconnect('google')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
+                        : services?.google === false
+                          ? <button onClick={connectGoogleCalendar} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
+                          : <span className="text-[14px] text-white/30">…</span>}
+                    </div>
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="Coming Soon">
+                  {([
+                    { icon: '🍎', name: 'Apple Health', desc: 'Steps, sleep & workouts', bg: 'rgba(255,59,48,0.12)' },
+                    { icon: '⌚', name: 'Garmin',        desc: 'GPS watches & cycling',  bg: 'rgba(0,126,197,0.12)' },
+                    { icon: '🔴', name: 'Whoop',         desc: 'Recovery & strain',       bg: 'rgba(220,38,38,0.10)' },
+                    { icon: '🫀', name: 'Polar',         desc: 'HR & training load',      bg: 'rgba(235,87,87,0.10)' },
+                  ] as const).map((item, i, arr) => (
+                    <ProfileRow key={item.name} separator={i < arr.length - 1}>
+                      <div className="flex items-center gap-3 opacity-40">
+                        <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
+                          style={{ background: item.bg }}>{item.icon}</div>
+                        <div className="flex-1">
+                          <p className="text-[15px] font-medium text-white">{item.name}</p>
+                          <p className="text-[12px] text-white/40">{item.desc}</p>
+                        </div>
+                        <span className="text-[11px] font-semibold text-white/30 px-2.5 py-1 rounded-full"
+                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          Soon
+                        </span>
+                      </div>
+                    </ProfileRow>
+                  ))}
+                </ProfileSection>
+              </div>
+            </div>
+          )}
+
+          {/* Settings overlay */}
+          {editingSettings && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => setEditingSettings(false)}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Settings</span>
+                <div className="w-16" />
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+                <ProfileSection title="Display">
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full" onClick={toggleUnits}>
+                      <span className="text-[17px] text-white">Units</span>
+                      <span className="text-[15px] text-white/40 capitalize">{units}</span>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full" onClick={toggleTimeFormat}>
+                      <span className="text-[17px] text-white">Time Format</span>
+                      <span className="text-[15px] text-white/40">{timeFormat === '12h' ? '12h (AM/PM)' : '24h'}</span>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[17px] text-white">Appearance</span>
+                      <span className="text-[15px] text-white/40">Dark</span>
+                    </div>
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="Notifications">
+                  <ProfileRow>
+                    <button className="flex items-center justify-between w-full"
+                      onClick={requestNotifications}
+                      disabled={notifStatus === 'denied' || notifStatus === 'unsupported'}>
+                      <span className="text-[17px] text-white">Push Notifications</span>
+                      <span className={`text-[15px] ${notifStatus === 'granted' ? 'text-green-400' : notifStatus === 'denied' ? 'text-red-400' : 'text-white/40'}`}>
+                        {notifLabel}
+                      </span>
+                    </button>
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="Data">
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full" onClick={() => setEditingPages(true)}>
+                      <span className="text-[17px] text-white">Pages</span>
+                      <ChevronRight size={18} className="text-white/25 shrink-0" />
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow>
+                    <button className="flex items-center justify-between w-full" onClick={() => setEditingTargets(true)}>
+                      <span className="text-[17px] text-white">Targets & Standards</span>
+                      <ChevronRight size={18} className="text-white/25 shrink-0" />
+                    </button>
+                  </ProfileRow>
+                </ProfileSection>
               </div>
             </div>
           )}
@@ -1676,7 +1854,7 @@ export function ProfileButton() {
           })()}
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6">
+          <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
             {/* Profile */}
             <ProfileSection>
@@ -1686,70 +1864,44 @@ export function ProfileButton() {
                     style={{ background: 'rgba(255,255,255,0.12)' }}>
                     <User size={26} className="text-white/50" />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[17px] font-semibold text-white">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[17px] font-semibold text-white truncate">
                       {email?.split('@')[0] ?? '—'}
                     </p>
-                    <p className="text-[14px] text-white/40">{email ?? '—'}</p>
+                    <p className="text-[14px] text-white/40 truncate">{email ?? '—'}</p>
                   </div>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
               </ProfileRow>
             </ProfileSection>
 
-            {/* Connected Services */}
-            <ProfileSection title="Connected Services">
-              <ProfileRow separator>
-                <ServiceRow icon="🏋️" label="Hevy" connected={services?.hevy} />
-              </ProfileRow>
-              <ProfileRow separator>
-                <ServiceRow icon="🏃" label="Strava"
-                  connected={services?.strava}
-                  onDisconnect={services?.strava === true ? () => setConfirmDisconnect('strava') : undefined} />
-              </ProfileRow>
-              <ProfileRow separator>
-                <ServiceRow icon="📅" label="Google Calendar"
-                  connected={services?.google}
-                  onConnect={services?.google === false ? connectGoogleCalendar : undefined}
-                  onDisconnect={services?.google === true ? () => setConfirmDisconnect('google') : undefined} />
-              </ProfileRow>
+            {/* Devices & Apps */}
+            <ProfileSection title="Devices & Apps">
               <ProfileRow>
-                <div className="flex items-center gap-3">
-                  <span className="text-[18px] w-6 text-center">⌚</span>
-                  <span className="flex-1 text-[17px] text-white">Fitbit</span>
-                  {services?.fitbit === false && (
-                    <button onClick={connectFitbit} className="text-[15px] font-semibold text-teal-400 active:opacity-60">
-                      Connect
-                    </button>
-                  )}
-                  {services?.fitbit === true && (
-                    <>
-                      <button
-                        onClick={syncFitbit}
-                        disabled={fitbitSyncing}
-                        className="text-[15px] font-semibold text-teal-400 active:opacity-60 disabled:opacity-50"
-                      >
-                        {fitbitSyncing ? 'Syncing…' : 'Sync'}
-                      </button>
-                      <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[15px] font-semibold text-green-400 active:opacity-60">
-                        Connected
-                      </button>
-                    </>
-                  )}
-                  {services?.fitbit === undefined && (
-                    <span className="text-[15px] text-white/30">…</span>
-                  )}
-                </div>
+                <button className="flex items-center gap-3 w-full" onClick={() => setEditingDevices(true)}>
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <span className="text-[17px] text-white text-left">
+                      {(() => {
+                        const count = [services?.strava, services?.fitbit, services?.hevy, services?.google].filter(Boolean).length
+                        return count === 0 ? 'No services connected' : `${count} service${count === 1 ? '' : 's'} connected`
+                      })()}
+                    </span>
+                    {[services?.strava, services?.fitbit, services?.hevy, services?.google].some(Boolean) && (
+                      <div className="flex gap-2 text-[15px]">
+                        {services?.strava && <span>🏃</span>}
+                        {services?.fitbit && <span>⌚</span>}
+                        {services?.hevy && <span>🏋️</span>}
+                        {services?.google && <span>📅</span>}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
+                </button>
               </ProfileRow>
             </ProfileSection>
-            {fitbitSyncMessage && (
-              <p className={`-mt-3 px-1 text-[13px] ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
-                {fitbitSyncMessage.text}
-              </p>
-            )}
 
-            {/* Preferences */}
-            <ProfileSection title="Preferences">
+            {/* Goals & Training */}
+            <ProfileSection title="Goals & Training">
               <ProfileRow separator>
                 <button className="flex items-center justify-between w-full" onClick={() => setEditingTraining(true)}>
                   <span className="text-[17px] text-white">Training</span>
@@ -1761,53 +1913,24 @@ export function ProfileButton() {
                   </div>
                 </button>
               </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full" onClick={openMacroChoice}>
-                  <span className="text-[17px] text-white">Macro Targets</span>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full" onClick={() => setEditingTargets(true)}>
-                  <span className="text-[17px] text-white">Targets & Standards</span>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full" onClick={() => setEditingPages(true)}>
-                  <span className="text-[17px] text-white">Pages</span>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full" onClick={toggleUnits}>
-                  <span className="text-[17px] text-white">Units</span>
-                  <span className="text-[15px] text-white/40 capitalize">{units}</span>
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full" onClick={toggleTimeFormat}>
-                  <span className="text-[17px] text-white">Time Format</span>
-                  <span className="text-[15px] text-white/40">{timeFormat === '12h' ? '12h (AM/PM)' : '24h'}</span>
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button
-                  className="flex items-center justify-between w-full"
-                  onClick={requestNotifications}
-                  disabled={notifStatus === 'denied' || notifStatus === 'unsupported'}
-                >
-                  <span className="text-[17px] text-white">Notifications</span>
-                  <span className={`text-[15px] ${notifStatus === 'granted' ? 'text-green-400' : notifStatus === 'denied' ? 'text-red-400' : 'text-white/40'}`}>
-                    {notifLabel}
-                  </span>
-                </button>
-              </ProfileRow>
               <ProfileRow>
-                <div className="flex items-center justify-between">
-                  <span className="text-[17px] text-white">Appearance</span>
-                  <span className="text-[15px] text-white/40">Dark</span>
-                </div>
+                <button className="flex items-center justify-between w-full" onClick={openMacroChoice}>
+                  <span className="text-[17px] text-white">Nutrition & Macros</span>
+                  <div className="flex items-center gap-2">
+                    {savedMacroKcal > 0 && <span className="text-[13px] text-white/40">{savedMacroKcal} kcal</span>}
+                    <ChevronRight size={18} className="text-white/25 shrink-0" />
+                  </div>
+                </button>
+              </ProfileRow>
+            </ProfileSection>
+
+            {/* App Settings */}
+            <ProfileSection title="App">
+              <ProfileRow>
+                <button className="flex items-center justify-between w-full" onClick={() => setEditingSettings(true)}>
+                  <span className="text-[17px] text-white">Settings</span>
+                  <ChevronRight size={18} className="text-white/25 shrink-0" />
+                </button>
               </ProfileRow>
             </ProfileSection>
 
