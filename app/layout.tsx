@@ -13,6 +13,20 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: 'Kern — AI Fitness & Health Coaching',
   description: DESCRIPTION,
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    shortcut: '/favicon-32x32.png',
+  },
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Kern',
+  },
   openGraph: {
     title: 'Kern — Advice that fits your day',
     description: DESCRIPTION,
