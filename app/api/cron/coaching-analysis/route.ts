@@ -26,21 +26,23 @@ const SPORTS: SportType[] = ['running', 'cycling', 'strength', 'swimming']
 export async function POST(request: NextRequest) {
   try {
     // Verify CRON_SECRET from Authorization header
+    const cronSecret = process.env.CRON_SECRET
     const authHeader = request.headers.get('authorization')
-    const expectedToken = `Bearer ${process.env.CRON_SECRET}`
 
-    if (!authHeader || authHeader !== expectedToken) {
+    if (!cronSecret || !authHeader || authHeader !== `Bearer ${cronSecret}`) {
       console.warn('Unauthorized cron request (missing/invalid CRON_SECRET)')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     console.info('[Coaching Analysis] Starting periodic analysis job')
 
-    // Create a service client (uses service role key, no auth context)
-    // For now, we'll use individual user context via a loop
-    // In production, you'd use service_role key to bypass RLS
-
-    const supabase = await createServerSupabaseClient()
+    // Use service role key so RLS does not filter out other users' data
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!serviceRoleKey) {
+      return NextResponse.json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured' }, { status: 500 })
+    }
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
 
     // Get all unique users with recent overrides (last 90 days)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000)

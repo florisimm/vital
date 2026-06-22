@@ -44,9 +44,8 @@ export async function POST(req: Request) {
       stream: true,
     })
   } catch (err: any) {
-    const msg = err?.message ?? String(err)
-    console.error('[coach/chat] OpenAI error:', msg)
-    return new Response(`OpenAI error: ${msg}`, { status: 502 })
+    console.error('[coach/chat] OpenAI error:', err?.message ?? String(err))
+    return new Response('AI service temporarily unavailable', { status: 502 })
   }
 
   const readable = new ReadableStream({
