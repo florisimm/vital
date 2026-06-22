@@ -31,7 +31,7 @@ export function DataProvider() {
         { data: gcalToken },
       ] = await Promise.all([
         supabase.from('food_log').select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
-        supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,training_frequencies,training_goal').eq('user_id', user.id).single(),
+        supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,training_frequencies,training_goal,training_sport_priority,training_goal_priority,training_intensity,training_injuries,training_self_planned').eq('user_id', user.id).single(),
         supabase.from('weather_cache').select('*').eq('id', 'current').single(),
         supabase.from('strava_activities').select('name,sport_type,start_date,distance,moving_time').eq('user_id', user.id).gte('start_date', new Date().toISOString()).order('start_date', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('gezondheid').select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min').eq('user_id', user.id).order('datum', { ascending: false }).limit(30),
@@ -91,7 +91,16 @@ export function DataProvider() {
 
       mutate('health-gezondheid', gezondheid ?? [], false)
 
-      mutate('training', { activities: activities ?? [], hevy: hevy ?? [], calendarEvents: upcomingCalendar }, false)
+      mutate('training', {
+        activities: activities ?? [],
+        hevy: hevy ?? [],
+        calendarEvents: upcomingCalendar,
+        trainingFrequencies: (settings as any)?.training_frequencies ?? {},
+        sportPriority: (settings as any)?.training_sport_priority ?? [],
+        goalPriority: (settings as any)?.training_goal_priority ?? [],
+        injuries: (settings as any)?.training_injuries ?? {},
+        selfPlanned: (settings as any)?.training_self_planned ?? {},
+      }, false)
 
       // Persist to localStorage immediately so iOS has data on next cold start
       saveCache()
