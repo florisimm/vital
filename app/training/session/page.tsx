@@ -295,8 +295,9 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
       {loading ? (
         <div className="animate-pulse mx-4 mb-4 rounded-[12px]" style={{ height: 240, background: 'rgba(255,255,255,0.06)' }} />
       ) : error && !routeCoords ? (
-        <div className="mx-4 mb-4 rounded-[12px] flex items-center justify-center" style={{ height: 240, background: 'rgba(255,255,255,0.04)' }}>
-          <p className="text-white/40 text-[14px]">{error}</p>
+        <div className="mx-4 mb-4 rounded-[12px] flex flex-col items-center justify-center gap-1" style={{ height: 240, background: 'rgba(255,255,255,0.04)' }}>
+          <p className="text-white/40 text-[14px]">Route map not available</p>
+          <p className="text-white/20 text-[12px]">Set ORS_API_KEY in Vercel to enable routes</p>
         </div>
       ) : routeCoords ? (
         <div className="mx-4 mb-4 rounded-[12px] overflow-hidden" style={{ height: 240 }}>
