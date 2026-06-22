@@ -30,7 +30,7 @@ export function DataProvider() {
         { data: activities }, { data: hevy }, { data: calendarEvents },
       ] = await Promise.all([
         supabase.from('food_log').select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
-        supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,training_frequencies').eq('user_id', user.id).single(),
+        supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,training_frequencies,training_goal').eq('user_id', user.id).single(),
         supabase.from('products').select('id,name,brand,kcal,protein,carbs,fat,servings').or(`user_id.eq.${user.id},user_id.is.null`).order('name'),
         supabase.from('weather_cache').select('*').eq('id', 'current').single(),
         supabase.from('strava_activities').select('name,sport_type,start_date,distance,moving_time').eq('user_id', user.id).gte('start_date', new Date().toISOString()).order('start_date', { ascending: true }).limit(1).maybeSingle(),
@@ -49,6 +49,16 @@ export function DataProvider() {
       }, false)
 
       mutate('products', products ?? [], false)
+
+      // Pre-populate 'weather' SWR key from the already-fetched weather_cache row
+      // so Today/Health/Coach tabs don't need to call /api/weather on first render.
+      if (weather) {
+        mutate('weather', {
+          temp_c:       Number(weather.temp)        || null,
+          night_temp_c: Number((weather as any).night_temp_c) || null,
+          city:         (weather as any).city        ?? null,
+        }, false)
+      }
 
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
       const todayIso = `${today}T00:00:00`
