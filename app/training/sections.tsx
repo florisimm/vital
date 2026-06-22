@@ -2789,7 +2789,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     if (focus.action === 'Rest & recover' || focus.action === 'Recovery day') return 'Rest & recover'
     if (readinessPct < 50) return 'Rest — prioritise recovery'
     if (readinessPct < 65) return 'Take it easy today'
-    return 'Done for today'
+    return 'Well done — rest up today'
   }
 
   const headline = simplified
