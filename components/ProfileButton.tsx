@@ -105,6 +105,9 @@ export function ProfileButton() {
   const [savedMacroFat, setSavedMacroFat] = useState(0)
   const [editingDevices, setEditingDevices] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
+  const [emailActionSheet, setEmailActionSheet] = useState(false)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [editingPassword, setEditingPassword] = useState(false)
 
   const { data: healthRows = [] } = useSWR<any[]>('health-gezondheid')
   const router = useRouter()
@@ -129,6 +132,7 @@ export function ProfileButton() {
     supabase.auth.getUser().then(({ data }) => {
       const uid = data.user?.id ?? null
       setEmail(data.user?.email ?? null)
+      setEditName(data.user?.user_metadata?.full_name ?? data.user?.email?.split('@')[0] ?? '')
       setUserId(uid)
       if (!uid) return
 
@@ -213,6 +217,47 @@ export function ProfileButton() {
     setEditPasswordConfirm('')
     setEditMsg(null)
     setEditingAccount(true)
+  }
+
+  function maskEmail(addr: string): string {
+    const at = addr.indexOf('@')
+    if (at < 0) return addr
+    const local = addr.slice(0, at)
+    const domain = addr.slice(at)
+    if (local.length <= 2) return addr
+    return local[0] + '*'.repeat(local.length - 2) + local[local.length - 1] + domain
+  }
+
+  async function saveEmail() {
+    if (!editEmail || editEmail === email) { setEditingEmail(false); return }
+    setEditSaving(true); setEditMsg(null)
+    const { error } = await createClient().auth.updateUser({ email: editEmail })
+    setEditSaving(false)
+    if (error) {
+      setEditMsg({ type: 'err', text: error.message })
+    } else {
+      setEmail(editEmail)
+      setEditMsg({ type: 'ok', text: 'Bevestigingsmail verstuurd naar nieuw adres.' })
+    }
+  }
+
+  async function savePassword() {
+    if (!editPassword) return
+    if (editPassword !== editPasswordConfirm) {
+      setEditMsg({ type: 'err', text: 'Wachtwoorden komen niet overeen' }); return
+    }
+    if (editPassword.length < 6) {
+      setEditMsg({ type: 'err', text: 'Minimaal 6 tekens vereist' }); return
+    }
+    setEditSaving(true); setEditMsg(null)
+    const { error } = await createClient().auth.updateUser({ password: editPassword })
+    setEditSaving(false)
+    if (error) {
+      setEditMsg({ type: 'err', text: error.message })
+    } else {
+      setEditPassword(''); setEditPasswordConfirm('')
+      setEditMsg({ type: 'ok', text: 'Wachtwoord bijgewerkt.' })
+    }
   }
 
   async function saveAccount() {
@@ -785,52 +830,70 @@ export function ProfileButton() {
             </button>
           </div>
 
-          {/* Edit account overlay */}
-          {editingAccount && (
+          {/* Email wijzigen overlay */}
+          {editingEmail && (
             <div className="absolute inset-0 z-10 flex flex-col"
               style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
               <div className="flex items-center justify-between px-5 py-4 shrink-0">
-                <button onClick={() => setEditingAccount(false)}
+                <button onClick={() => { setEditingEmail(false); setEditMsg(null) }}
                   className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
-                  Back
+                  Terug
                 </button>
-                <span className="text-[17px] font-semibold text-white">Account</span>
-                <button onClick={saveAccount} disabled={editSaving}
-                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
-                  {editSaving ? '…' : 'Save'}
+                <span className="text-[17px] font-semibold text-white">Email wijzigen</span>
+                <button onClick={saveEmail} disabled={editSaving || !editEmail || editEmail === email}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                  {editSaving ? '…' : 'Opslaan'}
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
-                <ProfileSection title="Name">
-                  <ProfileRow>
-                    <input
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      placeholder="Name"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
-                    />
-                  </ProfileRow>
-                </ProfileSection>
-                <ProfileSection title="Email">
+                <ProfileSection title="Nieuw e-mailadres">
                   <ProfileRow>
                     <input
                       type="email"
+                      autoFocus
                       value={editEmail}
                       onChange={e => setEditEmail(e.target.value)}
-                      placeholder="Email address"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                      placeholder="nieuw@email.com"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
                 </ProfileSection>
-                <ProfileSection title="Password">
+                {editMsg && (
+                  <p className={`text-[14px] text-center px-1 ${editMsg.type === 'ok' ? 'text-teal-400' : 'text-red-400'}`}>
+                    {editMsg.text}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Wachtwoord overlay */}
+          {editingPassword && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => { setEditingPassword(false); setEditMsg(null); setEditPassword(''); setEditPasswordConfirm('') }}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Terug
+                </button>
+                <span className="text-[17px] font-semibold text-white">Wachtwoord</span>
+                <button onClick={savePassword} disabled={editSaving || !editPassword || !editPasswordConfirm}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                  {editSaving ? '…' : 'Opslaan'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
+                <ProfileSection title="Nieuw wachtwoord">
                   <ProfileRow separator>
                     <input
                       type="password"
+                      autoFocus
                       value={editPassword}
                       onChange={e => setEditPassword(e.target.value)}
-                      placeholder="New password"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                      placeholder="Nieuw wachtwoord"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
                   <ProfileRow>
@@ -838,13 +901,13 @@ export function ProfileButton() {
                       type="password"
                       value={editPasswordConfirm}
                       onChange={e => setEditPasswordConfirm(e.target.value)}
-                      placeholder="Confirm password"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/30"
+                      placeholder="Bevestig wachtwoord"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
                 </ProfileSection>
                 {editMsg && (
-                  <p className={`text-[14px] text-center ${editMsg.type === 'ok' ? 'text-teal-400' : 'text-red-400'}`}>
+                  <p className={`text-[14px] text-center px-1 ${editMsg.type === 'ok' ? 'text-teal-400' : 'text-red-400'}`}>
                     {editMsg.text}
                   </p>
                 )}
@@ -1856,20 +1919,24 @@ export function ProfileButton() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-            {/* Profile */}
-            <ProfileSection>
+            {/* Account info */}
+            <ProfileSection title="Account">
+              <ProfileRow separator>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[15px] text-white/40 shrink-0">Naam</span>
+                  <span className="text-[17px] text-white text-right truncate">{editName || '—'}</span>
+                </div>
+              </ProfileRow>
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full gap-3" onClick={() => setEmailActionSheet(true)}>
+                  <span className="text-[15px] text-white/40 shrink-0">Email</span>
+                  <span className="text-[17px] text-white text-right truncate">{maskEmail(email ?? '—')}</span>
+                </button>
+              </ProfileRow>
               <ProfileRow>
-                <button className="flex items-center gap-4 py-1 w-full text-left active:opacity-70" onClick={openEditAccount}>
-                  <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(255,255,255,0.12)' }}>
-                    <User size={26} className="text-white/50" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[17px] font-semibold text-white truncate">
-                      {email?.split('@')[0] ?? '—'}
-                    </p>
-                    <p className="text-[14px] text-white/40 truncate">{email ?? '—'}</p>
-                  </div>
+                <button className="flex items-center justify-between w-full"
+                  onClick={() => { setEditPassword(''); setEditPasswordConfirm(''); setEditMsg(null); setEditingPassword(true) }}>
+                  <span className="text-[17px] text-white">Wachtwoord</span>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
               </ProfileRow>
@@ -1948,6 +2015,35 @@ export function ProfileButton() {
               </ProfileRow>
             </ProfileSection>
 
+          </div>
+        </div>
+      )}
+
+      {emailActionSheet && (
+        <div className="fixed inset-0 z-[10001] flex items-end justify-center pb-8 px-5"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setEmailActionSheet(false)}>
+          <div className="w-full max-w-sm flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+            <div className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(28,28,30,0.99)' }}>
+              <div className="px-5 pt-4 pb-3.5 border-b border-white/[0.08] text-center">
+                <p className="text-[13px] text-white/40">{maskEmail(email ?? '')}</p>
+              </div>
+              <button
+                onClick={() => { setEmailActionSheet(false); setEditEmail(email ?? ''); setEditMsg(null); setEditingEmail(true) }}
+                className="w-full py-4 text-[17px] text-white text-center border-b border-white/[0.08] active:bg-white/[0.06]">
+                Email wijzigen
+              </button>
+              <button
+                onClick={() => setEmailActionSheet(false)}
+                className="w-full py-4 text-[17px] text-orange-400 font-semibold text-center active:bg-white/[0.06]">
+                Email ontkoppelen
+              </button>
+            </div>
+            <button onClick={() => setEmailActionSheet(false)}
+              className="w-full py-4 rounded-[14px] text-[17px] font-semibold text-white text-center active:opacity-70"
+              style={{ background: 'rgba(28,28,30,0.99)' }}>
+              Annuleren
+            </button>
           </div>
         </div>
       )}
