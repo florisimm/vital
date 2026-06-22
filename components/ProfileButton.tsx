@@ -433,12 +433,8 @@ export function ProfileButton() {
     const deltaKg = calcTargetKg && Number(calcTargetKg) > 0
       ? Math.abs(Number(calcWeight) - Number(calcTargetKg))
       : 0
-    const resolvedWeeks = Number(calcTargetWeeks) > 0
-      ? Number(calcTargetWeeks)
-      : deltaKg > 0 ? Math.round(deltaKg / 0.5) : 1
-    const derivedRate = calcGoal !== 'maintain' && deltaKg > 0
-      ? Math.max(0.1, deltaKg / resolvedWeeks)
-      : 0
+    const rateX10 = Number(calcTargetWeeks) > 0 ? Number(calcTargetWeeks) : 5
+    const derivedRate = calcGoal !== 'maintain' && deltaKg > 0 ? rateX10 / 10 : 0
     const m = computeMacros(derivedRate)
     if (!m) return
     setCalcSaving(true)
@@ -1714,17 +1710,13 @@ export function ProfileButton() {
               ? Math.abs(Number(calcWeight) - Number(calcTargetKg))
               : 0
 
-            // Dynamic slider range: fastest = 2 kg/week, slowest = 0.1 kg/week
-            const minWeeks = deltaKg > 0 ? Math.max(1, Math.ceil(deltaKg / 2)) : 1
-            const maxWeeks = deltaKg > 0 ? Math.max(minWeeks + 1, Math.floor(deltaKg / 0.1)) : 10
-            const defaultWeeks = deltaKg > 0 ? Math.round(deltaKg / 0.5) : Math.round((minWeeks + maxWeeks) / 2)
-            const sliderWeeks = Number(calcTargetWeeks) > 0 ? Number(calcTargetWeeks) : defaultWeeks
-            const sliderRate = deltaKg > 0 && sliderWeeks > 0 ? Math.round(deltaKg / sliderWeeks * 100) / 100 : 0
-            const sliderPct = maxWeeks > minWeeks ? (sliderWeeks - minWeeks) / (maxWeeks - minWeeks) * 100 : 0
+            // Slider controls rate in 0.1 kg/week steps (1–20 = 0.1–2.0 kg/week)
+            const sliderRateX10 = Number(calcTargetWeeks) > 0 ? Number(calcTargetWeeks) : 5
+            const sliderRate = sliderRateX10 / 10
+            const sliderWeeks = deltaKg > 0 && sliderRate > 0 ? Math.ceil(deltaKg / sliderRate) : 0
+            const sliderPct = (sliderRateX10 - 1) / (20 - 1) * 100
 
-            const derivedRate = calcGoal !== 'maintain' && deltaKg > 0
-              ? Math.max(0.1, deltaKg / Math.max(1, sliderWeeks))
-              : 0
+            const derivedRate = calcGoal !== 'maintain' && deltaKg > 0 ? sliderRate : 0
             const macros = calcStep === 7 ? computeMacros(derivedRate) : null
 
             const canNextMap: Record<number, boolean> = {
@@ -1887,20 +1879,22 @@ export function ProfileButton() {
 
                       {deltaKg > 0 && (
                         <div className="flex flex-col gap-3">
-                          {/* Labels above slider */}
+                          {/* Rate label (controlled) + weeks label (derived) */}
                           <div className="flex justify-between items-center px-1">
-                            <span className="text-[13px] font-semibold text-white/50">{sliderWeeks} weeks</span>
+                            <span className="text-[13px] font-semibold text-white/50">
+                              {sliderWeeks} week{sliderWeeks !== 1 ? 's' : ''}
+                            </span>
                             <span className="text-[13px] font-semibold"
                               style={{ color: sliderRate < 0.5 ? '#2dd4bf' : sliderRate < 0.75 ? '#a3e635' : sliderRate < 1.5 ? '#fb923c' : '#f87171' }}>
-                              {sliderRate.toFixed(2)} kg/week
+                              {sliderRate.toFixed(1)} kg/week
                             </span>
                           </div>
 
-                          {/* Slider */}
+                          {/* Slider — controls rate in 0.1 steps (1–20 = 0.1–2.0 kg/week) */}
                           <input
                             type="range"
-                            min={minWeeks} max={maxWeeks} step={1}
-                            value={sliderWeeks}
+                            min={1} max={20} step={1}
+                            value={sliderRateX10}
                             onChange={e => setCalcTargetWeeks(e.target.value)}
                             className="w-full h-[4px] rounded-full appearance-none outline-none"
                             style={{
@@ -1914,7 +1908,7 @@ export function ProfileButton() {
                             <div className="rounded-[14px] px-4 py-3 mt-1"
                               style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
                               <p className="text-[13px] text-red-400/80 leading-relaxed">
-                                1.5 kg/week or more carries serious health risks. Consider spreading your goal over more weeks.
+                                1.5 kg/week or more carries serious health risks. Slide left to slow down.
                               </p>
                             </div>
                           )}
