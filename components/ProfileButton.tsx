@@ -106,6 +106,7 @@ export function ProfileButton() {
   const [editingDevices, setEditingDevices] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [emailActionSheet, setEmailActionSheet] = useState(false)
+  const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
 
@@ -226,6 +227,19 @@ export function ProfileButton() {
     const domain = addr.slice(at)
     if (local.length <= 2) return addr
     return local[0] + '*'.repeat(local.length - 2) + local[local.length - 1] + domain
+  }
+
+  async function saveName() {
+    if (!userId) return
+    setEditSaving(true); setEditMsg(null)
+    const { error } = await createClient().auth.updateUser({ data: { full_name: editName } })
+    setEditSaving(false)
+    if (error) {
+      setEditMsg({ type: 'err', text: error.message })
+    } else {
+      setEditMsg({ type: 'ok', text: 'Name saved.' })
+      setTimeout(() => { setEditingName(false); setEditMsg(null) }, 800)
+    }
   }
 
   async function saveEmail() {
@@ -829,6 +843,43 @@ export function ProfileButton() {
               Done
             </button>
           </div>
+
+          {/* Name overlay */}
+          {editingName && (
+            <div className="absolute inset-0 z-10 flex flex-col"
+              style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <button onClick={() => { setEditingName(false); setEditMsg(null) }}
+                  className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>
+                  Back
+                </button>
+                <span className="text-[17px] font-semibold text-white">Name</span>
+                <button onClick={saveName} disabled={editSaving || !editName}
+                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                  {editSaving ? '…' : 'Save'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
+                <ProfileSection title="Display name">
+                  <ProfileRow>
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      placeholder="Your name"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                    />
+                  </ProfileRow>
+                </ProfileSection>
+                {editMsg && (
+                  <p className={`text-[14px] text-center px-1 ${editMsg.type === 'ok' ? 'text-teal-400' : 'text-red-400'}`}>
+                    {editMsg.text}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Change Email overlay */}
           {editingEmail && (
@@ -1922,15 +1973,22 @@ export function ProfileButton() {
             {/* Account info */}
             <ProfileSection title="Account">
               <ProfileRow separator>
-                <div className="flex items-center justify-between gap-3">
+                <button className="flex items-center justify-between w-full gap-3"
+                  onClick={() => { setEditMsg(null); setEditingName(true) }}>
                   <span className="text-[15px] text-white/40 shrink-0">Name</span>
-                  <span className="text-[17px] text-white text-right truncate">{editName || '—'}</span>
-                </div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[17px] text-white truncate">{editName || '—'}</span>
+                    <ChevronRight size={16} className="text-white/25 shrink-0" />
+                  </div>
+                </button>
               </ProfileRow>
               <ProfileRow separator>
                 <button className="flex items-center justify-between w-full gap-3" onClick={() => setEmailActionSheet(true)}>
                   <span className="text-[15px] text-white/40 shrink-0">Email</span>
-                  <span className="text-[17px] text-white text-right truncate">{maskEmail(email ?? '—')}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[17px] text-white truncate">{maskEmail(email ?? '—')}</span>
+                    <ChevronRight size={16} className="text-white/25 shrink-0" />
+                  </div>
                 </button>
               </ProfileRow>
               <ProfileRow>
@@ -1945,22 +2003,20 @@ export function ProfileButton() {
             {/* Devices & Apps */}
             <ProfileSection title="Devices & Apps">
               <ProfileRow>
-                <button className="flex items-center gap-3 w-full" onClick={() => setEditingDevices(true)}>
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <span className="text-[17px] text-white text-left">
+                <button className="flex items-center justify-between w-full" onClick={() => setEditingDevices(true)}>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[17px] text-white">Connected services</span>
+                    <span className="text-[13px] text-white/40">
                       {(() => {
-                        const count = [services?.strava, services?.fitbit, services?.hevy, services?.google].filter(Boolean).length
-                        return count === 0 ? 'No services connected' : `${count} service${count === 1 ? '' : 's'} connected`
+                        const names = [
+                          services?.strava  && 'Strava',
+                          services?.fitbit  && 'Fitbit',
+                          services?.hevy    && 'Hevy',
+                          services?.google  && 'Calendar',
+                        ].filter(Boolean) as string[]
+                        return names.length ? names.join(' · ') : 'Nothing connected'
                       })()}
                     </span>
-                    {[services?.strava, services?.fitbit, services?.hevy, services?.google].some(Boolean) && (
-                      <div className="flex gap-2 text-[15px]">
-                        {services?.strava && <span>🏃</span>}
-                        {services?.fitbit && <span>⌚</span>}
-                        {services?.hevy && <span>🏋️</span>}
-                        {services?.google && <span>📅</span>}
-                      </div>
-                    )}
                   </div>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
