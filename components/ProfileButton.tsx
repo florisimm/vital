@@ -110,6 +110,7 @@ export function ProfileButton() {
   const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
+  const [hevySyncing, setHevySyncing] = useState(false)
   const [shortcutToken, setShortcutToken] = useState<string | null>(null)
   const [tokenCopied, setTokenCopied] = useState(false)
 
@@ -1093,9 +1094,30 @@ export function ProfileButton() {
                         <p className="text-[15px] font-medium text-white">Hevy</p>
                         <p className="text-[12px] text-white/40">Strength Training</p>
                       </div>
-                      <span className={`text-[14px] ${services?.hevy ? 'text-green-400' : 'text-white/30'}`}>
-                        {services?.hevy === undefined ? '…' : services.hevy ? 'Connected' : 'Not connected'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {services?.hevy && (
+                          <button
+                            onClick={async () => {
+                              setHevySyncing(true)
+                              const supabase = createClient()
+                              const { data: { session } } = await supabase.auth.getSession()
+                              await fetch(
+                                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`,
+                                { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: '{}' }
+                              ).catch(() => {})
+                              setHevySyncing(false)
+                              mutate('health-gezondheid')
+                              mutate('today')
+                            }}
+                            className="text-[13px] text-teal-400"
+                          >
+                            {hevySyncing ? 'Syncing…' : 'Sync'}
+                          </button>
+                        )}
+                        <span className={`text-[14px] ${services?.hevy ? 'text-green-400' : 'text-white/30'}`}>
+                          {services?.hevy === undefined ? '…' : services.hevy ? 'Connected' : 'Not connected'}
+                        </span>
+                      </div>
                     </div>
                   </ProfileRow>
                   <ProfileRow>
