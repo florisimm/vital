@@ -492,7 +492,8 @@ async function saveTraining() {
     setTrainingSaving(false)
     setEditingTraining(false)
     mutate('today')
-    mutate('training')
+    // Optimistisch de frequenties direct in cache zetten zodat tabs meteen updaten
+    mutate('training', (cur: any) => cur ? { ...cur, trainingFrequencies } : cur, { revalidate: true })
   }
 
   function setFreq(sport: string, delta: number) {
