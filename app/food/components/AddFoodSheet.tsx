@@ -89,7 +89,10 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
       if (!res.ok)            { setBarcodeError('unreachable'); return }
       const product = await res.json() as Product
       setSelected(product)
-      globalMutate('products')
+      globalMutate<Product[]>('products', (cur = []) =>
+        cur.find(p => p.id === product.id) ? cur : [...cur, product],
+        { revalidate: true }
+      )
       setView('detail')
     } finally {
       setBarcodeLoading(false)
