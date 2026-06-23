@@ -5,6 +5,15 @@ import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import useSWR from 'swr'
+import { createClient } from '@/lib/supabase'
+
+async function fetchTrainingFreqs(): Promise<Record<string, number>> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return {}
+  const { data } = await supabase.from('user_settings').select('training_frequencies').eq('user_id', user.id).single()
+  return (data?.training_frequencies as Record<string, number>) ?? {}
+}
 
 const ALL_CATEGORIES = [
   { label: 'Running',  href: '/training/running',     freqKey: 'running'  },
@@ -27,8 +36,7 @@ export function TrainingDetailScreen({
   children: ReactNode
 }) {
   const router = useRouter()
-  const { data: training } = useSWR('training', null)
-  const freqs: Record<string, number> = (training as any)?.trainingFrequencies ?? {}
+  const { data: freqs = {} } = useSWR<Record<string, number>>('training-freqs', fetchTrainingFreqs, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const CATEGORIES = ALL_CATEGORIES.filter(c => !c.freqKey || (freqs[c.freqKey] ?? 0) > 0)
 
   return (
