@@ -80,7 +80,7 @@ export async function GET(req: Request) {
     .from('products')
     .upsert(
       { user_id: user.id, name, brand, kcal, protein, carbs, fat, servings, image_url, barcode },
-      { onConflict: 'user_id,name' },
+      { onConflict: 'user_id,barcode' },
     )
     .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
     .single()
