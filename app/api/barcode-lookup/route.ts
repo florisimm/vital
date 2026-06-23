@@ -76,14 +76,30 @@ export async function GET(req: Request) {
     servingQ && servingLabel ? [{ label: servingLabel, amount_g: servingQ }] : null
 
   // 4. Cache in Supabase under the user's account for future scans
-  const { data: saved } = await supabase
+  const { data: existing } = await supabase
     .from('products')
-    .upsert(
-      { user_id: user.id, name, brand, kcal, protein, carbs, fat, servings, image_url, barcode },
-      { onConflict: 'user_id,barcode' },
-    )
-    .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
-    .single()
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('barcode', barcode)
+    .maybeSingle()
+
+  let saved: Product | null = null
+  if (existing?.id) {
+    const { data } = await supabase
+      .from('products')
+      .update({ name, brand, kcal, protein, carbs, fat, servings, image_url })
+      .eq('id', existing.id)
+      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
+      .single()
+    saved = data as Product | null
+  } else {
+    const { data } = await supabase
+      .from('products')
+      .insert({ user_id: user.id, name, brand, kcal, protein, carbs, fat, servings, image_url, barcode })
+      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
+      .single()
+    saved = data as Product | null
+  }
 
   const product: Product = saved ?? { id: `ofn-${barcode}`, name, brand, kcal, protein, carbs, fat, servings, image_url }
   return NextResponse.json(product)
