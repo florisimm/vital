@@ -11,27 +11,18 @@ import { PerformanceSection } from './PerformanceSection'
 import { trainingFetcher } from './fetcher'
 import { createClient } from '@/lib/supabase'
 
-async function fetchHiddenPages(): Promise<string[]> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  const { data } = await supabase.from('user_settings').select('hidden_pages').eq('user_id', user.id).single()
-  return Array.isArray(data?.hidden_pages) ? data.hidden_pages : []
-}
-
 const ALL_TABS = [
-  { label: 'Overview',     key: 'overview',     href: null                      },
-  { label: 'Running',      key: 'running',      href: '/training/running'      },
-  { label: 'Cycling',      key: 'cycling',      href: '/training/cycling'      },
-  { label: 'Swimming',     key: 'swimming',     href: '/training/swimming'     },
-  { label: 'Strength',     key: 'strength',     href: '/training/strength'     },
-  { label: 'Log',          key: 'history',      href: '/training/history'      },
-  { label: 'Metrics',      key: 'performance',  href: '/training/performance'  },
+  { label: 'Overview',  key: 'overview',    href: null,                     freqKey: null    },
+  { label: 'Running',   key: 'running',     href: '/training/running',      freqKey: 'running'  },
+  { label: 'Cycling',   key: 'cycling',     href: '/training/cycling',      freqKey: 'cycling'  },
+  { label: 'Swimming',  key: 'swimming',    href: '/training/swimming',     freqKey: 'swimming' },
+  { label: 'Strength',  key: 'strength',    href: '/training/strength',     freqKey: 'gym'      },
+  { label: 'Log',       key: 'history',     href: '/training/history',      freqKey: null    },
+  { label: 'Metrics',   key: 'performance', href: '/training/performance',  freqKey: null    },
 ]
 
 export default function TrainingPage() {
   const { data } = useSWR('training', trainingFetcher, { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000 })
-  const { data: hiddenPages = [] } = useSWR('user-settings-pages', fetchHiddenPages, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const [activeTab, setActiveTab] = useState('overview')
   // Server and first client render must match. SWR hydrates from localStorage on the
   // client, so data-driven content (emoji, labels) would differ from SSR. Gate it on mount.
@@ -42,7 +33,8 @@ export default function TrainingPage() {
     if (tab) setActiveTab(tab)
   }, [])
 
-  const TABS = ALL_TABS.filter(t => !t.href || !hiddenPages.includes(t.href))
+  const freqs: Record<string, number> = (data as any)?.trainingFrequencies ?? {}
+  const TABS = ALL_TABS.filter(t => !t.freqKey || (freqs[t.freqKey] ?? 0) > 0)
 
   function switchTab(key: string) {
     setActiveTab(key)

@@ -11,24 +11,6 @@ type Services = { strava: boolean; hevy: boolean; google: boolean; fitbit: boole
 type Units = 'metric' | 'imperial'
 type NotifStatus = 'default' | 'granted' | 'denied' | 'unsupported'
 
-const TRAINING_MODULES = [
-  { label: 'Running',     href: '/training/running',     icon: '🏃', desc: 'Runs, pace, zones and records' },
-  { label: 'Cycling',     href: '/training/cycling',     icon: '🚴', desc: 'Rides, power, FTP and trends' },
-  { label: 'Swimming',    href: '/training/swimming',    icon: '🏊', desc: 'Swims, pace per 100m and volume' },
-  { label: 'Strength',    href: '/training/strength',    icon: '🏋️', desc: 'Lifts, muscle groups and recovery' },
-  { label: 'History',     href: '/training/history',     icon: '📜', desc: 'Full workout timeline' },
-  { label: 'Performance', href: '/training/performance', icon: '📈', desc: 'Score, VO₂max, FTP and projections' },
-]
-
-const HEALTH_MODULES = [
-  { label: 'Sleep',    href: '/health/sleep',    icon: '😴', desc: 'Duration, quality and trends' },
-  { label: 'Recovery', href: '/health/recovery', icon: '🔋', desc: 'Readiness and strain balance' },
-  { label: 'Heart',    href: '/health/heart',    icon: '❤️', desc: 'Resting HR and HRV trends' },
-  { label: 'Weight',   href: '/health/weight',   icon: '⚖️', desc: 'Body weight history and trends' },
-  { label: 'Activity', href: '/health/activity', icon: '👟', desc: 'Steps, rings and active calories' },
-]
-
-const ALL_MODULES = [...TRAINING_MODULES, ...HEALTH_MODULES]
 
 export function ProfileButton() {
   const [open, setOpen] = useState(false)
@@ -51,9 +33,6 @@ export function ProfileButton() {
   const [benchRef, setBenchRef] = useState(100)
   const [deadliftRef, setDeadliftRef] = useState(180)
   const [targetsSaving, setTargetsSaving] = useState(false)
-  const [editingPages, setEditingPages] = useState(false)
-  const [hiddenPages, setHiddenPages] = useState<string[]>([])
-  const [pagesSaving, setPagesSaving] = useState(false)
   const [fitbitSyncing, setFitbitSyncing] = useState(false)
   const [fitbitSyncMessage, setFitbitSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [timeFormat, setTimeFormat] = useState<'24h' | '12h'>('24h')
@@ -156,7 +135,7 @@ export function ProfileButton() {
       })
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,hidden_pages,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -164,8 +143,7 @@ export function ProfileButton() {
           if (data?.strength_squat_ref) setSquatRef(data.strength_squat_ref)
           if (data?.strength_bench_ref) setBenchRef(data.strength_bench_ref)
           if (data?.strength_deadlift_ref) setDeadliftRef(data.strength_deadlift_ref)
-          setHiddenPages(Array.isArray(data?.hidden_pages) ? data.hidden_pages : [])
-          if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm))))
+if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm))))
           if (data?.age) setSavedCalcAge(String(data.age))
           if (data?.gender === 'male' || data?.gender === 'female') setSavedCalcGender(data.gender)
           if (data?.macro_kcal) setSavedMacroKcal(data.macro_kcal)
@@ -504,23 +482,7 @@ export function ProfileButton() {
     setEditingTargets(false)
   }
 
-  async function savePages() {
-    if (!userId) return
-    setPagesSaving(true)
-    await createClient()
-      .from('user_settings')
-      .update({ hidden_pages: hiddenPages })
-      .eq('user_id', userId)
-    mutate('user-settings-pages', hiddenPages, false)
-    setPagesSaving(false)
-    setEditingPages(false)
-  }
-
-  function togglePage(href: string) {
-    setHiddenPages(prev => prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href])
-  }
-
-  async function saveTraining() {
+async function saveTraining() {
     if (!userId) return
     setTrainingSaving(true)
     await createClient()
@@ -1210,12 +1172,6 @@ export function ProfileButton() {
                   </ProfileRow>
                 </ProfileSection>
                 <ProfileSection title="Data">
-                  <ProfileRow separator>
-                    <button className="flex items-center justify-between w-full" onClick={() => setEditingPages(true)}>
-                      <span className="text-[17px] text-white">Pages</span>
-                      <ChevronRight size={18} className="text-white/25 shrink-0" />
-                    </button>
-                  </ProfileRow>
                   <ProfileRow>
                     <button className="flex items-center justify-between w-full" onClick={() => setEditingTargets(true)}>
                       <span className="text-[17px] text-white">Targets & Standards</span>
@@ -1283,114 +1239,6 @@ export function ProfileButton() {
               </div>
             </div>
           )}
-
-          {/* Pages overlay */}
-          {editingPages && (() => {
-            const activeCount = ALL_MODULES.length - hiddenPages.length
-            const onlyOne = activeCount === 1
-
-            const ModuleRow = ({ label, href, icon, desc, isLast }: { label: string; href: string; icon: string; desc: string; isLast: boolean }) => {
-              const hidden = hiddenPages.includes(href)
-              const disableToggle = !hidden && onlyOne
-              return (
-                <div
-                  className="px-4 py-3.5 transition-all duration-200"
-                  style={{
-                    opacity: hidden ? 0.38 : 1,
-                    background: hidden ? 'rgba(0,0,0,0.18)' : 'transparent',
-                    borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)',
-                  }}
-                >
-                  <div className="flex items-center gap-3.5">
-                    <span className="text-[22px] w-8 text-center shrink-0 leading-none"
-                      style={{ filter: hidden ? 'grayscale(1) opacity(0.5)' : 'none', transition: 'filter 0.2s' }}>
-                      {icon}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[16px] font-semibold text-white leading-tight">{label}</p>
-                      <p className="text-[12px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{desc}</p>
-                    </div>
-                    <button onClick={() => !disableToggle && togglePage(href)} disabled={disableToggle} className="shrink-0 active:scale-95 transition-transform">
-                      <div className={`w-[44px] h-[26px] rounded-full relative transition-colors duration-250 ${!hidden ? 'bg-teal-400' : 'bg-white/15'}`}>
-                        <div className={`absolute top-[3px] w-5 h-5 rounded-full bg-white transition-all duration-250 ${!hidden ? 'left-[21px]' : 'left-[3px]'}`}
-                          style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.35)' }} />
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              )
-            }
-
-            return (
-              <div className="absolute inset-0 z-10 flex flex-col"
-                style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-
-                <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
-                  <button onClick={() => setEditingPages(false)}
-                    className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
-                    style={{ background: 'rgba(255,255,255,0.10)' }}>
-                    Back
-                  </button>
-                  <button onClick={savePages} disabled={pagesSaving}
-                    className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-50">
-                    {pagesSaving ? '…' : 'Save'}
-                  </button>
-                </div>
-
-                <div className="px-5 pt-3 pb-5 shrink-0 flex items-end justify-between">
-                  <div>
-                    <h1 className="text-[28px] font-bold text-white leading-tight">Pages</h1>
-                    <p className="text-[13px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                      Choose which modules appear in your dashboard
-                    </p>
-                  </div>
-                  <div className="pb-0.5 text-right shrink-0 ml-4">
-                    <span className="text-[13px] font-semibold text-teal-400">
-                      {activeCount} of {ALL_MODULES.length} active
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[11px] font-semibold px-1 tracking-[0.12em]"
-                      style={{ color: 'rgba(255,255,255,0.28)' }}>
-                      TRAINING · {TRAINING_MODULES.length} MODULES
-                    </span>
-                    <div className="rounded-[18px] overflow-hidden"
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                      {TRAINING_MODULES.map((m, i) => (
-                        <ModuleRow key={m.href} {...m} isLast={i === TRAINING_MODULES.length - 1} />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[11px] font-semibold px-1 tracking-[0.12em]"
-                      style={{ color: 'rgba(255,255,255,0.28)' }}>
-                      HEALTH · {HEALTH_MODULES.length} MODULES
-                    </span>
-                    <div className="rounded-[18px] overflow-hidden"
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                      {HEALTH_MODULES.map((m, i) => (
-                        <ModuleRow key={m.href} {...m} isLast={i === HEALTH_MODULES.length - 1} />
-                      ))}
-                    </div>
-                  </div>
-
-                  {onlyOne && (
-                    <div className="rounded-[14px] px-4 py-3.5 flex items-center gap-3"
-                      style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.22)' }}>
-                      <span className="text-[18px] shrink-0">⚠️</span>
-                      <p className="text-[13px] font-medium text-orange-400">
-                        At least one module must remain active.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
 
           {/* Training preferences overlay */}
           {editingTraining && (
