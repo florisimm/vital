@@ -11,11 +11,29 @@ type Services = { strava: boolean; hevy: boolean; google: boolean; fitbit: boole
 type Units = 'metric' | 'imperial'
 type NotifStatus = 'default' | 'granted' | 'denied' | 'unsupported'
 
+async function fetchServices(): Promise<Services> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { strava: false, hevy: false, google: false, fitbit: false }
+  const [strava, hevy, google, fitbit] = await Promise.all([
+    supabase.from('strava_tokens').select('id').eq('user_id', user.id).limit(1),
+    supabase.from('hevy_workouts').select('id').eq('user_id', user.id).limit(1),
+    supabase.from('google_tokens').select('user_id').eq('user_id', user.id).limit(1),
+    supabase.from('fitbit_tokens').select('user_id').eq('user_id', user.id).limit(1),
+  ])
+  return {
+    strava:  (strava.data?.length  ?? 0) > 0,
+    hevy:    (hevy.data?.length    ?? 0) > 0,
+    google:  (google.data?.length  ?? 0) > 0,
+    fitbit:  (fitbit.data?.length  ?? 0) > 0,
+  }
+}
+
 
 export function ProfileButton() {
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
-  const [services, setServices] = useState<Services | null>(null)
+  const { data: services, mutate: mutateServices } = useSWR('profile-services', fetchServices, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const [units, setUnits] = useState<Units>('metric')
   const [notifStatus, setNotifStatus] = useState<NotifStatus>('default')
   const [userId, setUserId] = useState<string | null>(null)
@@ -119,20 +137,6 @@ export function ProfileButton() {
       setEditName(data.user?.user_metadata?.full_name ?? data.user?.email?.split('@')[0] ?? '')
       setUserId(uid)
       if (!uid) return
-
-      Promise.all([
-        supabase.from('strava_tokens').select('id').eq('user_id', uid).limit(1),
-        supabase.from('hevy_workouts').select('id').eq('user_id', uid).limit(1),
-        supabase.from('google_tokens').select('user_id').eq('user_id', uid).limit(1),
-        supabase.from('fitbit_tokens').select('user_id').eq('user_id', uid).limit(1),
-      ]).then(([strava, hevy, google, fitbit]) => {
-        setServices({
-          strava:  (strava.data?.length  ?? 0) > 0,
-          hevy:    (hevy.data?.length    ?? 0) > 0,
-          google:  (google.data?.length  ?? 0) > 0,
-          fitbit:  (fitbit.data?.length  ?? 0) > 0,
-        })
-      })
 
       supabase.from('user_settings')
         .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
@@ -347,13 +351,13 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     const supabase = createClient()
     if (confirmDisconnect === 'google') {
       await supabase.from('google_tokens').delete().eq('user_id', userId)
-      setServices(s => s ? { ...s, google: false } : s)
+      mutateServices(s => s ? { ...s, google: false } : s, { revalidate: false })
     } else if (confirmDisconnect === 'strava') {
       await supabase.from('strava_tokens').delete().eq('user_id', userId)
-      setServices(s => s ? { ...s, strava: false } : s)
+      mutateServices(s => s ? { ...s, strava: false } : s, { revalidate: false })
     } else if (confirmDisconnect === 'fitbit') {
       await supabase.from('fitbit_tokens').delete().eq('user_id', userId)
-      setServices(s => s ? { ...s, fitbit: false } : s)
+      mutateServices(s => s ? { ...s, fitbit: false } : s, { revalidate: false })
     }
     setConfirmDisconnect(null)
   }
