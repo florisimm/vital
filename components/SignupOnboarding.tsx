@@ -1,14 +1,20 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ArrowRight, ArrowLeft, Check, ChevronUp, ChevronDown, Minus, Plus,
-  Activity, PartyPopper,
+  Activity, PartyPopper, Info,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase'
 
-// Multi-step sign-up onboarding. Collects all the profile questions in a nice
-// order — but does NOT create a real account yet (sign-up isn't open). The final
-// step shows a friendly "coming soon" confirmation.
+// Multi-step onboarding. Works in two modes:
+//  - 'signup'     : collects everything + creates the account (used from /login)
+//  - 'onboarding' : user is already logged in; persists straight to user_settings
+// Every data step carries a short "why" note so the user understands what each
+// answer powers — lowering the barrier to filling it in honestly.
+
+const PENDING_PROFILE_KEY = 'kern_pending_profile'
 
 type Units = 'metric' | 'imperial'
 type Sex = 'male' | 'female' | null
@@ -55,17 +61,29 @@ const SPORTS: { id: Sport; emoji: string; label: string }[] = [
 const DEVICES = [
   { id: 'strava',   label: 'Strava',          desc: 'Runs & rides' },
   { id: 'hevy',     label: 'Hevy',            desc: 'Strength workouts' },
-  { id: 'fitbit',   label: 'Fitbit',          desc: 'Sleep, HRV & steps' },
+  { id: 'fitbit',   label: 'Google Health',   desc: 'Sleep, HRV & steps' },
   { id: 'garmin',   label: 'Garmin',          desc: 'Any Garmin watch' },
   { id: 'apple',    label: 'Apple Watch',     desc: 'Apple Health' },
   { id: 'google',   label: 'Google Calendar', desc: 'Your schedule' },
   { id: 'other',    label: 'Any other wearable', desc: 'Whoop, Oura, Polar, Suunto…' },
 ]
 
-export function SignupOnboarding({ onClose }: { onClose: () => void }) {
+export function SignupOnboarding({
+  mode = 'signup',
+  onClose,
+  onComplete,
+}: {
+  mode?: 'signup' | 'onboarding'
+  onClose: () => void
+  onComplete?: () => void
+}) {
+  const router = useRouter()
   const [step, setStep] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [sessionCreated, setSessionCreated] = useState(false)
 
-  // Collected answers (not persisted — sign-up isn't open yet)
+  // Collected answers
   const [units, setUnits] = useState<Units>('metric')
   const [sex, setSex] = useState<Sex>(null)
   const [age, setAge] = useState('')
@@ -91,16 +109,17 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
   const hUnit = units === 'metric' ? 'cm' : 'in'
   const doesGym = freq.gym > 0
 
-  // Build the step list dynamically (strength step only if gym is selected)
+  // Step list — the account step only exists when creating a new account.
   const steps = [
     'welcome', 'about', 'goal', 'nutrition', 'sports', 'intensity',
     'priority', 'injuries', 'targets', ...(doesGym ? ['strength'] : []),
-    'devices', 'account', 'done',
+    'devices', ...(mode === 'signup' ? ['account'] : []), 'done',
   ] as const
   const current = steps[step]
   const total = steps.length
   const isFirst = step === 0
   const isLast = current === 'done'
+  const lastDataStep = 'devices'
 
   function next() { setStep(s => Math.min(s + 1, total - 1)) }
   function back() { setStep(s => Math.max(s - 1, 0)) }
@@ -115,11 +134,107 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
     })
   }
 
+  // Build the user_settings payload from the collected answers.
+  function buildPayload() {
+    const toKg = (v: number) => units === 'imperial' ? Math.round(v / 2.2046) : v
+    const kg = units === 'imperial' ? Number(weight) / 2.2046 : Number(weight)
+    const cm = units === 'imperial' ? Number(height) * 2.54 : Number(height)
+    const a = Number(age) || 0
+
+    // Macros via Mifflin–St Jeor → TDEE → goal adjustment
+    let macros: Record<string, number> = {}
+    if (kg > 0 && cm > 0 && sex && a > 0) {
+      const bmr = 10 * kg + 6.25 * cm - 5 * a + (sex === 'male' ? 5 : -161)
+      const tdee = bmr * (activity ?? 1.55)
+      const adj = nutrition === 'lose' ? -500 : nutrition === 'gain' ? 300 : 0
+      const kcal = Math.max(1200, Math.round((tdee + adj) / 10) * 10)
+      const protein = Math.round(kg * 1.8)
+      const fat = Math.round(kcal * 0.25 / 9)
+      const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4))
+      macros = { macro_kcal: kcal, macro_protein: protein, macro_carbs: carbs, macro_fat: fat }
+    }
+
+    return {
+      units,
+      gender: sex,
+      age: a || null,
+      height_cm: cm > 0 ? Math.round(cm) : null,
+      step_goal: stepGoal,
+      strength_squat_ref: toKg(squat),
+      strength_bench_ref: toKg(bench),
+      strength_deadlift_ref: toKg(deadlift),
+      training_goal: goal,
+      training_frequencies: freq,
+      training_intensity: intensity,
+      training_sport_priority: sportOrder,
+      training_injuries: injuries,
+      ...macros,
+      onboarded: true,
+    }
+  }
+
+  async function persistForLoggedInUser() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('user_settings')
+      .upsert({ user_id: user.id, ...buildPayload() }, { onConflict: 'user_id' })
+  }
+
+  async function createAccount(): Promise<boolean> {
+    if (!email || !password) { setErr('Enter an email and password'); return false }
+    if (password.length < 6) { setErr('Password must be at least 6 characters'); return false }
+    setBusy(true); setErr(null)
+    const supabase = createClient()
+    const { data, error } = await supabase.auth.signUp({
+      email, password, options: { data: { full_name: name } },
+    })
+    if (error) { setErr(error.message); setBusy(false); return false }
+
+    const payload = buildPayload()
+    if (data.session) {
+      // Auto-confirm on: persist immediately
+      await supabase.from('user_settings')
+        .upsert({ user_id: data.user!.id, ...payload }, { onConflict: 'user_id' })
+      setSessionCreated(true)
+    } else {
+      // Email confirmation required — stash the profile so it isn't lost.
+      // The app replays it on first login (see app/page.tsx).
+      try { localStorage.setItem(PENDING_PROFILE_KEY, JSON.stringify(payload)) } catch { /* ignore */ }
+    }
+    setBusy(false)
+    return true
+  }
+
+  async function advance() {
+    setErr(null)
+    if (mode === 'signup' && current === 'account') {
+      const ok = await createAccount()
+      if (ok) next()
+      return
+    }
+    if (mode === 'onboarding' && current === lastDataStep) {
+      setBusy(true)
+      try { await persistForLoggedInUser() } finally { setBusy(false) }
+      next()
+      return
+    }
+    next()
+  }
+
+  function finish() {
+    if (mode === 'onboarding') { onComplete?.(); return }
+    if (sessionCreated) { router.push('/'); router.refresh(); return }
+    onClose()
+  }
+
   // Per-step "can continue" gate (kept lenient — most steps are optional)
   const canNext = (() => {
+    if (busy) return false
     switch (current) {
       case 'about': return !!sex && !!age
       case 'goal': return !!goal
+      case 'account': return !!email && password.length >= 6
       default: return true
     }
   })()
@@ -150,9 +265,9 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <button onClick={onClose} className="text-[14px] text-white/40 active:text-white/70 shrink-0">
-          Close
-        </button>
+        {mode === 'signup'
+          ? <button onClick={onClose} className="text-[14px] text-white/40 active:text-white/70 shrink-0">Close</button>
+          : <div className="w-[36px] shrink-0" />}
       </div>
 
       {/* Step body */}
@@ -166,12 +281,12 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
               <Activity size={36} className="text-teal-400" strokeWidth={2} />
             </div>
             <H>Let&apos;s set up your coach</H>
-            <Sub>A few quick questions so Kern can tailor every recommendation to you. Takes about a minute.</Sub>
+            <Sub>A few quick questions so Kern can tailor every recommendation to you. Each answer powers a specific part of your coaching — we&apos;ll explain why as we go. Takes about a minute.</Sub>
           </Center>
         )}
 
         {current === 'about' && (
-          <StepWrap title="About you" subtitle="This powers your readiness, zones and macros.">
+          <StepWrap title="About you" subtitle="The basics behind every number.">
             {/* Units toggle */}
             <div className="flex p-1 rounded-[14px] mb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {(['metric', 'imperial'] as Units[]).map(u => (
@@ -195,16 +310,19 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
               <NumField label="Height" value={height} onChange={setHeight} suffix={hUnit} />
               <NumField label="Weight" value={weight} onChange={setWeight} suffix={wUnit} />
             </div>
+
+            <Why>Your sex, age, height and weight set your metabolic baseline (BMR), heart-rate zones and macro targets. Without them Kern can&apos;t calculate personalised numbers.</Why>
           </StepWrap>
         )}
 
         {current === 'goal' && (
-          <StepWrap title="What's your main goal?" subtitle="Kern prioritises advice around this.">
+          <StepWrap title="What's your main goal?" subtitle="The lens for every recommendation.">
             <div className="flex flex-col gap-2.5">
               {GOALS.map(g => (
                 <Choice key={g.id} selected={goal === g.id} onClick={() => setGoal(g.id)} emoji={g.emoji} title={g.title} desc={g.desc} />
               ))}
             </div>
+            <Why>Your main goal decides whether Kern steers toward a calorie deficit, muscle gain or endurance — all advice is prioritised around it.</Why>
           </StepWrap>
         )}
 
@@ -222,6 +340,7 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
                 <Choice key={a.v} selected={activity === a.v} onClick={() => setActivity(a.v)} title={a.label} desc={a.desc} />
               ))}
             </div>
+            <Why>Your focus and daily activity set your calorie and protein goals on the Food tab. A more active day means a higher calorie budget.</Why>
           </StepWrap>
         )}
 
@@ -241,6 +360,7 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
                 </div>
               ))}
             </div>
+            <Why>How often you train each sport builds your weekly schedule — and decides which sport tabs show up in the app. Set a sport to 0 and Kern hides it.</Why>
           </StepWrap>
         )}
 
@@ -251,6 +371,7 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
                 <Choice key={it.id} selected={intensity === it.id} onClick={() => setIntensity(it.id)} title={it.label} desc={it.desc} />
               ))}
             </div>
+            <Why>This tunes how aggressive your daily readiness advice is — from relaxed zone-2 work to all-out threshold sessions.</Why>
           </StepWrap>
         )}
 
@@ -272,6 +393,7 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
                 )
               })}
             </div>
+            <Why>When two sessions compete on the same day, Kern recommends the sport you ranked highest.</Why>
           </StepWrap>
         )}
 
@@ -283,6 +405,7 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
                   onClick={() => setInjuries(prev => ({ ...prev, [s.id]: !prev[s.id] }))} />
               ))}
             </div>
+            <Why>Flagged sports are kept out of your advice until you switch them back on — so you don&apos;t get pushed onto an injury.</Why>
           </StepWrap>
         )}
 
@@ -294,6 +417,7 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
               <span className="flex-1 text-[16px] font-semibold text-white">Daily steps</span>
               <Stepper value={stepGoal} onChange={(d) => setStepGoal(v => Math.max(1000, v + d * 1000))} fmt={(v) => v.toLocaleString()} />
             </div>
+            <Why>Your step goal feeds your daily activity score on the Today and Health tabs.</Why>
           </StepWrap>
         )}
 
@@ -313,17 +437,19 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
                 <Stepper value={deadlift} onChange={(d) => setDeadlift(v => Math.max(0, v + d * 5))} suffix={wUnit} />
               </div>
             </div>
+            <Why>Your reference maxes let Kern judge each strength session against your own level instead of a generic baseline.</Why>
           </StepWrap>
         )}
 
         {current === 'devices' && (
-          <StepWrap title="Connect your devices" subtitle="Any wearable works — pick what you use. You can link them after sign-up.">
+          <StepWrap title="Connect your devices" subtitle="Any wearable works — pick what you use.">
             <div className="flex flex-col gap-2.5">
               {DEVICES.map(d => (
                 <Toggle key={d.id} label={d.label} desc={d.desc} on={devices.includes(d.id)}
                   onClick={() => setDevices(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])} />
               ))}
             </div>
+            <Why>The more sources you link, the more accurate your readiness, recovery and training advice. You can link the actual accounts from your profile{mode === 'signup' ? ' after sign-up' : ''} — this just tells Kern what to expect.</Why>
           </StepWrap>
         )}
 
@@ -332,8 +458,9 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
             <div className="flex flex-col gap-2.5">
               <TextField placeholder="Name" value={name} onChange={setName} />
               <TextField placeholder="Email address" value={email} onChange={setEmail} type="email" />
-              <TextField placeholder="Password" value={password} onChange={setPassword} type="password" />
+              <TextField placeholder="Password (min. 6 characters)" value={password} onChange={setPassword} type="password" />
             </div>
+            {err && <p className="text-red-400 text-[14px] text-center mt-3">{err}</p>}
             <p className="text-[12px] text-white/30 mt-4 text-center">
               By continuing you agree to our terms. Your data is only used to power your coaching.
             </p>
@@ -350,8 +477,11 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
             </div>
             <H>You&apos;re all set!</H>
             <Sub>
-              Thanks for setting up your profile. Sign-up isn&apos;t open to everyone just yet —
-              we&apos;ll let you know the moment your spot is ready.
+              {mode === 'onboarding'
+                ? 'Your coach is tuned to you. Next, link your devices from your profile to start seeing live data.'
+                : sessionCreated
+                  ? 'Your profile is ready. Let’s get into the app.'
+                  : 'Check your email to confirm your address, then sign in — your profile is saved and waiting.'}
             </Sub>
           </Center>
         )}
@@ -360,15 +490,19 @@ export function SignupOnboarding({ onClose }: { onClose: () => void }) {
       {/* Footer CTA */}
       <div className="px-6 pb-6 pt-2 shrink-0" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
         {isLast ? (
-          <button onClick={onClose}
+          <button onClick={finish}
             className="w-full h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] active:scale-[0.98] transition-transform">
-            Back to home
+            {mode === 'onboarding' || sessionCreated ? 'Enter Kern' : 'Back to sign in'}
           </button>
         ) : (
-          <button onClick={next} disabled={!canNext}
+          <button onClick={advance} disabled={!canNext}
             className="w-full h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform">
-            {current === 'welcome' ? 'Get started' : current === 'account' ? 'Finish' : 'Continue'}
-            <ArrowRight size={18} strokeWidth={2.3} />
+            {busy ? 'Saving…'
+              : current === 'welcome' ? 'Get started'
+              : current === 'account' ? 'Create account'
+              : (mode === 'onboarding' && current === lastDataStep) ? 'Finish'
+              : 'Continue'}
+            {!busy && <ArrowRight size={18} strokeWidth={2.3} />}
           </button>
         )}
       </div>
@@ -389,6 +523,18 @@ function Sub({ children }: { children: React.ReactNode }) {
 }
 function Label({ children }: { children: React.ReactNode }) {
   return <p className="text-[13px] font-medium text-white/40 mb-2 px-1">{children}</p>
+}
+
+// "Why we ask" callout — shown under each data step so the user understands
+// what their answer powers.
+function Why({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2.5 mt-5 px-3.5 py-3 rounded-[14px]"
+      style={{ background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.18)' }}>
+      <Info size={15} className="text-teal-400/80 shrink-0 mt-0.5" strokeWidth={2.2} />
+      <p className="text-[12.5px] leading-relaxed text-white/55">{children}</p>
+    </div>
+  )
 }
 
 function StepWrap({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -479,3 +625,5 @@ function TextField({ placeholder, value, onChange, type = 'text' }: { placeholde
     />
   )
 }
+
+export { PENDING_PROFILE_KEY }

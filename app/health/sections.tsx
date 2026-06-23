@@ -406,7 +406,7 @@ export function SleepSection() {
   const noData = !totalMin
 
   const insightText = noData
-    ? (selectedRow === null ? 'No Fitbit data for this night — Fitbit was not worn.' : 'Sync Fitbit to see your sleep quality data.')
+    ? (selectedRow === null ? 'No data for this night — your tracker was not worn.' : 'Sync Google Health to see your sleep quality data.')
     : buildSleepInsight({ score, quality, totalMin, avg7Min, avg30Min, deepPct, remPct, efficiency, consistency, spo2, resp, durationDiff, sleepRows, nightTempC: weatherData?.night_temp_c })
 
   // Sleep → next-day HRV correlation pairs
@@ -456,7 +456,7 @@ export function SleepSection() {
       {usingAvg && (
         <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-[12px]" style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.25)' }}>
           <span className="text-orange-400 text-[13px]">⚑</span>
-          <span className="text-[12px] font-medium text-orange-300">Geen Fitbit-data — onderstaande waarden zijn je 7-daags gemiddelde</span>
+          <span className="text-[12px] font-medium text-orange-300">Geen Google Health-data — onderstaande waarden zijn je 7-daags gemiddelde</span>
         </div>
       )}
 
@@ -849,7 +849,7 @@ function buildHeartInsight(
   hrvBaseline: { baseline: number | null; deviationPct: number | null },
   ctx: HeartContext = {}
 ): string {
-  if (!restingHR && !hrv) return 'Sync Fitbit to see your heart rate and HRV data.'
+  if (!restingHR && !hrv) return 'Sync Google Health to see your heart rate and HRV data.'
   const parts: string[] = []
   if (hrvBaseline.deviationPct !== null) {
     if (hrvBaseline.deviationPct <= -15) {

@@ -114,7 +114,7 @@ function tryDirectAnswer(
   }
   if (/how.*(did i sleep|was my sleep|heb ik geslapen)|sleep (last night|score|gisteravond)|slaap (gisteravond|score)/.test(m)) {
     const last = sleepRows[0]
-    if (!last) return 'No sleep data yet — sync your Fitbit.'
+    if (!last) return 'No sleep data yet — sync your Google Health.'
     const dur  = last.slaap_minuten ? fmtMin(last.slaap_minuten) : '–'
     const score = last.slaap_score != null ? `, score ${last.slaap_score}/100` : ''
     const deep  = last.slaap_diep != null && last.slaap_minuten ? `, deep ${Math.round(last.slaap_diep / last.slaap_minuten * 100)}%` : ''
@@ -122,7 +122,7 @@ function tryDirectAnswer(
   }
   if (/what.*(is my|is de).*(readiness|recovery|herstel)|readiness score|recovery score|herstelwaarde/.test(m)) {
     const r = computePhysiologyReadiness(healthRows)
-    if (r.score == null) return 'No readiness data yet — connect Fitbit.'
+    if (r.score == null) return 'No readiness data yet — connect Google Health.'
     return `Readiness today: ${r.score}/100 (${r.label}).${r.explanation ? ` ${r.explanation}` : ''}`
   }
   if (/what.*(is my|is de).*\bhrv\b|\bhrv\b.*(today|vandaag|now|nu)/.test(m)) {

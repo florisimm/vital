@@ -15,6 +15,7 @@ import {
   epley1RM, COMPOUND_KEYWORDS, computeRampRate, computeLoadRatio, computeTrainingForm,
 } from '@/lib/training-load'
 import { computePersonalProfile, type PersonalProfile } from '@/lib/personal-learning'
+import { openDevices } from '@/lib/services'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
 import { InjuryToggle } from '@/components/InjuryToggle'
@@ -4507,6 +4508,22 @@ export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorko
 
   return (
     <div className="flex flex-col gap-6">
+
+      {hevy.length === 0 && (
+        <Card>
+          <div className="flex flex-col gap-2.5">
+            <span className="text-[28px]">🏋️</span>
+            <p className="text-[16px] font-semibold text-white">No strength data yet</p>
+            <p className="text-[13px] text-white/50 leading-relaxed">
+              Connect Hevy and your workouts sync automatically — Kern then tracks volume, recovery and your estimated 1RMs.
+            </p>
+            <button onClick={openDevices}
+              className="self-start mt-1 flex items-center gap-1 text-[14px] font-semibold text-teal-400 active:opacity-60">
+              Connect Hevy <ChevronRight size={15} />
+            </button>
+          </div>
+        </Card>
+      )}
 
       <SplitRecommendationCard hevy={hevy} calendarEvents={calendarEvents} />
 

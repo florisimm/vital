@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { ChevronLeft, Bike, PersonStanding, Dumbbell, RefreshCw, Map, Download, ArrowUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Card } from '@/components/ui'
+import { openDevices } from '@/lib/services'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import {
   detectSport, computeAdvice, TYPE_LABEL, TYPE_COLOR,
@@ -462,6 +463,9 @@ function SessionContent() {
           <div className="flex flex-col gap-3">
             <p className="text-[17px] font-semibold text-white">Strength training</p>
             <p className="text-white/50 text-[15px] leading-relaxed">Connect Hevy for automatic advice based on your training history.</p>
+            <button onClick={openDevices} className="self-start flex items-center gap-1 text-[14px] font-semibold text-teal-400 active:opacity-60">
+              Connect Hevy <ChevronLeft size={15} className="rotate-180" />
+            </button>
           </div>
         </Card>
       ) : sport === 'other' ? (
@@ -482,6 +486,9 @@ function SessionContent() {
                 <p className="text-[12px] text-white/50 mt-0.5">
                   Connect Strava and log at least 3 activities for personalized training advice.
                 </p>
+                <button onClick={openDevices} className="mt-1.5 flex items-center gap-1 text-[13px] font-semibold text-teal-400 active:opacity-60">
+                  Connect Strava <ChevronLeft size={14} className="rotate-180" />
+                </button>
               </div>
             </div>
           )}

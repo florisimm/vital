@@ -6,29 +6,10 @@ import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { computeAdvice } from '@/lib/training-algorithm'
+import { fetchServices } from '@/lib/services'
 
-type Services = { strava: boolean; hevy: boolean; google: boolean; fitbit: boolean }
 type Units = 'metric' | 'imperial'
 type NotifStatus = 'default' | 'granted' | 'denied' | 'unsupported'
-
-async function fetchServices(): Promise<Services> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { strava: false, hevy: false, google: false, fitbit: false }
-  const [strava, hevy, google, fitbit] = await Promise.all([
-    supabase.from('strava_tokens').select('id').eq('user_id', user.id).limit(1),
-    supabase.from('hevy_workouts').select('id').eq('user_id', user.id).limit(1),
-    supabase.from('google_tokens').select('user_id').eq('user_id', user.id).limit(1),
-    supabase.from('fitbit_tokens').select('user_id').eq('user_id', user.id).limit(1),
-  ])
-  return {
-    strava:  (strava.data?.length  ?? 0) > 0,
-    hevy:    (hevy.data?.length    ?? 0) > 0,
-    google:  (google.data?.length  ?? 0) > 0,
-    fitbit:  (fitbit.data?.length  ?? 0) > 0,
-  }
-}
-
 
 export function ProfileButton() {
   const [open, setOpen] = useState(false)
@@ -108,6 +89,9 @@ export function ProfileButton() {
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
   const [hevySyncing, setHevySyncing] = useState(false)
+  const [showHevyInput, setShowHevyInput] = useState(false)
+  const [hevyKeyInput, setHevyKeyInput] = useState('')
+  const [hevyKeySaving, setHevyKeySaving] = useState(false)
   const [shortcutToken, setShortcutToken] = useState<string | null>(null)
   const [tokenCopied, setTokenCopied] = useState(false)
 
@@ -119,6 +103,14 @@ export function ProfileButton() {
     if (nav) nav.style.display = open ? 'none' : ''
     return () => { if (nav) nav.style.display = '' }
   }, [open])
+
+  // Allow any empty-state or checklist anywhere in the app to deep-link straight
+  // into the Devices & Apps section: window.dispatchEvent(new Event('kern:open-devices'))
+  useEffect(() => {
+    function openDevices() { setOpen(true); setEditingDevices(true) }
+    window.addEventListener('kern:open-devices', openDevices)
+    return () => window.removeEventListener('kern:open-devices', openDevices)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -311,6 +303,41 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     window.location.href = `/api/fitbit/connect?user_id=${userId}`
   }
 
+  async function connectStrava() {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/strava-auth`)
+      const { url } = await res.json()
+      if (url) window.location.href = url
+    } catch { /* ignore */ }
+  }
+
+  async function saveHevyKey() {
+    const key = hevyKeyInput.trim()
+    if (!key || !userId) return
+    setHevyKeySaving(true)
+    try {
+      const supabase = createClient()
+      await supabase.from('api_keys').upsert(
+        { service: 'hevy', api_key: key, user_id: userId, updated_at: new Date().toISOString() },
+        { onConflict: 'service' },
+      )
+      // Kick off a first sync so data appears right away
+      const { data: { session } } = await supabase.auth.getSession()
+      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: '{}',
+      }).catch(() => {})
+      setHevyKeyInput('')
+      setShowHevyInput(false)
+      mutateServices(s => s ? { ...s, hevy: true } : s, { revalidate: true })
+      mutate('health-gezondheid')
+      mutate('today')
+    } finally {
+      setHevyKeySaving(false)
+    }
+  }
+
   async function syncFitbit() {
     setFitbitSyncing(true)
     setFitbitSyncMessage(null)
@@ -323,10 +350,10 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
         setFitbitSyncMessage({
           type: 'err',
           text: data?.error === 'not connected'
-            ? 'Fitbit is not connected.'
+            ? 'Google Health is not connected.'
             : apiError
               ? `Sync error: ${apiError}`
-              : 'Fitbit sync failed.',
+              : 'Google Health sync failed.',
         })
         return
       }
@@ -339,7 +366,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
         type: errorCount ? 'err' : 'ok',
         text: errorCount
           ? `Sync completed with ${errorCount} error${errorCount === 1 ? '' : 's'}.`
-          : `Fitbit updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+          : `Google Health updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
       })
     } finally {
       setFitbitSyncing(false)
@@ -787,7 +814,7 @@ async function saveTraining() {
     : notifStatus === 'unsupported' ? 'N/A'
     : 'Ask'
 
-  const disconnectLabel = confirmDisconnect === 'strava' ? 'Strava' : confirmDisconnect === 'fitbit' ? 'Fitbit' : 'Google Calendar'
+  const disconnectLabel = confirmDisconnect === 'strava' ? 'Strava' : confirmDisconnect === 'fitbit' ? 'Google Health' : 'Google Calendar'
 
   return (
     <>
@@ -1023,7 +1050,9 @@ async function saveTraining() {
                       </div>
                       {services?.strava === true
                         ? <button onClick={() => setConfirmDisconnect('strava')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
-                        : <span className="text-[14px] text-white/30">{services?.strava === undefined ? '…' : 'Not connected'}</span>}
+                        : services?.strava === false
+                          ? <button onClick={connectStrava} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
+                          : <span className="text-[14px] text-white/30">…</span>}
                     </div>
                   </ProfileRow>
                   <ProfileRow separator>
@@ -1031,7 +1060,7 @@ async function saveTraining() {
                       <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
                         style={{ background: 'rgba(0,178,202,0.15)' }}>⌚</div>
                       <div className="flex-1">
-                        <p className="text-[15px] font-medium text-white">Fitbit</p>
+                        <p className="text-[15px] font-medium text-white">Google Health</p>
                         <p className="text-[12px] text-white/40">Sleep, HRV & Activity</p>
                       </div>
                       {services?.fitbit === true ? (
@@ -1082,12 +1111,37 @@ async function saveTraining() {
                             {hevySyncing ? 'Syncing…' : 'Sync'}
                           </button>
                         )}
-                        <span className={`text-[14px] ${services?.hevy ? 'text-green-400' : 'text-white/30'}`}>
-                          {services?.hevy === undefined ? '…' : services.hevy ? 'Connected' : 'Not connected'}
-                        </span>
+                        {services?.hevy
+                          ? <span className="text-[14px] font-semibold text-green-400">Connected</span>
+                          : services?.hevy === false
+                            ? <button onClick={() => setShowHevyInput(v => !v)} className="text-[14px] font-semibold text-teal-400 active:opacity-60">{showHevyInput ? 'Cancel' : 'Connect'}</button>
+                            : <span className="text-[14px] text-white/30">…</span>}
                       </div>
                     </div>
                   </ProfileRow>
+                  {showHevyInput && !services?.hevy && (
+                    <div className="px-4 pb-3 flex flex-col gap-2">
+                      <input
+                        type="text"
+                        inputMode="text"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        placeholder="Paste your Hevy API key"
+                        value={hevyKeyInput}
+                        onChange={e => setHevyKeyInput(e.target.value)}
+                        className="h-[44px] px-3.5 rounded-[12px] text-white placeholder:text-white/30 text-[14px] outline-none"
+                        style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <a href="https://hevy.com/settings?developer" target="_blank" rel="noopener noreferrer"
+                          className="text-[12px] text-teal-400/80 active:opacity-60">Where do I find this?</a>
+                        <button onClick={saveHevyKey} disabled={hevyKeySaving || !hevyKeyInput.trim()}
+                          className="px-4 h-[36px] rounded-full text-black text-[14px] font-semibold bg-white disabled:opacity-30">
+                          {hevyKeySaving ? 'Saving…' : 'Save & sync'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <ProfileRow>
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
@@ -1942,7 +1996,7 @@ async function saveTraining() {
                       {(() => {
                         const names = [
                           services?.strava  && 'Strava',
-                          services?.fitbit  && 'Fitbit',
+                          services?.fitbit  && 'Google Health',
                           services?.hevy    && 'Hevy',
                           services?.google  && 'Calendar',
                         ].filter(Boolean) as string[]

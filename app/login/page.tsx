@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, Activity, ArrowRight } from 'lucide-react'
+import { Mail, Lock, Activity, ArrowRight, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { SignupOnboarding } from '@/components/SignupOnboarding'
 
 type Tab = 'signin' | 'signup'
 
@@ -15,12 +16,10 @@ export default function LoginPage() {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
 
-  // Sign-up only
-  const [confirm, setConfirm]   = useState('')
-
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [notice, setNotice]     = useState<string | null>(null)
+  const [showWizard, setShowWizard] = useState(false)
 
   function switchTab(t: Tab) {
     setTab(t)
@@ -35,17 +34,6 @@ export default function LoginPage() {
     if (error) { setError(error.message); setLoading(false); return }
     router.push('/')
     router.refresh()
-  }
-
-  async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault()
-    if (password !== confirm) { setError("Passwords don't match"); return }
-    if (password.length < 6)  { setError('Password must be at least 6 characters'); return }
-    setLoading(true); setError(null); setNotice(null)
-    const { error } = await createClient().auth.signUp({ email, password })
-    setLoading(false)
-    if (error) { setError(error.message); return }
-    setNotice('Account created — check your email to confirm your address.')
   }
 
   async function handleForgotPassword() {
@@ -173,66 +161,39 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* Sign up form */}
+        {/* Sign up — launches the guided wizard so we collect the profile
+            that powers coaching, with a short "why" on every step. */}
         {tab === 'signup' && (
-          <form onSubmit={handleSignUp} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2.5">
-              <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
-                <input
-                  type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
-                />
-              </Field>
-              <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
-                />
-              </Field>
-              <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
-                <input
-                  type="password"
-                  placeholder="Confirm password"
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
-                />
-              </Field>
+          <div className="flex flex-col gap-3">
+            <div className="rounded-[18px] px-4 py-4 flex gap-3"
+              style={{ background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.18)' }}>
+              <Sparkles size={18} className="text-teal-400 shrink-0 mt-0.5" />
+              <p className="text-[13.5px] leading-relaxed text-white/55">
+                We&apos;ll ask a few quick questions so your coach is tailored to you from day one —
+                and explain why each one matters. Takes about a minute.
+              </p>
             </div>
 
-            {error  && <p className="text-red-400  text-[14px] text-center px-2">{error}</p>}
-            {notice && <p className="text-teal-400 text-[14px] text-center px-2">{notice}</p>}
-
             <button
-              type="submit"
-              disabled={loading}
-              className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
+              type="button"
+              onClick={() => setShowWizard(true)}
+              className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              {loading ? 'Creating account…' : <>Create account <ArrowRight size={18} strokeWidth={2.3} /></>}
+              Get started <ArrowRight size={18} strokeWidth={2.3} />
             </button>
 
             <p className="text-[12px] text-white/25 text-center mt-1 px-4">
               By signing up you agree to our terms of service.
             </p>
-          </form>
+          </div>
         )}
       </div>
 
       <p className="text-[13px] text-white/20 text-center">
         Kern — AI Fitness & Health Coaching
       </p>
+
+      {showWizard && <SignupOnboarding mode="signup" onClose={() => setShowWizard(false)} />}
     </div>
   )
 }

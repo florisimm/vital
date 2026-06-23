@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { LandingPage } from '@/components/LandingPage'
+import { SignupOnboarding, PENDING_PROFILE_KEY } from '@/components/SignupOnboarding'
+import { SetupChecklist } from '@/components/SetupChecklist'
 import { PremiumScreen } from '@/components/PremiumScreen'
 import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 import { formatTime, localDateStr } from '@/lib/timeFormat'
@@ -512,6 +514,8 @@ function UpcomingCard({ events, onSync, hevy, acts }: { events: any[]; onSync: (
 // nav Today tab is unchanged.
 export default function HomePage() {
   const [authState, setAuthState] = useState<'loading' | 'in' | 'out'>('loading')
+  // null = not yet checked, true/false = onboarding completion known
+  const [onboarded, setOnboarded] = useState<boolean | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -525,8 +529,44 @@ export default function HomePage() {
     return () => { active = false; subscription.unsubscribe() }
   }, [])
 
+  // Once logged in, check whether onboarding is done. If the user filled in the
+  // signup wizard but had to confirm their email first, replay that stashed
+  // profile here so nothing entered is lost.
+  useEffect(() => {
+    if (authState !== 'in') return
+    let active = true
+    ;(async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('user_settings').select('onboarded').eq('user_id', user.id).maybeSingle()
+      if (!active) return
+
+      if (data?.onboarded) { setOnboarded(true); return }
+
+      // Replay a profile collected during signup (email-confirmation flow)
+      let pending: Record<string, unknown> | null = null
+      try {
+        const raw = localStorage.getItem(PENDING_PROFILE_KEY)
+        if (raw) pending = JSON.parse(raw)
+      } catch { /* ignore */ }
+
+      if (pending) {
+        await supabase.from('user_settings').upsert({ user_id: user.id, ...pending }, { onConflict: 'user_id' })
+        try { localStorage.removeItem(PENDING_PROFILE_KEY) } catch { /* ignore */ }
+        if (active) setOnboarded(true)
+        return
+      }
+
+      if (active) setOnboarded(false)
+    })()
+    return () => { active = false }
+  }, [authState])
+
   if (authState === 'loading') return null
   if (authState === 'out') return <LandingPage />
+  if (onboarded === null) return null
+  if (!onboarded) return <SignupOnboarding mode="onboarding" onClose={() => setOnboarded(true)} onComplete={() => setOnboarded(true)} />
   return <TodayDashboard />
 }
 
@@ -648,6 +688,7 @@ function TodayDashboard() {
 
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
+      <div className="mb-6"><SetupChecklist /></div>
       <div className="flex flex-col gap-6" style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
         <TodaysPlanCard
           simplified

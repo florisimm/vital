@@ -9,6 +9,7 @@ import { Card } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import { computePhysiologyReadiness, computeIllnessFlag, computeHRVBaseline } from '@/lib/readiness'
 import { computePersonalProfile } from '@/lib/personal-learning'
+import { openDevices } from '@/lib/services'
 import {
   computeSleepScore,
   SleepSection,
@@ -211,7 +212,7 @@ export default function HealthPage() {
     }
     if (readinessPct === null) return {
       emoji: '📊',
-      title: 'Connect Fitbit',
+      title: 'Connect Google Health',
       sub: 'Sync health data to see personalised daily focus advice',
     }
     if (_sleepMin !== null && _sleepMin < 420) {
@@ -245,7 +246,7 @@ export default function HealthPage() {
   const recommendationData = (() => {
     const noData = sleepScore === null && hrv === null && restingHR === null
     if (noData)
-      return { emoji: '📱', title: 'Connect Fitbit', bullets: ['Personalised recommendations available after connecting'], cta: null }
+      return { emoji: '📱', title: 'Connect Google Health', bullets: ['Personalised recommendations available after connecting'], cta: null }
 
     const pct      = readinessPct
     const sleepMin = latestWithSleep?.slaap_minuten ?? null
@@ -345,10 +346,10 @@ export default function HealthPage() {
       if (!res.ok || !data?.ok) {
         const apiError = Array.isArray(data?.errors) && data.errors.length ? String(data.errors[0]) : null
         const text = data?.error === 'not connected'
-          ? 'Fitbit is not yet connected.'
+          ? 'Google Health is not yet connected.'
           : apiError
-            ? `Fitbit sync error: ${apiError}`
-          : 'Fitbit sync failed.'
+            ? `Google Health sync error: ${apiError}`
+          : 'Google Health sync failed.'
         setSyncMessage({ type: 'err', text })
         return
       }
@@ -360,7 +361,7 @@ export default function HealthPage() {
         type: errorCount ? 'err' : 'ok',
         text: errorCount
           ? `Sync completed with ${errorCount} error${errorCount === 1 ? '' : 's'}: ${String(data.errors[0])}`
-          : `Fitbit updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
+          : `Google Health updated: ${data.healthSynced ?? 0} health rows, ${data.stepsSynced ?? 0} step days.`,
       })
     } finally {
       setSyncing(false)
@@ -408,6 +409,12 @@ export default function HealthPage() {
             <p className="text-[19px] font-bold text-white leading-tight">{todayFocus.title}</p>
           </div>
           {todayFocus.sub && <p className="text-[13px] text-white/55 leading-relaxed">{todayFocus.sub}</p>}
+          {readinessPct === null && (
+            <button onClick={openDevices}
+              className="mt-3 flex items-center gap-1 text-[14px] font-semibold text-teal-400 active:opacity-60">
+              Connect now <ChevronRight size={15} />
+            </button>
+          )}
         </div>
 
         {/* Recovery Score hero */}
@@ -435,7 +442,9 @@ export default function HealthPage() {
                 </span>
               </div>
             </>) : (
-              <p className="text-[15px] text-white/40">Connect Fitbit to see readiness data.</p>
+              <button onClick={openDevices} className="flex items-center gap-1 text-[15px] font-medium text-teal-400 active:opacity-60">
+                Connect Google Health to see readiness data <ChevronRight size={15} />
+              </button>
             )}
           </div>
         </Card>
