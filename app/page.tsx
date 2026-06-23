@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { LandingPage } from '@/components/LandingPage'
@@ -563,21 +563,25 @@ function TodayDashboard() {
     syncCalendar()
   }, [])
 
+  const hevySyncedRef = useRef(false)
   useEffect(() => {
+    // Sync Hevy on every visit until today's weight is in — then stop for the day.
+    if (hevySyncedRef.current) return
+    if (!gezondheid) return // wait until health data is loaded
+    const todayRow = gezondheid.find(r => r.datum === localDateStr())
+    if (todayRow?.gewicht != null) return // weight already fetched today → skip
+    hevySyncedRef.current = true
     async function syncHevy() {
       try {
-        const THROTTLE_KEY = 'hevy_sync_last'
-        const last = parseInt(localStorage.getItem(THROTTLE_KEY) ?? '0', 10)
-        if (Date.now() - last < 15 * 60 * 1000) return // max once per 15 min
-        localStorage.setItem(THROTTLE_KEY, String(Date.now()))
         await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
         })
         mutate('training')
+        mutate('health-gezondheid')
       } catch { /* ignore */ }
     }
     syncHevy()
-  }, [])
+  }, [gezondheid])
 
   const todayStr = localDateStr()
   const todayHealthRow = rows.find(r => r.datum === todayStr)
