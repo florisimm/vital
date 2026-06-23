@@ -110,6 +110,8 @@ export function ProfileButton() {
   const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
+  const [shortcutToken, setShortcutToken] = useState<string | null>(null)
+  const [tokenCopied, setTokenCopied] = useState(false)
 
   const { data: healthRows = [] } = useSWR<any[]>('health-gezondheid')
   const router = useRouter()
@@ -219,6 +221,15 @@ export function ProfileButton() {
     setEditPasswordConfirm('')
     setEditMsg(null)
     setEditingAccount(true)
+  }
+
+  async function loadShortcutToken() {
+    if (!userId) return
+    const supabase = createClient()
+    const { data } = await supabase.from('shortcut_tokens').select('token').eq('user_id', userId).maybeSingle()
+    if (data?.token) { setShortcutToken(data.token); return }
+    const { data: created } = await supabase.from('shortcut_tokens').insert({ user_id: userId }).select('token').single()
+    if (created?.token) setShortcutToken(created.token)
   }
 
   function maskEmail(addr: string): string {
@@ -862,13 +873,32 @@ export function ProfileButton() {
                       </div>
                     </button>
                   </ProfileRow>
-                  <ProfileRow>
+                  <ProfileRow separator>
                     <button className="flex items-center justify-between w-full gap-3"
                       onClick={() => setEmailActionSheet(true)}>
                       <span className="text-[15px] text-white/40 shrink-0">Email</span>
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[17px] text-white truncate">{maskEmail(email ?? '—')}</span>
                         <ChevronRight size={16} className="text-white/25 shrink-0" />
+                      </div>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow>
+                    <button className="flex items-center justify-between w-full gap-3"
+                      onClick={() => {
+                        if (!shortcutToken) { loadShortcutToken(); return }
+                        navigator.clipboard.writeText(shortcutToken)
+                        setTokenCopied(true)
+                        setTimeout(() => setTokenCopied(false), 2000)
+                      }}>
+                      <span className="text-[15px] text-white/40 shrink-0">Shortcut Key</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[13px] text-white/60 font-mono truncate">
+                          {shortcutToken ? `${shortcutToken.slice(0, 8)}…` : '—'}
+                        </span>
+                        <span className="text-[13px] text-teal-400 shrink-0">
+                          {tokenCopied ? 'Gekopieerd!' : 'Kopieer'}
+                        </span>
                       </div>
                     </button>
                   </ProfileRow>
@@ -2005,7 +2035,7 @@ export function ProfileButton() {
             <ProfileSection>
               <ProfileRow separator>
                 <button className="flex items-center gap-4 py-1 w-full text-left active:opacity-70"
-                  onClick={() => setEditingAccountInfo(true)}>
+                  onClick={() => { setEditingAccountInfo(true); loadShortcutToken() }}>
                   <div className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0"
                     style={{ background: 'rgba(255,255,255,0.10)' }}>
                     <User size={22} className="text-white/50" />
