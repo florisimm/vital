@@ -154,7 +154,7 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
         onClick={e => e.stopPropagation()}
         onTouchMove={e => e.stopPropagation()}>
 
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+        <div className="flex items-center justify-between px-5 pb-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)' }}>
           {view !== 'options'
             ? <button onClick={handleBack} className="text-[17px] font-medium text-white/70 w-16">‹ Back</button>
             : <div className="w-16" />}

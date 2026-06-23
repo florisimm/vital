@@ -61,7 +61,7 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
     <div className="flex flex-col flex-1 overflow-hidden">
       {showPicker && (
         <div className="absolute inset-0 flex flex-col z-10" style={{ background: 'rgb(10,12,14)' }}>
-          <div className="flex items-center justify-between px-5 pt-4 pb-3 shrink-0">
+          <div className="flex items-center justify-between px-5 pb-3 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}>
             <button onClick={() => { setShowPicker(false); setPickerProduct(null); setPickerSearch('') }}
               className="text-[16px] font-medium text-white/60">‹ Back</button>
             <span className="text-[16px] font-bold text-white">

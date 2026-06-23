@@ -57,7 +57,7 @@ export function EditFoodSheet({ entry, userId, onSaved, onClose }: {
         style={{ background: 'rgb(10,12,14)' }}
         onClick={e => e.stopPropagation()}>
 
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+        <div className="flex items-center justify-between px-5 pb-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)' }}>
           <span className="text-[17px] font-bold text-white flex-1 mr-4 truncate">{cap(entry.food_name)}</span>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full shrink-0"
             style={{ background: 'rgba(255,255,255,0.08)' }}>
