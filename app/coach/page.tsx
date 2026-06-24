@@ -169,7 +169,9 @@ function buildSections(
   weather?: { temp_c: number | null; night_temp_c: number | null; city: string | null } | null,
   memory?: string[],
 ): Sections {
-  const today     = new Date().toISOString().slice(0, 10)
+  const now        = new Date()
+  const today      = now.toISOString().slice(0, 10)
+  const timeStr    = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   const readiness = computePhysiologyReadiness(healthRows)
   const illness   = computeIllnessFlag(healthRows)
   const baselines = computeSimpleBaselines(healthRows)
@@ -284,7 +286,7 @@ function buildSections(
 
   return {
     profile: [
-      `### Profile — ${today}`,
+      `### Profile — ${today}, ${timeStr}`,
       goal ? `Primary goal: ${goal}` : null,
       GOAL_PRIORITY[trainingGoalKey] ? `Priority: ${GOAL_PRIORITY[trainingGoalKey]}` : null,
       weatherLine ? `Weather: ${weatherLine}` : null,
