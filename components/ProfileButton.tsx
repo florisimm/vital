@@ -1255,6 +1255,19 @@ async function saveTraining() {
                                 done={progress?.qualityMinutes ?? 0} target={targets.qualityMinutes} />
                             </div>
                           </div>
+                          <div className="rounded-[18px] px-4 py-3.5 flex flex-col gap-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[12px] text-white/35">Weekly target</span>
+                              <span className="text-[13px] font-semibold text-white/60">{fmt(freq * 60)}</span>
+                            </div>
+                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="pt-2.5 flex items-center justify-between">
+                              <span className="text-[12px] text-white/35">This week done</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-white/25">🟢 {fmt(progress?.z2Minutes ?? 0)} · ⚡ {fmt(progress?.qualityMinutes ?? 0)}</span>
+                                <span className="text-[13px] font-semibold text-white/60">{fmt((progress?.z2Minutes ?? 0) + (progress?.qualityMinutes ?? 0))}</span>
+                              </div>
+                            </div>
+                          </div>
                         </>
                       ) : (
                         <div className="rounded-[18px] px-4 py-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
