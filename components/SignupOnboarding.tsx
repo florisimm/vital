@@ -58,14 +58,17 @@ const SPORTS: { id: Sport; emoji: string; label: string }[] = [
   { id: 'gym',      emoji: '🏋️', label: 'Gym / Strength' },
 ]
 
-const DEVICES = [
-  { id: 'strava',   label: 'Strava',          desc: 'Runs & rides' },
-  { id: 'hevy',     label: 'Hevy',            desc: 'Strength workouts' },
-  { id: 'fitbit',   label: 'Google Health',   desc: 'Sleep, HRV & steps' },
-  { id: 'garmin',   label: 'Garmin',          desc: 'Any Garmin watch' },
-  { id: 'apple',    label: 'Apple Watch',     desc: 'Apple Health' },
-  { id: 'google',   label: 'Google Calendar', desc: 'Your schedule' },
-  { id: 'other',    label: 'Any other wearable', desc: 'Whoop, Oura, Polar, Suunto…' },
+const APPS = [
+  { id: 'strava', label: 'Strava', desc: 'Runs & rides' },
+  { id: 'hevy',   label: 'Hevy',   desc: 'Strength workouts' },
+]
+
+const WEARABLES = [
+  { id: 'fitbit', label: 'Google Health',      desc: 'Sleep, HRV & steps' },
+  { id: 'garmin', label: 'Garmin',             desc: 'Any Garmin watch' },
+  { id: 'apple',  label: 'Apple Watch',        desc: 'Apple Health' },
+  { id: 'google', label: 'Google Calendar',    desc: 'Your schedule' },
+  { id: 'other',  label: 'Any other wearable', desc: 'Whoop, Oura, Polar, Suunto…' },
 ]
 
 export function SignupOnboarding({
@@ -113,13 +116,13 @@ export function SignupOnboarding({
   const steps = [
     'welcome', 'about', 'goal', 'nutrition', 'sports', 'intensity',
     'priority',
-    'devices', ...(mode === 'signup' ? ['account'] : []), 'done',
+    'apps', 'wearables', ...(mode === 'signup' ? ['account'] : []), 'done',
   ] as const
   const current = steps[step]
   const total = steps.length
   const isFirst = step === 0
   const isLast = current === 'done'
-  const lastDataStep = 'devices'
+  const lastDataStep = 'wearables'
 
   function next() { setStep(s => Math.min(s + 1, total - 1)) }
   function back() { setStep(s => Math.max(s - 1, 0)) }
@@ -392,15 +395,27 @@ export function SignupOnboarding({
         )}
 
 
-{current === 'devices' && (
-          <StepWrap title="Connect your devices" subtitle="Any wearable works — pick what you use.">
+        {current === 'apps' && (
+          <StepWrap title="Which apps do you use?" subtitle="Kern imports your workouts from these.">
             <div className="flex flex-col gap-2.5">
-              {DEVICES.map(d => (
+              {APPS.map(d => (
                 <Toggle key={d.id} label={d.label} desc={d.desc} on={devices.includes(d.id)}
                   onClick={() => setDevices(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])} />
               ))}
             </div>
-            <Why>The more sources you link, the more accurate your readiness, recovery and training advice. You can link the actual accounts from your profile{mode === 'signup' ? ' after sign-up' : ''} — this just tells Kern what to expect.</Why>
+            <Why>Strava and Hevy sync your runs, rides and strength sessions automatically. You&apos;ll connect the actual accounts from your profile{mode === 'signup' ? ' after sign-up' : ''}.</Why>
+          </StepWrap>
+        )}
+
+        {current === 'wearables' && (
+          <StepWrap title="Any wearables?" subtitle="For sleep, HRV, steps and health data.">
+            <div className="flex flex-col gap-2.5">
+              {WEARABLES.map(d => (
+                <Toggle key={d.id} label={d.label} desc={d.desc} on={devices.includes(d.id)}
+                  onClick={() => setDevices(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])} />
+              ))}
+            </div>
+            <Why>The more sources you link, the more accurate your readiness and recovery advice. Connect from your profile{mode === 'signup' ? ' after sign-up' : ''}.</Why>
           </StepWrap>
         )}
 
