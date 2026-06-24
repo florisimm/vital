@@ -95,23 +95,11 @@ export function computeZones(activities: any[], sport: string, maxHR?: number): 
   }
 }
 
-// Derive avg session duration from real history; falls back to sport-specific defaults.
-function historicalAvgSessionMin(activities: any[], sport: string): number {
-  const DEFAULTS: Record<string, number> = { running: 50, cycling: 75, swimming: 45, gym: 60 }
-  const sportActs = activities
-    .filter(a => matchesSport(a.sport_type ?? '', sport) && (a.moving_time ?? 0) > 600)
-  if (sportActs.length === 0) return DEFAULTS[sport] ?? 50
-  const total = sportActs.reduce((s: number, a: any) => s + (a.moving_time as number), 0)
-  return Math.round(total / sportActs.length / 60)
-}
-
-export function suggestZoneTargets(sport: string, freq: number, activities?: any[]): ZoneTargets {
-  if (freq === 0) return { z2Minutes: 0, qualityMinutes: 0 }
-
-  const avgMin    = historicalAvgSessionMin(activities ?? [], sport)
-  const totalMin  = freq * avgMin
-
-  // Polarized model: 80% aerobic base, 20% quality — rounded to nearest 5 min
+// hoursPerWeek is the user's weekly hour target for this sport (e.g. 5 = 5h/week).
+// Splits 80/20 into Zone 2 / quality, rounded to nearest 5 min.
+export function suggestZoneTargets(sport: string, hoursPerWeek: number): ZoneTargets {
+  if (hoursPerWeek === 0) return { z2Minutes: 0, qualityMinutes: 0 }
+  const totalMin       = hoursPerWeek * 60
   const z2Minutes      = Math.max(30, Math.round((totalMin * 0.80) / 5) * 5)
   const qualityMinutes = Math.max(15, Math.round((totalMin * 0.20) / 5) * 5)
   return { z2Minutes, qualityMinutes }

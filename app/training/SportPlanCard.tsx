@@ -55,7 +55,7 @@ export function SportPlanCard({
   const progressionAppliedRef = useRef<string | null>(null)
 
   const zones = useMemo(() => computeZones(activities, sport), [activities, sport])
-  const suggested = useMemo(() => suggestZoneTargets(sport, freq, activities), [sport, freq, activities])
+  const suggested = useMemo(() => suggestZoneTargets(sport, freq), [sport, freq])
   const targets = savedTargets ?? suggested
   const progress = useMemo(() => computeWeekProgress(activities, sport, zones, undefined, 0), [activities, sport, zones])
   const lastWeekProgress = useMemo(() => computeWeekProgress(activities, sport, zones, undefined, -1), [activities, sport, zones])
@@ -115,7 +115,7 @@ export function SportPlanCard({
     <div className="mt-6 mb-2">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">Weekly zone targets</p>
-        <span className="text-[12px] font-medium text-white/30">{freq}× per week</span>
+        <span className="text-[12px] font-medium text-white/30">{formatMinutes(freq * 60)}/week</span>
       </div>
 
       {adviceText && (
