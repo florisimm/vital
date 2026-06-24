@@ -141,7 +141,7 @@ export function SportPlanCard({
                   {formatMinutes(progress.z2Minutes)} / {formatMinutes(targets.z2Minutes)}
                 </span>
               </div>
-              <p className="text-[10px] text-white/20 mt-1 leading-snug">Geen hartslagmeter? Noem je activiteit 'duurloop', 'zone 2' of 'rustig'</p>
+              <p className="text-[10px] text-white/20 mt-1 leading-snug">No HR monitor? Name your activity 'easy run', 'zone 2' or 'endurance'</p>
             </div>
           </button>
           {editingZone === 'z2' && (
@@ -186,7 +186,7 @@ export function SportPlanCard({
                   {formatMinutes(progress.qualityMinutes)} / {formatMinutes(targets.qualityMinutes)}
                 </span>
               </div>
-              <p className="text-[10px] text-white/20 mt-1 leading-snug">Geen hartslagmeter? Noem je activiteit 'interval' of 'tempo'</p>
+              <p className="text-[10px] text-white/20 mt-1 leading-snug">No HR monitor? Name your activity 'interval' or 'tempo'</p>
             </div>
           </button>
           {editingZone === 'quality' && (

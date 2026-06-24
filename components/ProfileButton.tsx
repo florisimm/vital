@@ -1245,24 +1245,16 @@ async function saveTraining() {
                         <>
                           <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
                             <ZoneRow zone="z2" emoji="🟢" label="Zone 2"
-                                hint="Geen hartslagmeter? Noem je activiteit 'duurloop', 'zone 2' of 'rustig'"
+                                hint="No HR monitor? Name your activity 'easy run', 'zone 2' or 'endurance'"
                                 done={progress?.z2Minutes ?? 0} target={targets.z2Minutes} />
                             <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                               <ZoneRow zone="quality" emoji="⚡"
                                 label={activeSport === 'running' ? 'Intervals & tempo' : 'Intervals'}
                                 sublabel={activeSport === 'running' ? 'tempo, drempeltraining, VO2max' : 'FTP-blokken, drempelritten, VO2max'}
-                                hint="Geen hartslagmeter? Noem je activiteit 'interval' of 'tempo'"
+                                hint="No HR monitor? Name your activity 'interval' or 'tempo'"
                                 done={progress?.qualityMinutes ?? 0} target={targets.qualityMinutes} />
                             </div>
                           </div>
-                          <button
-                            onClick={() => { saveTraining(); setOpen(false); router.push(`/training/${activeSport}`) }}
-                            className="flex items-center justify-center gap-1.5 py-3 rounded-[14px] active:opacity-60 transition-opacity"
-                            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-                          >
-                            <span className="text-[13px] text-white/40 font-medium">View session advice</span>
-                            <ChevronRight size={14} className="text-white/25" />
-                          </button>
                         </>
                       ) : (
                         <div className="rounded-[18px] px-4 py-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
