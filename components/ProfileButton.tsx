@@ -5,8 +5,14 @@ import useSWR, { mutate } from 'swr'
 import { User, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { computeAdvice } from '@/lib/training-algorithm'
 import { fetchServices } from '@/lib/services'
+import {
+  computeZones,
+  suggestZoneTargets,
+  computeWeekProgress,
+  getISOWeek,
+  type ZoneTargets,
+} from '@/lib/training-plan'
 
 type Units = 'metric' | 'imperial'
 type NotifStatus = 'default' | 'granted' | 'denied' | 'unsupported'
@@ -46,9 +52,8 @@ export function ProfileButton() {
   const [injuries, setInjuries] = useState<Record<string, boolean>>({ running: false, cycling: false, swimming: false, gym: false })
   const [selfPlanned, setSelfPlanned] = useState<Record<string, boolean>>({})
   const [activeSport, setActiveSport] = useState<string | null>(null)
-  const [weeklyDoneIdx, setWeeklyDoneIdx] = useState<Record<string, number[]>>({})
-  const [personalZones, setPersonalZones] = useState<Record<string, { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }>>({})
   const [sportActivities, setSportActivities] = useState<any[]>([])
+  const [zoneTargets, setZoneTargets] = useState<Record<string, ZoneTargets>>({})
   const [goalOrder, setGoalOrder] = useState<string[]>(['lose_weight', 'build_muscle', 'get_fitter', 'maintain', 'performance'])
   const [draggingGoalKey, setDraggingGoalKey] = useState<string | null>(null)
   const dragGoalKeyRef = useRef<string | null>(null)
@@ -135,7 +140,7 @@ export function ProfileButton() {
       if (!uid) return
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,macro_goal,macro_activity_level,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,macro_goal,macro_activity_level,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned,training_zone_targets')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -165,6 +170,8 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
             setInjuries(prev => ({ ...prev, ...data.training_injuries }))
           if (data?.training_self_planned && typeof data.training_self_planned === 'object')
             setSelfPlanned(data.training_self_planned)
+          if (data?.training_zone_targets && typeof data.training_zone_targets === 'object')
+            setZoneTargets(data.training_zone_targets)
         })
 
       // Auto-detect injuries from calendar events and recent Strava activities
@@ -547,13 +554,13 @@ async function saveTraining() {
     setTrainingSaving(true)
     await createClient()
       .from('user_settings')
-      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder, training_injuries: injuries, training_self_planned: selfPlanned })
+      .update({ training_goal: trainingGoal, training_frequencies: trainingFrequencies, training_intensity: trainingIntensity, training_sport_priority: sportOrder, training_goal_priority: goalOrder, training_injuries: injuries, training_self_planned: selfPlanned, training_zone_targets: zoneTargets })
       .eq('user_id', userId)
     setTrainingSaving(false)
     setEditingTraining(false)
     mutate('today')
     // Optimistisch de frequenties direct in cache zetten zodat tabs meteen updaten
-    mutate('training', (cur: any) => cur ? { ...cur, trainingFrequencies } : cur, { revalidate: true })
+    mutate('training', (cur: any) => cur ? { ...cur, trainingFrequencies, zoneTargets } : cur, { revalidate: true })
     mutate('training-freqs', trainingFrequencies, { revalidate: false })
   }
 
@@ -561,233 +568,40 @@ async function saveTraining() {
     setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.max(0, Math.min(7, (prev[sport] ?? 0) + delta)) }))
   }
 
+  // Adjust a zone target by ±delta minutes for the given sport, stamping the current ISO week
+  function adjustZone(sport: string, zone: 'z2' | 'quality', delta: number, current: ZoneTargets) {
+    const now = new Date()
+    setZoneTargets(prev => ({
+      ...prev,
+      [sport]: {
+        z2Minutes:      zone === 'z2'      ? Math.max(15, current.z2Minutes + delta)      : current.z2Minutes,
+        qualityMinutes: zone === 'quality' ? Math.max(0,  current.qualityMinutes + delta) : current.qualityMinutes,
+        updatedWeek: getISOWeek(now),
+        updatedYear: now.getFullYear(),
+      },
+    }))
+  }
+
+  // When a sport is opened, fetch its 60-day Strava history so the zone-hours
+  // view can compute personal zones, suggested targets and this-week progress.
   useEffect(() => {
     if (!activeSport || !userId) return
     const supabase = createClient()
-    const now = new Date()
-    const day = now.getDay()
-    const diffToMon = day === 0 ? -6 : 1 - day
-    const weekStart = new Date(now)
-    weekStart.setDate(now.getDate() + diffToMon)
-    weekStart.setHours(0, 0, 0, 0)
-    const weekStartStr = weekStart.toISOString()
-
-    // Classify a running activity to a template index (0=Easy, 1=Intervals, 2=Long, 3=Tempo, 4=Hill)
-    function classifyRun(dist: number, speed: number, dur: number): number {
-      if (dist >= 12000) return 2                          // Long run: 12km+
-      if (speed >= 3.5 && dur <= 4200) return 1           // Intervals: fast (<4:45/km) + under 70 min
-      if (speed >= 3.0 && dist >= 7000) return 3          // Tempo: 5:33/km+ and 7-12km
-      return 0                                              // Easy run: default
+    const sportTypes: Record<string, string[]> = {
+      running:  ['Run', 'VirtualRun', 'TrailRun'],
+      cycling:  ['Ride', 'VirtualRide', 'EBikeRide', 'GravelRide', 'MountainBikeRide'],
+      swimming: ['Swim'],
+      gym:      ['WeightTraining', 'Workout', 'CrossFit'],
     }
-
-    // Classify a cycling activity to a template index (0=Endurance, 1=FTP, 2=Long, 3=Recovery, 4=VO2)
-    function classifyRide(speed: number, dur: number): number {
-      if (dur >= 5400) return 2                            // Long ride: 90+ min
-      if (dur < 2700) return 3                             // Recovery: under 45 min
-      if (speed * 3.6 >= 32) return 4                     // VO2max: 32km/h+
-      if (speed * 3.6 >= 26 && dur < 4500) return 1      // FTP: 26km/h+ and under 75 min
-      return 0                                              // Endurance: default
-    }
-
-    // Classify a swim to a template index (0=Endurance, 1=Speed, 2=Technique, 3=Mixed)
-    function classifySwim(dist: number, dur: number): number {
-      if (dist >= 2500) return 0                           // Endurance: 2500m+
-      if (dur < 2700) return 1                             // Speed: under 45 min
-      return 3                                              // Mixed: default
-    }
-
-    const sportOf = (t: string) => {
-      const s = t.toLowerCase().replace(/_/g, '')
-      if (['run', 'virtualrun', 'trailrun'].includes(s)) return 'running'
-      if (['ride', 'virtualride', 'ebikeride', 'gravelride', 'mountainbikeride'].includes(s)) return 'cycling'
-      if (['swim'].includes(s)) return 'swimming'
-      if (['weighttraining', 'workout', 'crossfit', 'elliptical'].includes(s)) return 'gym'
-      return null
-    }
-
-    Promise.all([
-      supabase.from('strava_activities')
-        .select('sport_type, distance, moving_time, average_speed')
-        .eq('user_id', userId).gte('start_date', weekStartStr),
-      supabase.from('hevy_workouts')
-        .select('id').eq('user_id', userId).gte('start_time', weekStartStr),
-    ]).then(([strava, hevy]) => {
-      const usedIdx = new Set<number>()
-      const doneIndices: number[] = []
-
-      for (const a of strava.data ?? []) {
-        if (sportOf(a.sport_type ?? '') !== activeSport) continue
-        let idx: number
-        if (activeSport === 'running') {
-          idx = classifyRun(a.distance ?? 0, a.average_speed ?? 0, a.moving_time ?? 0)
-        } else if (activeSport === 'cycling') {
-          idx = classifyRide(a.average_speed ?? 0, a.moving_time ?? 0)
-        } else if (activeSport === 'swimming') {
-          idx = classifySwim(a.distance ?? 0, a.moving_time ?? 0)
-        } else {
-          idx = doneIndices.length // gym: sequential
-        }
-        if (!usedIdx.has(idx)) { usedIdx.add(idx); doneIndices.push(idx) }
-      }
-
-      if (activeSport === 'gym') {
-        const hevyCount = hevy.data?.length ?? 0
-        for (let i = 0; i < hevyCount; i++) {
-          const idx = doneIndices.length
-          if (!usedIdx.has(idx)) { usedIdx.add(idx); doneIndices.push(idx) }
-        }
-      }
-
-      setWeeklyDoneIdx(prev => ({ ...prev, [activeSport]: doneIndices }))
-
-      // Fetch 60-day history for personal zone calculation
-      const sportTypes: Record<string, string[]> = {
-        running:  ['Run', 'VirtualRun', 'TrailRun'],
-        cycling:  ['Ride', 'VirtualRide', 'EBikeRide', 'GravelRide', 'MountainBikeRide'],
-        swimming: ['Swim'],
-        gym:      ['WeightTraining', 'Workout', 'CrossFit'],
-      }
-      const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
-      supabase.from('strava_activities')
-        .select('average_speed, average_heartrate, moving_time, distance, start_date, sport_type')
-        .eq('user_id', userId)
-        .gte('start_date', sixtyDaysAgo)
-        .in('sport_type', sportTypes[activeSport] ?? [])
-        .order('start_date', { ascending: false })
-        .then(({ data }) => {
-          setSportActivities(data ?? [])
-          const withHR = (data ?? []).filter(a => a.average_heartrate && a.average_speed)
-          if (withHR.length < 3) return
-
-          // Estimate max HR: highest avg HR seen ÷ 0.92 (avg HR in a hard effort ≈ 92% max)
-          const maxHR = Math.round(
-            Math.max(...withHR.map(a => a.average_heartrate as number)) / 0.92
-          )
-
-          const avgSpd = (arr: typeof withHR) =>
-            arr.length ? arr.reduce((s, a) => s + (a.average_speed as number), 0) / arr.length : null
-
-          // Zone 2 = 60–70% max HR
-          const z2 = withHR.filter(a => {
-            const r = (a.average_heartrate as number) / maxHR
-            return r >= 0.60 && r <= 0.72
-          })
-
-          // Threshold = 83–92% max HR
-          const thr = withHR.filter(a => {
-            const r = (a.average_heartrate as number) / maxHR
-            return r >= 0.83 && r <= 0.92
-          })
-
-          // Longest effort as proxy for long-ride/long-run distance
-          const longestDist = Math.max(...(data ?? []).map(a => a.distance ?? 0))
-
-          setPersonalZones(prev => ({
-            ...prev,
-            [activeSport]: {
-              z2Speed: avgSpd(z2),
-              thresholdSpeed: avgSpd(thr),
-              longDist: longestDist > 0 ? longestDist : null,
-            },
-          }))
-        })
-    })
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
+    supabase.from('strava_activities')
+      .select('name, average_speed, average_heartrate, moving_time, distance, start_date, sport_type')
+      .eq('user_id', userId)
+      .gte('start_date', sixtyDaysAgo)
+      .in('sport_type', sportTypes[activeSport] ?? [])
+      .order('start_date', { ascending: false })
+      .then(({ data }) => setSportActivities(data ?? []))
   }, [activeSport, userId])
-
-  type SessionTemplate = { title: string; subtitle: string; duration: string; emoji: string; href: string; typeKey: number }
-  type Zones = { z2Speed: number | null; thresholdSpeed: number | null; longDist: number | null }
-
-  function getSessionTemplates(sport: string, freq: number, zones?: Zones, activities?: any[], intensity?: string): SessionTemplate[] {
-    const n = Math.max(1, Math.min(freq, 7))
-
-    const kmh = (mps: number | null | undefined) => mps ? `${Math.round(mps * 3.6)} km/h` : null
-    const pace = (mps: number | null | undefined) => {
-      if (!mps) return null
-      const sPerKm = 1000 / mps
-      return `${Math.floor(sPerKm / 60)}:${String(Math.round(sPerKm % 60)).padStart(2, '0')}/km`
-    }
-    const km = (m: number | null | undefined) => m ? `${Math.round(m / 1000)} km` : null
-
-    // Compute session duration from user history via the training algorithm
-    const dur = (title: string): string => {
-      if (!activities?.length || (sport !== 'running' && sport !== 'cycling')) return '–'
-      const res = computeAdvice(sport as any, activities, title.replace(/\+/g, ' '), intensity)
-      return `${res.advice.durationMin} min`
-    }
-
-    if (sport === 'running') {
-      const z2Pace  = pace(zones?.z2Speed)
-      const thrPace = pace(zones?.thresholdSpeed)
-      const longKm  = km(zones?.longDist)
-      // typeKey matches classifyRun return values so done-detection works regardless of display order.
-      const easy      = { typeKey: 0, title: 'Easy run',          subtitle: z2Pace  ? `Zone 2 — ${z2Pace} — conversational pace`          : 'Zone 2 aerobic — conversational pace',    emoji: '🏃', href: '/training/session?title=Easy+Run',           duration: dur('Easy Run') }
-      const intervals = { typeKey: 1, title: 'Interval training', subtitle: thrPace ? `5×1 km at ${thrPace} — VO2max boost`                : '5×1 km at 5K pace — VO2max boost',        emoji: '⚡', href: '/training/session?title=Running+Intervals', duration: dur('Running Intervals') }
-      const longRun   = { typeKey: 2, title: 'Long run',          subtitle: longKm  ? `Slow & steady — target ${longKm}`                  : 'Slow & steady — builds endurance base',   emoji: '🛣️', href: '/training/session?title=Long+Run',           duration: dur('Long Run') }
-      const tempo     = { typeKey: 3, title: 'Tempo run',         subtitle: thrPace ? `Comfortably hard — ${thrPace} — lactate threshold` : 'Comfortably hard — lactate threshold',    emoji: '🔥', href: '/training/session?title=Tempo+Run',          duration: dur('Tempo Run') }
-      const hills     = { typeKey: 4, title: 'Hill repeats',      subtitle: '6–8 × 90s uphill — strength & power',                                                                       emoji: '⛰️', href: '/training/session?title=Hill+Repeats',       duration: dur('Hill Repeats') }
-      // easy: zone 2 first, quality sessions pushed back
-      // moderate: one quality session early
-      // hard/all_out: quality sessions front-loaded
-      const order = (intensity === 'easy')
-        ? [easy, longRun, tempo, intervals, hills]
-        : (intensity === 'hard' || intensity === 'all_out')
-          ? [easy, intervals, tempo, longRun, hills]
-          : [easy, intervals, longRun, tempo, hills] // moderate (default)
-      return order.slice(0, n)
-    }
-    if (sport === 'cycling') {
-      const z2Kmh  = kmh(zones?.z2Speed)
-      const thrKmh = kmh(zones?.thresholdSpeed)
-      const longKm = km(zones?.longDist)
-      // typeKey matches classifyRide return values so done-detection works regardless of display order.
-      const endurance = { typeKey: 0, title: 'Endurance ride', subtitle: z2Kmh  ? `Zone 2 — ${z2Kmh} — fat metabolism & aerobic base` : 'Zone 2 — fat metabolism & aerobic base',   emoji: '🚴', href: '/training/session?title=Endurance+Ride', duration: dur('Endurance Ride') }
-      const ftp       = { typeKey: 1, title: 'FTP intervals',  subtitle: thrKmh ? `3×10 min at ${thrKmh} — raise FTP`                : '3×10 min threshold — raise FTP',             emoji: '⚡', href: '/training/session?title=FTP+Intervals',  duration: dur('FTP Intervals') }
-      const longRide  = { typeKey: 2, title: 'Long ride',      subtitle: longKm ? `Steady endurance — target ${longKm}`              : 'Steady endurance — big aerobic volume',      emoji: '🛣️', href: '/training/session?title=Long+Ride',       duration: dur('Long Ride') }
-      const recovery  = { typeKey: 3, title: 'Recovery ride',  subtitle: z2Kmh  ? `Easy spin onder ${z2Kmh} — flush legs`            : 'Easy spin — flush legs & recover',           emoji: '🌱', href: '/training/session?title=Recovery+Ride',  duration: dur('Recovery Ride') }
-      const vo2       = { typeKey: 4, title: 'VO₂max effort',  subtitle: thrKmh ? `5×3 min boven ${thrKmh} — aerobic ceiling`        : '5×3 min at 110% FTP — aerobic ceiling',      emoji: '🔥', href: '/training/session?title=VO2max+Cycling', duration: dur('VO2max Cycling') }
-      // easy: long ride before FTP so quality only appears at 3×+
-      // moderate: FTP at 2×, VO2 only at 5×
-      // hard/all_out: VO2max pushed to 3×, aggressive front-loading
-      const order = (intensity === 'easy')
-        ? [endurance, longRide, ftp, recovery, vo2]
-        : (intensity === 'hard' || intensity === 'all_out')
-          ? [endurance, ftp, vo2, longRide, recovery]
-          : [endurance, ftp, longRide, recovery, vo2] // moderate (default)
-      return order.slice(0, n)
-    }
-    if (sport === 'swimming') {
-      const all: SessionTemplate[] = [
-        { typeKey: 0, title: 'Endurance swim',   subtitle: 'Steady aerobic pace — 2000–3000m',         duration: '45–60 min', emoji: '🏊', href: '/training/session?title=Endurance+Swim' },
-        { typeKey: 1, title: 'Speed intervals',  subtitle: '8×100m with 20s rest — pace work',          duration: '45–55 min', emoji: '⚡', href: '/training/session?title=Swimming+Intervals' },
-        { typeKey: 2, title: 'Technique drills', subtitle: 'Pull buoy, catch drills, form focus',       duration: '40–50 min', emoji: '🎯', href: '/training/session?title=Swim+Technique' },
-        { typeKey: 3, title: 'Mixed session',    subtitle: 'Warm-up + speed + endurance + cool-down',   duration: '55–70 min', emoji: '🌊', href: '/training/session?title=Swimming' },
-      ]
-      return all.slice(0, n)
-    }
-    if (sport === 'gym') {
-      const splits: SessionTemplate[][] = [
-        [{ typeKey: 0, title: 'Full body',  subtitle: 'Squat · press · row · hinge — all patterns',      duration: '55–65 min', emoji: '🏋️', href: '/training/strength' }],
-        [
-          { typeKey: 0, title: 'Upper body', subtitle: 'Chest · shoulders · back · arms',                duration: '50–60 min', emoji: '💪', href: '/training/strength' },
-          { typeKey: 1, title: 'Lower body', subtitle: 'Squat · hinge · calves · core',                  duration: '50–60 min', emoji: '🦵', href: '/training/strength' },
-        ],
-        [
-          { typeKey: 0, title: 'Push', subtitle: 'Chest · shoulders · triceps',                          duration: '55–65 min', emoji: '⬆️', href: '/training/strength' },
-          { typeKey: 1, title: 'Pull', subtitle: 'Back · rear delts · biceps',                           duration: '55–65 min', emoji: '⬇️', href: '/training/strength' },
-          { typeKey: 2, title: 'Legs', subtitle: 'Quads · hamstrings · glutes · calves',                 duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
-        ],
-        [
-          { typeKey: 0, title: 'Upper A', subtitle: 'Chest focus — bench · OHP · rows',                  duration: '55–65 min', emoji: '💪', href: '/training/strength' },
-          { typeKey: 1, title: 'Lower A', subtitle: 'Squat focus — back squat · lunges · RDL',           duration: '55–65 min', emoji: '🦵', href: '/training/strength' },
-          { typeKey: 2, title: 'Upper B', subtitle: 'Back focus — pull-ups · rows · chest',              duration: '55–65 min', emoji: '🔄', href: '/training/strength' },
-          { typeKey: 3, title: 'Lower B', subtitle: 'Hinge focus — deadlift · leg press · core',        duration: '55–65 min', emoji: '🔁', href: '/training/strength' },
-        ],
-      ]
-      const split = splits[Math.min(n - 1, splits.length - 1)]
-      return split.slice(0, n)
-    }
-    return []
-  }
 
 
   function startGoalDrag(key: string, e: React.MouseEvent | React.TouchEvent) {
@@ -1340,7 +1154,7 @@ async function saveTraining() {
             <div className="absolute inset-0 z-10 flex flex-col"
               style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
 
-              {/* Sport session templates sub-overlay */}
+              {/* Sport weekly zone-hours sub-overlay */}
               {activeSport && (() => {
                 const SPORT_META: Record<string, { label: string; icon: string }> = {
                   running:  { label: 'Running',        icon: '🏃' },
@@ -1350,7 +1164,51 @@ async function saveTraining() {
                 }
                 const meta = SPORT_META[activeSport]
                 const freq = trainingFrequencies[activeSport] ?? 0
-                const templates = getSessionTemplates(activeSport, freq, personalZones[activeSport], sportActivities, trainingIntensity)
+                const isEndurance = activeSport === 'running' || activeSport === 'cycling' || activeSport === 'swimming'
+
+                const fmt = (min: number) => {
+                  if (min <= 0) return '0 min'
+                  if (min < 60) return `${min} min`
+                  const h = Math.floor(min / 60), m = min % 60
+                  return m > 0 ? `${h}h ${m}m` : `${h}h`
+                }
+
+                const suggested = isEndurance ? suggestZoneTargets(activeSport, freq, sportActivities) : null
+                const targets = zoneTargets[activeSport] ?? suggested
+                const zones = isEndurance ? computeZones(sportActivities, activeSport) : null
+                const progress = isEndurance ? computeWeekProgress(sportActivities, activeSport, zones ?? undefined, undefined, 0) : null
+
+                const ZoneRow = ({ zone, emoji, label, done, target }: { zone: 'z2' | 'quality'; emoji: string; label: string; done: number; target: number }) => {
+                  const pct = target > 0 ? Math.min(100, (done / target) * 100) : 0
+                  const barColor = pct >= 100 ? '#4ade80' : pct >= 50 ? '#fb923c' : 'rgba(255,255,255,0.15)'
+                  return (
+                    <div className="flex items-center gap-3 px-4 py-3.5">
+                      <span className="text-[18px] leading-none w-7 shrink-0 text-center">{emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-white/80">{label}</p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: barColor }} />
+                          </div>
+                          <span className="text-[11px] text-white/35 shrink-0 tabular-nums">{fmt(done)} / {fmt(target)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button onClick={() => targets && adjustZone(activeSport, zone, -15, targets)}
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-white/60 active:opacity-50"
+                          style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          <span className="text-[16px] leading-none select-none">−</span>
+                        </button>
+                        <button onClick={() => targets && adjustZone(activeSport, zone, 15, targets)}
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-white/60 active:opacity-50"
+                          style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          <span className="text-[16px] leading-none select-none">+</span>
+                        </button>
+                      </div>
+                    </div>
+                  )
+                }
+
                 return (
                   <div className="absolute inset-0 z-20 flex flex-col"
                     style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
@@ -1365,57 +1223,35 @@ async function saveTraining() {
                     </div>
                     <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
                       <div className="px-1">
-                        {(() => {
-                          const doneList = weeklyDoneIdx[activeSport] ?? []
-                          const done = templates.filter(t => doneList.includes(t.typeKey)).length
-                          const remaining = Math.max(0, freq - done)
-                          return (
-                            <p className="text-[13px] text-white/35">
-                              {freq}× per week ·{' '}
-                              {done > 0 ? <span className="text-green-400/70">{done} done</span> : null}
-                              {done > 0 && remaining > 0 ? ' · ' : null}
-                              {remaining > 0 ? <span className="text-teal-400/70">{remaining} to go</span> : null}
-                              {done >= freq && freq > 0 ? <span className="text-green-400/70"> Week complete 🎉</span> : null}
-                            </p>
-                          )
-                        })()}
+                        <p className="text-[13px] text-white/35">{freq}× per week · weekly time targets</p>
+                        <p className="text-[11px] text-white/25 mt-1 leading-snug">
+                          Polarized model — most time easy in Zone 2, a smaller share at quality intensity. Adjust the hours to fit your week.
+                        </p>
                       </div>
-                      <div className="flex flex-col gap-3">
-                        {templates.map((t, i) => {
-                          const doneList = weeklyDoneIdx[activeSport] ?? []
-                          const done = doneList.includes(t.typeKey)
-                          const firstOpen = templates.findIndex(t2 => !doneList.includes(t2.typeKey))
-                          const isNext = !done && i === firstOpen
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => { if (!done) { saveTraining(); setOpen(false); router.push(t.href) } }}
-                              className="flex items-center gap-4 px-4 py-4 rounded-[18px] text-left transition-opacity"
-                              style={{
-                                background: done ? 'rgba(74,222,128,0.06)' : isNext ? 'rgba(45,212,191,0.10)' : 'rgba(255,255,255,0.05)',
-                                border: `1px solid ${done ? 'rgba(74,222,128,0.20)' : isNext ? 'rgba(45,212,191,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                                opacity: done ? 0.65 : 1,
-                              }}
-                            >
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-[20px]"
-                                style={{ background: done ? 'rgba(74,222,128,0.15)' : 'rgba(45,212,191,0.12)' }}>
-                                {done ? '✓' : t.emoji}
-                              </div>
-                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-[11px] font-bold uppercase tracking-[0.1em] ${done ? 'text-green-400/70' : isNext ? 'text-teal-400' : 'text-white/30'}`}>
-                                    {done ? 'Done' : isNext ? 'Next up' : `Session ${i + 1}`}
-                                  </span>
-                                </div>
-                                <span className={`text-[15px] font-semibold leading-tight ${done ? 'text-white/50' : 'text-white'}`}>{t.title}</span>
-                                <span className="text-[12px] text-white/40 leading-snug">{t.subtitle}</span>
-                                <span className="text-[11px] text-white/25 mt-0.5">{t.duration}</span>
-                              </div>
-                              {!done && <ChevronRight size={16} className={`shrink-0 ${isNext ? 'text-teal-400/50' : 'text-white/20'}`} />}
-                            </button>
-                          )
-                        })}
-                      </div>
+
+                      {isEndurance && targets ? (
+                        <>
+                          <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                            <ZoneRow zone="z2" emoji="🟢" label="Zone 2" done={progress?.z2Minutes ?? 0} target={targets.z2Minutes} />
+                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                              <ZoneRow zone="quality" emoji="⚡" label="Quality" done={progress?.qualityMinutes ?? 0} target={targets.qualityMinutes} />
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => { saveTraining(); setOpen(false); router.push(`/training/${activeSport}`) }}
+                            className="flex items-center justify-center gap-1.5 py-3 rounded-[14px] active:opacity-60 transition-opacity"
+                            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+                          >
+                            <span className="text-[13px] text-white/40 font-medium">View session advice</span>
+                            <ChevronRight size={14} className="text-white/25" />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="rounded-[18px] px-4 py-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                          <p className="text-[14px] text-white/70 font-semibold">{freq}× strength sessions per week</p>
+                          <p className="text-[12px] text-white/35 mt-1 leading-snug">Strength volume is tracked per session rather than by zone hours.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
