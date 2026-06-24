@@ -97,6 +97,7 @@ export function ProfileButton() {
   const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
+  const [editCurrentPassword, setEditCurrentPassword] = useState('')
   const [hevySyncing, setHevySyncing] = useState(false)
   const [showHevyInput, setShowHevyInput] = useState(false)
   const [hevyKeyInput, setHevyKeyInput] = useState('')
@@ -257,21 +258,31 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
   }
 
   async function savePassword() {
-    if (!editPassword) return
+    if (!editCurrentPassword || !editPassword) return
     if (editPassword !== editPasswordConfirm) {
-      setEditMsg({ type: 'err', text: "Passwords don't match" }); return
+      setEditMsg({ type: 'err', text: 'Wachtwoorden komen niet overeen' }); return
     }
     if (editPassword.length < 6) {
-      setEditMsg({ type: 'err', text: 'Minimum 6 characters required' }); return
+      setEditMsg({ type: 'err', text: 'Minimaal 6 tekens vereist' }); return
     }
     setEditSaving(true); setEditMsg(null)
+    // Verify current password first
+    const { error: verifyError } = await createClient().auth.signInWithPassword({
+      email: email!,
+      password: editCurrentPassword,
+    })
+    if (verifyError) {
+      setEditMsg({ type: 'err', text: 'Huidig wachtwoord is onjuist' })
+      setEditSaving(false); return
+    }
     const { error } = await createClient().auth.updateUser({ password: editPassword })
     setEditSaving(false)
     if (error) {
       setEditMsg({ type: 'err', text: error.message })
     } else {
-      setEditPassword(''); setEditPasswordConfirm('')
-      setEditMsg({ type: 'ok', text: 'Password updated.' })
+      setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm('')
+      setEditMsg({ type: 'ok', text: 'Wachtwoord opgeslagen.' })
+      setTimeout(() => { setEditingPassword(false); setEditMsg(null) }, 900)
     }
   }
 
@@ -836,26 +847,39 @@ async function saveTraining() {
             <div className="absolute inset-0 z-10 flex flex-col"
               style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
               <div className="flex items-center justify-between px-5 py-4 shrink-0">
-                <button onClick={() => { setEditingPassword(false); setEditMsg(null); setEditPassword(''); setEditPasswordConfirm('') }}
+                <button onClick={() => { setEditingPassword(false); setEditMsg(null); setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm('') }}
                   className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
                   Back
                 </button>
-                <span className="text-[17px] font-semibold text-white">Password</span>
-                <button onClick={savePassword} disabled={editSaving || !editPassword || !editPasswordConfirm}
+                <span className="text-[17px] font-semibold text-white">Wachtwoord</span>
+                <button onClick={savePassword} disabled={editSaving || !editCurrentPassword || !editPassword || !editPasswordConfirm}
                   className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
                   {editSaving ? '…' : 'Save'}
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
-                <ProfileSection title="New password">
-                  <ProfileRow separator>
+                <ProfileSection title="Huidig wachtwoord">
+                  <ProfileRow>
                     <input
                       type="password"
                       autoFocus
+                      value={editCurrentPassword}
+                      onChange={e => setEditCurrentPassword(e.target.value)}
+                      placeholder="Huidig wachtwoord"
+                      autoComplete="current-password"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                    />
+                  </ProfileRow>
+                </ProfileSection>
+                <ProfileSection title="Nieuw wachtwoord">
+                  <ProfileRow separator>
+                    <input
+                      type="password"
                       value={editPassword}
                       onChange={e => setEditPassword(e.target.value)}
-                      placeholder="New password"
+                      placeholder="Nieuw wachtwoord"
+                      autoComplete="new-password"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
@@ -864,7 +888,8 @@ async function saveTraining() {
                       type="password"
                       value={editPasswordConfirm}
                       onChange={e => setEditPasswordConfirm(e.target.value)}
-                      placeholder="Confirm password"
+                      placeholder="Bevestig wachtwoord"
+                      autoComplete="new-password"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>

@@ -23,8 +23,12 @@ export async function GET(request: NextRequest) {
         },
       }
     )
+    const type = searchParams.get('type')
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      if (type === 'recovery') {
+        return NextResponse.redirect(`${origin}/auth/reset-password`)
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
     const msg = error.message?.toLowerCase() ?? ''
