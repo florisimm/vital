@@ -260,7 +260,6 @@ export function SportPlanCard({
 }
 
 const SESSION_LINKS: Record<string, Array<{ label: string; href: string }>> = {
-  running:  [{ label: 'Session advice', href: '/training/session?title=Easy+Run' }],
-  cycling:  [{ label: 'Session advice', href: '/training/session?title=Endurance+Ride' }],
-  swimming: [{ label: 'Session advice', href: '/training/session?title=Endurance+Swim' }],
+  running:  [{ label: 'Session advice', href: '/training/session?sport=running&title=Zone+2+Run' }],
+  cycling:  [{ label: 'Session advice', href: '/training/session?sport=cycling&title=Endurance+Ride' }],
 }
