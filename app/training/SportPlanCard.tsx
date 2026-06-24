@@ -258,6 +258,45 @@ export function SportPlanCard({
           </a>
         ))}
       </div>
+
+      {/* Weekly summary card */}
+      <div
+        className="mt-3 rounded-[18px] px-4 py-3.5 flex flex-col gap-2.5"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">This week</span>
+          <span className="text-[12px] font-semibold text-white/40">{formatMinutes(freq * 60)} / week</span>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="pt-2.5 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] text-white/50">🟢 Zone 2</span>
+            <div className="text-right">
+              <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.z2Minutes)}</span>
+              <span className="text-[12px] text-white/30"> / {formatMinutes(targets.z2Minutes)}</span>
+              {z2Remaining > 0 && (
+                <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(z2Remaining)} left</span>
+              )}
+              {z2Remaining === 0 && (
+                <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] text-white/50">⚡ {QUALITY_LABEL[sport]}</span>
+            <div className="text-right">
+              <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.qualityMinutes)}</span>
+              <span className="text-[12px] text-white/30"> / {formatMinutes(targets.qualityMinutes)}</span>
+              {qualityRemaining > 0 && (
+                <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(qualityRemaining)} left</span>
+              )}
+              {qualityRemaining === 0 && (
+                <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
