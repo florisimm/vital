@@ -27,6 +27,16 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`)
     }
+    const msg = error.message?.toLowerCase() ?? ''
+    if (msg.includes('already') || msg.includes('email') || msg.includes('registered')) {
+      return NextResponse.redirect(`${origin}/login?error=email_exists`)
+    }
+  }
+
+  // OAuth-level error (error comes back in URL before code exchange)
+  const oauthError = searchParams.get('error_description') ?? ''
+  if (oauthError.toLowerCase().includes('already') || oauthError.toLowerCase().includes('email')) {
+    return NextResponse.redirect(`${origin}/login?error=email_exists`)
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth`)

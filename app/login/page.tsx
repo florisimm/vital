@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Mail, Lock, Activity, ArrowRight, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
@@ -19,6 +19,16 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [notice, setNotice]     = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('error') === 'email_exists') {
+      setTab('signin')
+      setError('Er bestaat al een account met dit e-mailadres. Log in met je wachtwoord hieronder.')
+    } else if (params.get('error') === 'auth') {
+      setError('Inloggen mislukt. Probeer het opnieuw.')
+    }
+  }, [])
   const [showWizard, setShowWizard] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
 
