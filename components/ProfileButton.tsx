@@ -1188,7 +1188,7 @@ async function saveTraining() {
                 const zones = isEndurance ? computeZones(sportActivities, activeSport) : null
                 const progress = isEndurance ? computeWeekProgress(sportActivities, activeSport, zones ?? undefined, undefined, 0) : null
 
-                const ZoneRow = ({ zone, emoji, label, done, target }: { zone: 'z2' | 'quality'; emoji: string; label: string; done: number; target: number }) => {
+                const ZoneRow = ({ zone, emoji, label, sublabel, done, target }: { zone: 'z2' | 'quality'; emoji: string; label: string; sublabel?: string; done: number; target: number }) => {
                   const pct = target > 0 ? Math.min(100, (done / target) * 100) : 0
                   const barColor = pct >= 100 ? '#4ade80' : pct >= 50 ? '#fb923c' : 'rgba(255,255,255,0.15)'
                   return (
@@ -1196,6 +1196,7 @@ async function saveTraining() {
                       <span className="text-[18px] leading-none w-7 shrink-0 text-center">{emoji}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-semibold text-white/80">{label}</p>
+                        {sublabel && <p className="text-[11px] text-white/30 leading-none mt-0.5">{sublabel}</p>}
                         <div className="flex items-center gap-2 mt-1.5">
                           <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
                             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: barColor }} />
@@ -1244,7 +1245,10 @@ async function saveTraining() {
                           <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
                             <ZoneRow zone="z2" emoji="🟢" label="Zone 2" done={progress?.z2Minutes ?? 0} target={targets.z2Minutes} />
                             <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                              <ZoneRow zone="quality" emoji="⚡" label="Quality" done={progress?.qualityMinutes ?? 0} target={targets.qualityMinutes} />
+                              <ZoneRow zone="quality" emoji="⚡"
+                                label={activeSport === 'running' ? 'Intervals & tempo' : 'Intervals'}
+                                sublabel={activeSport === 'running' ? 'tempo, drempeltraining, VO2max' : 'FTP-blokken, drempelritten, VO2max'}
+                                done={progress?.qualityMinutes ?? 0} target={targets.qualityMinutes} />
                             </div>
                           </div>
                           <button

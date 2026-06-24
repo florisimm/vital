@@ -177,7 +177,8 @@ export function SportPlanCard({
           >
             <span className="text-[18px] leading-none w-7 shrink-0 text-center">⚡</span>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-white/80">Quality</p>
+              <p className="text-[13px] font-semibold text-white/80">{QUALITY_LABEL[sport]}</p>
+              <p className="text-[11px] text-white/30 leading-none mt-0.5">{QUALITY_DESC[sport]}</p>
               <div className="flex items-center gap-2 mt-1.5">
                 <ProgressBar done={progress.qualityMinutes} target={targets.qualityMinutes} />
                 <span className="text-[11px] text-white/35 shrink-0 tabular-nums">
@@ -257,6 +258,18 @@ export function SportPlanCard({
       </div>
     </div>
   )
+}
+
+const QUALITY_LABEL: Record<string, string> = {
+  running:  'Intervals & tempo',
+  cycling:  'Intervals',
+  swimming: 'Intervals',
+}
+
+const QUALITY_DESC: Record<string, string> = {
+  running:  'tempo runs, drempeltraining, VO2max',
+  cycling:  'FTP-blokken, drempelritten, VO2max',
+  swimming: 'snelheidssessies, intervallen',
 }
 
 const SESSION_LINKS: Record<string, Array<{ label: string; href: string }>> = {
