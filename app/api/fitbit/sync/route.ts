@@ -247,9 +247,7 @@ export async function POST(_req: NextRequest) {
       date = localDate(w.sampleTime.physicalTime, w.sampleTime.utcOffset)
     }
     if (!date || date < cutoffDate) continue
-    const rounded = Math.round(kg * 10) / 10
-    // Only set if not already set this date (Hevy wins via DB trigger)
-    if (ensure(date).gewicht == null) ensure(date).gewicht = rounded
+    ensure(date).gewicht_google = Math.round(kg * 10) / 10
   }
 
   // Steps counted separately — never mixed into health rows
