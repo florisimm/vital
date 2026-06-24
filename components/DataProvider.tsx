@@ -181,16 +181,17 @@ export function DataProvider() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user || cancelled) return
       const today = new Date().toISOString().split('T')[0]
-      const [{ data: tok }, { data: latestRow }] = await Promise.all([
+      const [{ data: tok }, { data: todayRow }] = await Promise.all([
         supabase.from('fitbit_tokens').select('last_synced_at').eq('user_id', user.id).maybeSingle(),
-        supabase.from('gezondheid').select('datum').eq('user_id', user.id).order('datum', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('gezondheid').select('slaap_minuten').eq('user_id', user.id).eq('datum', today).maybeSingle(),
       ])
       if (!tok || cancelled) return // not connected
 
       const last = tok.last_synced_at ? new Date(tok.last_synced_at).getTime() : 0
-      const syncedRecently = (Date.now() - last) / 3_600_000 < 3
-      const hasTodayRow = latestRow?.datum === today
-      if (syncedRecently && hasTodayRow) return
+      const syncedRecently = (Date.now() - last) / 60_000 < 30 // 30-min cooldown
+      const hasTodaySleep = todayRow?.slaap_minuten != null
+      // Skip only when sleep is already present AND we synced within the last 30 min
+      if (syncedRecently && hasTodaySleep) return
 
       await fetch('/api/fitbit/sync', { method: 'POST' }).catch(() => {/* silent */})
       if (cancelled) return
@@ -198,8 +199,13 @@ export function DataProvider() {
     }
 
     autoSync()
-    const id = setInterval(autoSync, 60 * 60 * 1000) // hourly while app is open
-    return () => { cancelled = true; clearInterval(id) }
+    const id = setInterval(autoSync, 30 * 60 * 1000) // every 30 min while app is open
+
+    // Re-sync when user brings the app to the foreground (e.g. waking up, switching tabs)
+    function onVisible() { if (document.visibilityState === 'visible') autoSync() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => { cancelled = true; clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
   return null
