@@ -17,6 +17,7 @@ const tabs = [
 export function BottomNav() {
   const pathname = usePathname()
   const [authed, setAuthed] = useState<boolean | null>(null)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -30,8 +31,16 @@ export function BottomNav() {
     return () => { active = false; subscription.unsubscribe() }
   }, [])
 
+  // Short delay so the page (and any wizard) has time to mount and hide the
+  // nav before it first appears — prevents the flash after Google OAuth redirect.
+  useEffect(() => {
+    if (!authed) { setReady(false); return }
+    const t = setTimeout(() => setReady(true), 350)
+    return () => clearTimeout(t)
+  }, [authed])
+
   // Hide for logged-out visitors (e.g. the marketing landing page on `/`)
-  if (authed === null || authed === false) return null
+  if (!authed || !ready) return null
   if (pathname === '/training/session' || pathname === '/login' || pathname === '/coach') return null
 
   return (
