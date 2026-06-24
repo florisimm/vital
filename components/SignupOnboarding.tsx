@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight, ArrowLeft, Check, ChevronUp, ChevronDown, Minus, Plus,
@@ -78,6 +78,12 @@ export function SignupOnboarding({
   onComplete?: () => void
 }) {
   const router = useRouter()
+  useEffect(() => {
+    const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
+    if (nav) nav.style.display = 'none'
+    return () => { if (nav) nav.style.display = '' }
+  }, [])
+
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
