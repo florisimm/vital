@@ -616,10 +616,18 @@ export default function HomePage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase.from('user_settings').select('onboarded').eq('user_id', user.id).maybeSingle()
+      const { data } = await supabase.from('user_settings').select('onboarded, user_id').eq('user_id', user.id).maybeSingle()
       if (!active) return
 
-      if (data?.onboarded) { setOnboarded(true); return }
+      // Any existing settings row means the user has used the app before — skip wizard.
+      // Also backfill onboarded=true so future checks skip the DB comparison entirely.
+      if (data) {
+        if (!data.onboarded) {
+          supabase.from('user_settings').update({ onboarded: true }).eq('user_id', user.id).then(() => {})
+        }
+        setOnboarded(true)
+        return
+      }
 
       // Replay a profile collected during signup (email-confirmation flow)
       let pending: Record<string, unknown> | null = null
