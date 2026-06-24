@@ -50,7 +50,7 @@ async function fetchTodayData() {
     { data: weekActivities },
   ] = await Promise.all([
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).eq('datum', today).maybeSingle(),
-    supabase.from('food_log').select('kcal,protein,carbs,fat,food_name,logged_at').eq('user_id', user.id).eq('date', today),
+    supabase.from('food_log').select('kcal,protein,carbs,fat,food_name,logged_at,amount_g,meal_category').eq('user_id', user.id).eq('date', today),
     supabase.from('food_log').select('date,protein').eq('user_id', user.id).gte('date', sevenDaysAgoStr).order('date', { ascending: false }),
     supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal,training_intensity').eq('user_id', user.id).maybeSingle(),
     supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
@@ -66,11 +66,11 @@ async function fetchTodayData() {
   if (foodNames.length > 0) {
     const { data: prods } = await supabase
       .from('products')
-      .select('name,caffeine_mg')
+      .select('name,caffeine')
       .in('name', foodNames)
-      .not('caffeine_mg', 'is', null)
+      .not('caffeine', 'is', null)
     for (const p of prods ?? []) {
-      if (p.caffeine_mg) caffeineByName[(p.name ?? '').toLowerCase()] = Number(p.caffeine_mg)
+      if (p.caffeine) caffeineByName[(p.name ?? '').toLowerCase()] = Number(p.caffeine)
     }
   }
 
@@ -207,8 +207,12 @@ function buildLifestyleFocus({
   let remainingMg = 0
   for (const item of (effectiveData?.foodLogToday ?? [])) {
     const name = (item.food_name ?? '').toLowerCase()
-    // Product DB takes priority over keyword defaults
-    let cafMg = caffeineByName[name] ?? 0
+    const amountG = Number(item.amount_g ?? 100)
+    // Product DB: caffeine is per 100g — scale by actual amount
+    let cafMg = caffeineByName[name] != null
+      ? caffeineByName[name] * amountG / 100
+      : 0
+    // Keyword fallback: fixed mg per serving (already total, not per 100g)
     if (cafMg === 0) {
       for (const [kw, mg] of CAFFEINE_KW) { if (name.includes(kw)) { cafMg = mg; break } }
     }
