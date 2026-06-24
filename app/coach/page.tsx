@@ -166,7 +166,7 @@ type Sections = {
 function buildSections(
   goal: string, trainingGoalKey: string, healthRows: HealthRow[],
   activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[], foodData: any,
-  weather?: { temp_c: number | null; night_temp_c: number | null; city: string | null } | null,
+  weather?: { temp_c: number | null; night_temp_c: number | null; city: string | null; hourly_forecast?: { hour: string; temp: number }[] | null } | null,
   memory?: string[],
 ): Sections {
   const now        = new Date()
@@ -219,8 +219,11 @@ function buildSections(
     performance:  '1. Performance · 2. Recovery · 3. Specificity · 4. Volume management',
   }
 
+  const hourlyLine = weather?.hourly_forecast?.length
+    ? `Hourly forecast today: ${weather.hourly_forecast.map(h => `${h.hour} ${h.temp}°C`).join(', ')}`
+    : null
   const weatherLine = weather?.temp_c != null
-    ? `Current: ${Math.round(weather.temp_c)}°C${weather.city ? ` in ${weather.city}` : ''}${weather.night_temp_c != null ? ` · last night ${Math.round(weather.night_temp_c)}°C` : ''}`
+    ? `Current: ${Math.round(weather.temp_c)}°C${weather.city ? ` in ${weather.city}` : ''}${weather.night_temp_c != null ? ` · last night ${Math.round(weather.night_temp_c)}°C` : ''}${hourlyLine ? `\n${hourlyLine}` : ''}`
     : null
 
   const heatTolerant = memory?.some(m => /heat|warm|hitte|warmte/i.test(m) && /well|good|fine|handles|tolerates|geen probleem|prima/i.test(m)) ?? false
@@ -467,7 +470,7 @@ export default function CoachPage() {
   const { data: healthRows = [] } = useSWR<HealthRow[]>('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: training }        = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: foodData }        = useSWR(`food-log-${today}`, () => fetchFoodData(today), { revalidateOnFocus: false, dedupingInterval: 60_000 })
-  const { data: weatherData }     = useSWR<{ temp_c: number | null; night_temp_c: number | null; city: string | null }>(
+  const { data: weatherData }     = useSWR<{ temp_c: number | null; night_temp_c: number | null; city: string | null; hourly_forecast: { hour: string; temp: number }[] | null }>(
     'weather', () => fetch('/api/weather').then(r => r.json()),
     { revalidateOnFocus: false, dedupingInterval: 3600000 },
   )
