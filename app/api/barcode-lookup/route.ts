@@ -65,10 +65,12 @@ export async function GET(req: Request) {
   const brand = rawBrand || null
   const image_url = (p.image_front_url || p.image_url || null) as string | null
 
-  const kcal    = Math.round(Number(n['energy-kcal_100g'] ?? n['energy-kcal'] ?? 0))
-  const protein = Math.round(Number(n.proteins_100g ?? 0) * 10) / 10
-  const carbs   = Math.round(Number(n.carbohydrates_100g ?? 0) * 10) / 10
-  const fat     = Math.round(Number(n.fat_100g ?? 0) * 10) / 10
+  const kcal     = Math.round(Number(n['energy-kcal_100g'] ?? n['energy-kcal'] ?? 0))
+  const protein  = Math.round(Number(n.proteins_100g ?? 0) * 10) / 10
+  const carbs    = Math.round(Number(n.carbohydrates_100g ?? 0) * 10) / 10
+  const fat      = Math.round(Number(n.fat_100g ?? 0) * 10) / 10
+  const caffeineRaw = Number(n.caffeine_100g ?? 0)
+  const caffeine = caffeineRaw > 0 ? Math.round(caffeineRaw * 10) / 10 : null
 
   const servingQ     = p.serving_quantity ? Math.round(Number(p.serving_quantity)) : null
   const servingLabel = (p.serving_size as string | undefined) ?? (servingQ ? `${servingQ}g` : null)
@@ -87,16 +89,16 @@ export async function GET(req: Request) {
   if (existing?.id) {
     const { data } = await supabase
       .from('products')
-      .update({ name, brand, kcal, protein, carbs, fat, servings, image_url })
+      .update({ name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine })
       .eq('id', existing.id)
-      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
+      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine')
       .single()
     saved = data as Product | null
   } else {
     const { data } = await supabase
       .from('products')
-      .insert({ user_id: user.id, name, brand, kcal, protein, carbs, fat, servings, image_url, barcode })
-      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
+      .insert({ user_id: user.id, name, brand, kcal, protein, carbs, fat, servings, image_url, barcode, caffeine })
+      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine')
       .single()
     saved = data as Product | null
   }
