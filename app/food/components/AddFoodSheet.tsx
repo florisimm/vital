@@ -27,6 +27,7 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
   onAdded: (entry: FoodLogEntry) => void; onClose: () => void
 }) {
   const [view, setView] = useState<SheetView>('options')
+  const [viewHistory, setViewHistory] = useState<SheetView[]>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Product | null>(null)
   const [meal, setMeal] = useState(preselectedMeal)
@@ -69,19 +70,31 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
       .slice(0, 40)
   }, [search, products, freqMap])
 
+  function navigate(next: SheetView) {
+    setViewHistory(h => [...h, view])
+    setView(next)
+  }
+
+  function resetTo(next: SheetView) {
+    setViewHistory([])
+    setView(next)
+  }
+
   function handleBack() {
-    if (view === 'detail') { setSelected(null); setView('search') }
-    else if (view === 'search' || view === 'scan' || view === 'meals' || view === 'custom-food') setView('options')
-    else if (view === 'create-meal') { setTemplateItems([]); setNewMealName(''); setView('meals') }
-    else if (view === 'meal-confirm') { setConfirmTemplate(null); setView('meals') }
-    else onClose()
+    if (view === 'detail') setSelected(null)
+    if (view === 'create-meal') { setTemplateItems([]); setNewMealName('') }
+    if (view === 'meal-confirm') setConfirmTemplate(null)
+    const prev = viewHistory[viewHistory.length - 1]
+    if (prev === undefined) { onClose(); return }
+    setViewHistory(h => h.slice(0, -1))
+    setView(prev)
   }
 
   async function handleBarcodeDetected(barcode: string) {
     setShowBarcodeScanner(false)
     setBarcodeLoading(true)
     setBarcodeError(null)
-    setView('scan')
+    navigate('scan')
     try {
       const res = await fetch(`/api/barcode-lookup?barcode=${encodeURIComponent(barcode)}`)
       if (res.status === 404) { setBarcodeError('not_found'); return }
@@ -132,7 +145,7 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
     setSavingTemplate(false)
     mutateTemplates()
     setTemplateItems([]); setNewMealName(''); setConfirmTemplate(null)
-    setView('meals')
+    resetTo('meals')
   }
 
   async function deleteTemplate(id: string) {
@@ -173,10 +186,10 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
           <div className="px-5 pb-10 flex flex-col gap-2">
             <div className="rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
               {[
-                { Icon: Search,   iconBg: '#22d3ee', label: 'Search Food',  sub: 'Find in nutrition database',       action: () => setView('search') },
-                { Icon: Utensils, iconBg: '#4ade80', label: 'Meals',        sub: 'Log a saved meal template',        action: () => setView('meals') },
+                { Icon: Search,   iconBg: '#22d3ee', label: 'Search Food',  sub: 'Find in nutrition database',       action: () => navigate('search') },
+                { Icon: Utensils, iconBg: '#4ade80', label: 'Meals',        sub: 'Log a saved meal template',        action: () => navigate('meals') },
                 { Icon: ScanLine, iconBg: '#fb923c', label: 'Scan Barcode', sub: 'Scan product barcode',             action: () => setShowBarcodeScanner(true) },
-                { Icon: Plus,     iconBg: '#a78bfa', label: 'Custom Food',  sub: 'Enter nutrition details manually', action: () => setView('custom-food') },
+                { Icon: Plus,     iconBg: '#a78bfa', label: 'Custom Food',  sub: 'Enter nutrition details manually', action: () => navigate('custom-food') },
               ].map(({ Icon, iconBg, label, sub, action }, i) => (
                 <button key={label} onClick={action}
                   className="w-full flex items-center gap-4 px-4 py-4 text-left"
@@ -200,9 +213,9 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
           <ScanResultView
             barcodeLoading={barcodeLoading}
             barcodeError={barcodeError}
-            onCustomFood={() => setView('custom-food')}
+            onCustomFood={() => navigate('custom-food')}
             onRescan={() => { setBarcodeError(null); setShowBarcodeScanner(true) }}
-            onSearch={() => setView('search')}
+            onSearch={() => navigate('search')}
           />
         )}
 
@@ -211,9 +224,9 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
             templates={templates}
             menuOpenId={menuOpenId}
             setMenuOpenId={setMenuOpenId}
-            onNewTemplate={() => { setTemplateItems([]); setNewMealName(''); setView('create-meal') }}
-            onSelectTemplate={(t) => { setConfirmTemplate(t); setView('meal-confirm') }}
-            onEditTemplate={(t) => { setMenuOpenId(null); setConfirmTemplate(t); setNewMealName(t.name); setTemplateItems(t.foods); setView('create-meal') }}
+            onNewTemplate={() => { setTemplateItems([]); setNewMealName(''); navigate('create-meal') }}
+            onSelectTemplate={(t) => { setConfirmTemplate(t); navigate('meal-confirm') }}
+            onEditTemplate={(t) => { setMenuOpenId(null); setConfirmTemplate(t); setNewMealName(t.name); setTemplateItems(t.foods); navigate('create-meal') }}
             onDeleteTemplate={(id) => { setMenuOpenId(null); deleteTemplate(id) }}
           />
         )}
@@ -258,7 +271,7 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
               style={{ background: 'rgba(255,255,255,0.06)' }}>
               {filtered.map((p, i) => (
                 <button key={p.id}
-                  onClick={() => { setSelected(p); setView('detail') }}
+                  onClick={() => { setSelected(p); navigate('detail') }}
                   className="flex items-center justify-between px-4 py-3.5 text-left"
                   style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                   <div>

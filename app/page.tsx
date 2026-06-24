@@ -160,7 +160,7 @@ function buildLifestyleFocus({
     if (e.start_date !== tomStr || !e.start_datetime) return false
     return new Date(e.start_datetime).getHours() < 9
   })
-  if (earlyTomorrow) bedtimeSub = 'Early session tomorrow'
+  if (earlyTomorrow) bedtimeSub = earlyTomorrow.title ? `Early: ${earlyTomorrow.title}` : 'Early session tomorrow'
 
   // bedtime = 07:00 − needed sleep (normalize to 0–1440 to handle pre-midnight)
   const rawBedtime = WAKE_MINS - neededMin

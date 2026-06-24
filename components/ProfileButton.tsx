@@ -72,6 +72,10 @@ export function ProfileButton() {
   const [savedCalcHeight, setSavedCalcHeight] = useState('')
   const [savedCalcAge, setSavedCalcAge] = useState('')
   const [savedCalcGender, setSavedCalcGender] = useState<'male' | 'female' | null>(null)
+  const [savedCalcGoal, setSavedCalcGoal] = useState<'lose' | 'maintain' | 'gain' | null>(null)
+  const [savedCalcActivity, setSavedCalcActivity] = useState<number | null>(null)
+  const [savedCalcTargetKg, setSavedCalcTargetKg] = useState('')
+  const [savedCalcTargetWeeks, setSavedCalcTargetWeeks] = useState('')
   const [manualKcal, setManualKcal] = useState('')
   const [manualProtein, setManualProtein] = useState('')
   const [manualCarbs, setManualCarbs] = useState('')
@@ -131,7 +135,7 @@ export function ProfileButton() {
       if (!uid) return
 
       supabase.from('user_settings')
-        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
+        .select('units,step_goal,strength_squat_ref,strength_bench_ref,strength_deadlift_ref,height_cm,age,gender,macro_kcal,macro_protein,macro_carbs,macro_fat,macro_goal,macro_activity_level,training_goal,training_frequencies,training_intensity,training_sport_priority,training_goal_priority,training_injuries,training_self_planned')
         .eq('user_id', uid).single()
         .then(({ data }) => {
           if (data?.units) setUnits(data.units as Units)
@@ -146,6 +150,9 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
           if (data?.macro_protein) setSavedMacroProtein(data.macro_protein)
           if (data?.macro_carbs) setSavedMacroCarbs(data.macro_carbs)
           if (data?.macro_fat) setSavedMacroFat(data.macro_fat)
+          if (data?.macro_goal === 'lose' || data?.macro_goal === 'maintain' || data?.macro_goal === 'gain')
+            setSavedCalcGoal(data.macro_goal)
+          if (data?.macro_activity_level) setSavedCalcActivity(Number(data.macro_activity_level))
           if (data?.training_goal) setTrainingGoal(data.training_goal)
           if (data?.training_frequencies && typeof data.training_frequencies === 'object')
             setTrainingFrequencies({ gym: 0, running: 0, cycling: 0, swimming: 0, ...data.training_frequencies })
@@ -411,12 +418,20 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
 
   function openMacroCalc() {
     const latestWeight = healthRows.find((r: any) => r.gewicht != null)?.gewicht ?? null
-    setCalcStep(0); setCalcGoal(null)
+    const weight = latestWeight ? String(Math.round(Number(latestWeight) * 10) / 10) : ''
     setCalcGender(savedCalcGender)
     setCalcAge(savedCalcAge)
     setCalcHeight(savedCalcHeight)
-    setCalcWeight(latestWeight ? String(Math.round(Number(latestWeight) * 10) / 10) : '')
-    setCalcActivity(null); setCalcSaved(false); setCalcTargetKg(''); setCalcTargetWeeks('')
+    setCalcWeight(weight)
+    setCalcGoal(savedCalcGoal)
+    setCalcActivity(savedCalcActivity)
+    setCalcTargetKg(savedCalcTargetKg)
+    setCalcTargetWeeks(savedCalcTargetWeeks)
+    setCalcSaved(false)
+    // Jump straight to result if all required inputs are already known
+    const allKnown = !!savedCalcGender && !!savedCalcAge && !!savedCalcHeight &&
+                     !!weight && savedCalcActivity !== null && !!savedCalcGoal
+    setCalcStep(allKnown ? 7 : 0)
     setEditingMacroMode(false)
     setEditingMacroCalc(true)
   }
@@ -466,11 +481,17 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
         height_cm: Number(calcHeight) || null,
         age: Number(calcAge) || null,
         gender: calcGender,
+        macro_goal: calcGoal,
+        macro_activity_level: calcActivity,
       })
       .eq('user_id', userId)
     setSavedCalcHeight(calcHeight)
     setSavedCalcAge(calcAge)
     setSavedCalcGender(calcGender)
+    setSavedCalcGoal(calcGoal)
+    setSavedCalcActivity(calcActivity)
+    setSavedCalcTargetKg(calcTargetKg)
+    setSavedCalcTargetWeeks(calcTargetWeeks)
     setSavedMacroKcal(m.kcal); setSavedMacroProtein(m.protein)
     setSavedMacroCarbs(m.carbs); setSavedMacroFat(m.fat)
     const today = new Date().toISOString().split('T')[0]
