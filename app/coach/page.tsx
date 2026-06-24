@@ -279,10 +279,15 @@ function buildSections(
     obsLines.push(`- Today's recommendation: ${rec}${support ? ` (${support})` : ''}`)
   }
 
-  if (weather?.temp_c != null && weather.temp_c >= 28)
+  if (weather?.temp_c != null && weather.temp_c >= 28) {
+    const hour = now.getHours()
+    const heatWindow = hour < 9 ? 'still within the cool morning window (before 09:00)'
+      : hour >= 20 ? 'evening is cooling down — outdoor training now is fine'
+      : `current time ${timeStr} is peak heat — outdoor training not recommended until after 20:00`
     obsLines.push(heatTolerant
-      ? `- Hot today (${Math.round(weather.temp_c)}°C) — user handles heat well, still advise hydration`
-      : `- Heat alert: ${Math.round(weather.temp_c)}°C today — advise early/indoor training and extra hydration`)
+      ? `- Hot today (${Math.round(weather.temp_c)}°C) — user handles heat well. ${heatWindow}. Advise hydration.`
+      : `- Heat alert: ${Math.round(weather.temp_c)}°C. ${heatWindow}. Safe outdoor windows: before 09:00 or after 20:00 only.`)
+  }
 
   return {
     profile: [
