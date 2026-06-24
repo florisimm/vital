@@ -80,8 +80,6 @@ export function SportPlanCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedTargets?.updatedWeek, savedTargets?.updatedYear])
 
-  if (freq === 0) return null
-
   async function handleAdjust(zone: 'z2' | 'quality', delta: number) {
     if (!onSaveTargets || saving) return
     const now = new Date()
@@ -113,6 +111,7 @@ export function SportPlanCard({
 
   return (
     <div className="mt-6 mb-2">
+      {freq > 0 && <>
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">Weekly zone targets</p>
         <span className="text-[12px] font-medium text-white/30">{formatMinutes(freq * 60)}/week</span>
@@ -258,6 +257,7 @@ export function SportPlanCard({
           </a>
         ))}
       </div>
+      </>}
 
       {/* Weekly summary card */}
       <div
@@ -266,36 +266,41 @@ export function SportPlanCard({
       >
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">This week</span>
-          <span className="text-[12px] font-semibold text-white/40">{formatMinutes(freq * 60)} / week</span>
+          {freq > 0
+            ? <span className="text-[12px] font-semibold text-white/40">{formatMinutes(freq * 60)} / week</span>
+            : <span className="text-[11px] text-white/25">Set hours in Profile → Training</span>
+          }
         </div>
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="pt-2.5 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-white/50">🟢 Zone 2</span>
-            <div className="text-right">
-              <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.z2Minutes)}</span>
-              <span className="text-[12px] text-white/30"> / {formatMinutes(targets.z2Minutes)}</span>
-              {z2Remaining > 0 && (
-                <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(z2Remaining)} left</span>
-              )}
-              {z2Remaining === 0 && (
-                <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
-              )}
+        {freq > 0 && (
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="pt-2.5 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] text-white/50">🟢 Zone 2</span>
+              <div className="text-right">
+                <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.z2Minutes)}</span>
+                <span className="text-[12px] text-white/30"> / {formatMinutes(targets.z2Minutes)}</span>
+                {z2Remaining > 0 && (
+                  <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(z2Remaining)} left</span>
+                )}
+                {z2Remaining === 0 && (
+                  <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] text-white/50">⚡ {QUALITY_LABEL[sport]}</span>
+              <div className="text-right">
+                <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.qualityMinutes)}</span>
+                <span className="text-[12px] text-white/30"> / {formatMinutes(targets.qualityMinutes)}</span>
+                {qualityRemaining > 0 && (
+                  <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(qualityRemaining)} left</span>
+                )}
+                {qualityRemaining === 0 && (
+                  <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-white/50">⚡ {QUALITY_LABEL[sport]}</span>
-            <div className="text-right">
-              <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.qualityMinutes)}</span>
-              <span className="text-[12px] text-white/30"> / {formatMinutes(targets.qualityMinutes)}</span>
-              {qualityRemaining > 0 && (
-                <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(qualityRemaining)} left</span>
-              )}
-              {qualityRemaining === 0 && (
-                <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
-              )}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )
