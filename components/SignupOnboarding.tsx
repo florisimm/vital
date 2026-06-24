@@ -112,6 +112,21 @@ export function SignupOnboarding({
   const wUnit = units === 'metric' ? 'kg' : 'lb'
   const hUnit = units === 'metric' ? 'cm' : 'in'
 
+  const computedMacros = (() => {
+    const kg = units === 'imperial' ? Number(weight) / 2.2046 : Number(weight)
+    const cm = units === 'imperial' ? Number(height) * 2.54 : Number(height)
+    const a = Number(age) || 0
+    if (!(kg > 0 && cm > 0 && sex && a > 0)) return null
+    const bmr = 10 * kg + 6.25 * cm - 5 * a + (sex === 'male' ? 5 : -161)
+    const tdee = bmr * (activity ?? 1.55)
+    const adj = nutrition === 'lose' ? -500 : nutrition === 'gain' ? 300 : 0
+    const kcal = Math.max(1200, Math.round((tdee + adj) / 10) * 10)
+    const protein = Math.round(kg * 1.8)
+    const fat = Math.round(kcal * 0.25 / 9)
+    const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4))
+    return { kcal, protein, carbs, fat }
+  })()
+
   // Step list — the account step only exists when creating a new account.
   const steps = [
     'welcome', 'about', 'goal', 'nutrition', 'sports', 'intensity',
@@ -219,9 +234,24 @@ export function SignupOnboarding({
     next()
   }
 
-  function finish() {
-    if (mode === 'onboarding') { onComplete?.(); return }
+  async function markOnboarded() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('user_settings')
+        .upsert({ user_id: user.id, onboarded: true }, { onConflict: 'user_id' })
+    }
+  }
+
+  async function skipWizard() {
+    await markOnboarded()
+    onClose()
+  }
+
+  async function finish() {
+    if (mode === 'onboarding') { await persistForLoggedInUser(); onComplete?.(); return }
     if (sessionCreated) { router.push('/'); router.refresh(); return }
+    await markOnboarded()
     onClose()
   }
 
@@ -262,8 +292,8 @@ export function SignupOnboarding({
           />
         </div>
 
-        {mode === 'signup'
-          ? <button onClick={onClose} className="text-[14px] text-white/40 active:text-white/70 shrink-0">Close</button>
+        {!isLast
+          ? <button onClick={skipWizard} className="text-[14px] text-white/40 active:text-white/70 shrink-0">Skip</button>
           : <div className="w-[36px] shrink-0" />}
       </div>
 
@@ -443,12 +473,31 @@ export function SignupOnboarding({
             </div>
             <H>You&apos;re all set!</H>
             <Sub>
-              {mode === 'onboarding'
-                ? 'Your coach is tuned to you. Next, link your devices from your profile to start seeing live data.'
+              {mode === "onboarding"
+                ? "Your coach is tuned to you. You can adjust everything from your Profile page at any time."
                 : sessionCreated
-                  ? 'Your profile is ready. Let’s get into the app.'
-                  : 'Check your email to confirm your address, then sign in — your profile is saved and waiting.'}
+                  ? "Your profile is ready. You can adjust everything from your Profile page."
+                  : "Check your email to confirm your address, then sign in."}
             </Sub>
+            {computedMacros && (
+              <div className="mt-6 rounded-[18px] overflow-hidden text-left" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-white/35 px-4 pt-3.5 pb-2">Your daily targets</p>
+                <div className="grid grid-cols-4 divide-x divide-white/[0.06]">
+                  {[
+                    { label: "Calories", value: computedMacros.kcal,     unit: "kcal" },
+                    { label: "Protein",  value: computedMacros.protein,   unit: "g" },
+                    { label: "Carbs",    value: computedMacros.carbs,     unit: "g" },
+                    { label: "Fat",      value: computedMacros.fat,       unit: "g" },
+                  ].map(m => (
+                    <div key={m.label} className="flex flex-col items-center py-3 px-1">
+                      <span className="text-[18px] font-bold text-white">{m.value}</span>
+                      <span className="text-[10px] text-white/35 mt-0.5">{m.unit}</span>
+                      <span className="text-[10px] text-white/30 mt-0.5">{m.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Center>
         )}
       </div>

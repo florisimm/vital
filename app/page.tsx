@@ -763,11 +763,22 @@ function TodayDashboard() {
     [rows, effectiveData, unifiedReadinessPct, weatherData], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  const hasNoData = !!data && !!training &&
+    (training?.activities ?? []).length === 0 &&
+    (training?.hevy ?? []).length === 0 &&
+    rows.length === 0
+
   return (
     <PremiumScreen title="Today" subtitle={formatSubtitle()}>
       <div className="mb-6"><SetupChecklist /></div>
       <div className="flex flex-col gap-6" style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        <TodaysPlanCard
+        {hasNoData && (
+          <div className="rounded-[20px] px-5 py-5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="text-[16px] font-semibold text-white mb-1">No data yet</p>
+            <p className="text-[14px] text-white/45 leading-relaxed">Connect Strava, Hevy or a wearable from your Profile to start seeing your readiness and recommendations.</p>
+          </div>
+        )}
+        {!hasNoData && <TodaysPlanCard
           simplified
           focus={todaysFocus}
           calendarEvents={effectiveData?.calendarEvents ?? []}
@@ -783,8 +794,8 @@ function TodayDashboard() {
               .map((a: any) => ({ name: a.name, sport: a.sport_type }))
             return [...hevy, ...cardio]
           })()}
-        />
-        <LifestyleFocusCard tips={lifestyleFocus} />
+        />}
+        {!hasNoData && <LifestyleFocusCard tips={lifestyleFocus} />}
         <ProgressCard data={effectiveData} />
         <UpcomingCard
           events={(effectiveData?.calendarEvents ?? []).filter(isSport)}
