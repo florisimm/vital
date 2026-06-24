@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   // 1. Check local products cache (user's own + shared user_id=null)
   const { data: cached } = await supabase
     .from('products')
-    .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url')
+    .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine')
     .eq('barcode', barcode)
     .or(`user_id.eq.${user.id},user_id.is.null`)
     .maybeSingle()
