@@ -98,6 +98,53 @@ Called directly from client components using the Supabase URL:
 - `{SUPABASE_URL}/functions/v1/google-calendar-auth?user_id=` — initiates Google Calendar OAuth
 - `{SUPABASE_URL}/functions/v1/google-calendar-sync` — syncs calendar events (POST with Bearer token)
 
+### Server-side scheduled syncs (always-fresh backend)
+
+All external data is kept fresh server-side by `pg_cron` jobs that `net.http_post`
+the relevant edge function on a timer — data updates even with the app closed.
+Each function writes a row to `job_heartbeats` (`job_name`, `last_run_at`,
+`last_status`, `error_message`) for observability.
+
+| Cron job | Schedule | Edge function |
+|---|---|---|
+| `sync-weather-hourly` | `0 * * * *` | `sync-weather` |
+| `sync-strava-hourly` | `0 * * * *` | `strava-sync` |
+| `sync-hevy-hourly` | `30 * * * *` | `hevy-sync` (workouts + `gewicht_hevy`) |
+| `sync-google-calendar-hourly` | `*/15 * * * *` | `google-calendar-sync` |
+| `sync-google-health` | `*/30 * * * *` | `google-health-sync` |
+
+`google-health-sync` ([edge function]) ports `/api/fitbit/sync` to Deno: it runs
+with the service role, iterates `fitbit_tokens`, refreshes Google OAuth tokens
+and writes sleep/HRV/RHR/SpO2/steps to `gezondheid`. The Next.js
+`/api/fitbit/sync` route remains for on-demand "Sync now" + DataProvider auto-sync.
+
+**Reconnect detection**: when a Google refresh token is dead (the OAuth consent
+screen is in "Testing" mode → refresh tokens expire after 7 days; publish to
+Production to stop this), both the edge function and the `/api/fitbit/sync` route
+set `fitbit_tokens.needs_reconnect = true` (cleared on successful refresh or
+re-auth via `/api/fitbit/callback`). `fetchServices()` exposes
+`fitbitNeedsReconnect`; ProfileButton and the Today `SetupChecklist` show an
+amber "Reconnect" prompt.
+
+### Realtime
+
+`DataProvider` opens a single Supabase Realtime channel and revalidates the
+relevant SWR keys when rows change (live UI updates when a server-side sync
+writes). Requires the tables to be in the `supabase_realtime` publication:
+`gezondheid`, `strava_activities`, `hevy_workouts`, `calendar_events`,
+`user_settings`, `food_log`, `coach_bias_adjustments`. RLS gates delivery to the
+user's own rows.
+
+### Source-priority conflict resolution (`gezondheid`)
+
+Multiple sources write the same `gezondheid` row (Hevy, Google Health, Apple
+Health via Shortcuts/Scriptable). A single BEFORE INSERT/UPDATE trigger
+`gezondheid_resolve_sources()` is the one place conflicts are resolved:
+- **gewicht**: `gewicht_hevy` wins — when set, canonical `gewicht` mirrors it.
+- **stappen**: max wins — a write can never lower the day's highest reading.
+
+Add new field rules inside that function as sources grow.
+
 ### Design tokens
 
 - Background: `radial-gradient` teal/orange on `rgb(5, 6, 8)` — fixed full-screen div in root layout
