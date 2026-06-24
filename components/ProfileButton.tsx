@@ -1456,17 +1456,17 @@ async function saveTraining() {
                               key={key}
                               style={{ borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
                             >
-                              <div className="flex items-center gap-3 px-4 py-3.5" style={{ opacity: injuries[key] ? 0.5 : 1 }}>
+                              <div className="flex items-center gap-3 px-4 py-3.5">
                                 <button
-                                  onClick={() => val > 0 && !injuries[key] && setActiveSport(key)}
+                                  onClick={() => val > 0 && setActiveSport(key)}
                                   className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-60"
                                 >
                                   <span className="text-[16px] shrink-0">{injuries[key] ? '🤕' : meta.icon}</span>
                                   <div className="flex-1 flex flex-col gap-0">
-                                    <span className={`text-[15px] ${injuries[key] ? 'line-through text-white/40' : 'text-white'}`}>{meta.label}</span>
-                                    {injuries[key] && <span className="text-[11px] text-orange-400/80">Injured — not recommended</span>}
+                                    <span className="text-[15px] text-white">{meta.label}</span>
+                                    {injuries[key] && <span className="text-[11px] text-orange-400/80">Injured — plan still available</span>}
                                   </div>
-                                  {val > 0 && !injuries[key] && <ChevronRight size={14} className="text-white/25 shrink-0" />}
+                                  {val > 0 && <ChevronRight size={14} className="text-white/25 shrink-0" />}
                                 </button>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <button onClick={() => setFreq(key, -1)} disabled={val === 0}
