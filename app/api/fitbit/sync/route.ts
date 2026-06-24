@@ -134,13 +134,14 @@ export async function POST(_req: NextRequest) {
   const cutoffIso  = cutoff.toISOString()
   const cutoffDate = cutoffIso.split('T')[0]
 
-  const [sleepPoints, rhrPoints, hrvPoints, spo2Points, respPoints, stepPoints] = await Promise.all([
+  const [sleepPoints, rhrPoints, hrvPoints, spo2Points, respPoints, stepPoints, weightPoints] = await Promise.all([
     fetchDataPoints(token, 'sleep',                   `sleep.interval.end_time >= "${cutoffIso}"`),
     fetchDataPoints(token, 'daily-resting-heart-rate'),
     fetchDataPoints(token, 'heart-rate-variability',  `heart_rate_variability.sample_time.physical_time >= "${cutoffIso}"`),
     fetchDataPoints(token, 'oxygen-saturation',       `oxygen_saturation.sample_time.physical_time >= "${cutoffIso}"`),
     fetchDataPoints(token, 'daily-respiratory-rate'),
     fetchDataPoints(token, 'steps', undefined, 10),
+    fetchDataPoints(token, 'weight',                  `weight.sample_time.physical_time >= "${cutoffIso}"`),
   ])
 
   const rows: Record<string, Record<string, unknown>> = {}
@@ -232,6 +233,23 @@ export async function POST(_req: NextRequest) {
     const date = dateStr(r.date)
     if (date < cutoffDate) continue
     ensure(date).ademhalingsfrequentie = Math.round(r.breathsPerMinute * 10) / 10
+  }
+
+  for (const p of weightPoints) {
+    const w = p.weight
+    if (!w) continue
+    const kg = w.weightKilograms ?? w.weight?.kilograms
+    if (typeof kg !== 'number' || kg < 20 || kg > 300) continue
+    let date: string | null = null
+    if (w.date) {
+      date = dateStr(w.date)
+    } else if (w.sampleTime?.physicalTime) {
+      date = localDate(w.sampleTime.physicalTime, w.sampleTime.utcOffset)
+    }
+    if (!date || date < cutoffDate) continue
+    const rounded = Math.round(kg * 10) / 10
+    // Only set if not already set this date (Hevy wins via DB trigger)
+    if (ensure(date).gewicht == null) ensure(date).gewicht = rounded
   }
 
   // Steps counted separately — never mixed into health rows
