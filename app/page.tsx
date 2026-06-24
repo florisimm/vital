@@ -132,25 +132,23 @@ function buildLifestyleFocus({
   unifiedReadinessPct,
   weatherData,
 }: { rows: HealthRow[]; effectiveData: any; unifiedReadinessPct: number; weatherData?: { temp_c: number | null; night_temp_c: number | null } | null }): FocusTip[] {
-  const tips: FocusTip[] = []
 
   // ── Bedtime = 07:00 − needed sleep ──
-  const WAKE_MINS = 7 * 60 // assume 07:00 wake-up
+  const WAKE_MINS = 7 * 60
 
   const recentSleep = rows.filter(r => r.slaap_minuten != null).slice(0, 7)
   const avgSleepMin = recentSleep.length
     ? recentSleep.reduce((s, r) => s + (r.slaap_minuten ?? 0), 0) / recentSleep.length
     : null
 
-  let neededMin = 8 * 60 // base: 8h
+  let neededMin = 8 * 60
   let bedtimeSub = '8h sleep target'
 
   if (avgSleepMin != null && avgSleepMin < 7 * 60) {
     neededMin = Math.max(neededMin, 8.5 * 60)
-    bedtimeSub = "Sleep debt — you need extra rest"
+    bedtimeSub = 'Sleep debt — you need extra rest'
   }
 
-  // HRV below baseline → more recovery
   const latestHRV = rows[0]?.hrv_rmssd
   const recentHRVs = rows.filter(r => r.hrv_rmssd != null).slice(0, 7)
   let hrvBelowBaseline = false
@@ -168,7 +166,6 @@ function buildLifestyleFocus({
     bedtimeSub = 'Recovery mode — aim for extra sleep'
   }
 
-  // Early event tomorrow → keep base need but flag it
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   const tomStr = tomorrow.toISOString().split('T')[0]
   const earlyTomorrow = (effectiveData?.calendarEvents ?? []).find((e: any) => {
@@ -177,14 +174,28 @@ function buildLifestyleFocus({
   })
   if (earlyTomorrow) bedtimeSub = earlyTomorrow.title ? `Early: ${earlyTomorrow.title}` : 'Early session tomorrow'
 
-  // bedtime = 07:00 − needed sleep (normalize to 0–1440 to handle pre-midnight)
   const rawBedtime = WAKE_MINS - neededMin
   const bedtimeMins = ((rawBedtime % 1440) + 1440) % 1440
   const bh = Math.floor(bedtimeMins / 60)
   const bm = bedtimeMins % 60
   const neededHours = neededMin / 60
   const neededLabel = Number.isInteger(neededHours) ? `${neededHours}h` : `${neededHours.toFixed(1).replace('.0', '')}h`
-  tips.push({ emoji: '🌙', label: `Go to sleep by ${bh}:${bm.toString().padStart(2, '0')}`, sub: `${neededLabel} — ${bedtimeSub}` })
+  const bedtimeStr = `${bh}:${bm.toString().padStart(2, '0')}`
+
+  // ── Current time ──
+  const nowH = new Date().getHours() + new Date().getMinutes() / 60
+  const nowMins = Math.round(nowH * 60)
+  const bedtimeH = bedtimeMins / 60
+
+  // Returns true if we've passed `cutoffMins` within the last 12 hours (handles midnight wrap)
+  function isPast(cutoffMins: number): boolean {
+    return ((nowMins - cutoffMins + 1440) % 1440) < 720
+  }
+
+  function fmtMins(m: number): string {
+    const norm = ((m % 1440) + 1440) % 1440
+    return `${Math.floor(norm / 60)}:${(norm % 60).toString().padStart(2, '0')}`
+  }
 
   // ── Caffeine cutoff ──
   const CAFFEINE_KW: [string, number][] = [
@@ -198,9 +209,6 @@ function buildLifestyleFocus({
     ontbijt: 8, snack_ochtend: 10.5, lunch: 12.5,
     snack_middag: 15, avondeten: 18, snack_avond: 20, supps: 8,
   }
-  const nowH = new Date().getHours() + new Date().getMinutes() / 60
-  const bedtimeH = bedtimeMins / 60
-
   const caffeineByName: Record<string, number> = effectiveData?.caffeineByName ?? {}
 
   let coffeeCount = 0
@@ -208,11 +216,9 @@ function buildLifestyleFocus({
   for (const item of (effectiveData?.foodLogToday ?? [])) {
     const name = (item.food_name ?? '').toLowerCase()
     const amountG = Number(item.amount_g ?? 100)
-    // Product DB: caffeine is per 100g — scale by actual amount
     let cafMg = caffeineByName[name] != null
       ? caffeineByName[name] * amountG / 100
       : 0
-    // Keyword fallback: fixed mg per serving (already total, not per 100g)
     if (cafMg === 0) {
       for (const [kw, mg] of CAFFEINE_KW) { if (name.includes(kw)) { cafMg = mg; break } }
     }
@@ -227,60 +233,79 @@ function buildLifestyleFocus({
   const CUP_MG = 80
   const THRESHOLD_MG = 50
   const headroom = Math.max(0, THRESHOLD_MG - remainingMg)
-  const cutoffH = headroom > 0
+  const caffCutoffH = headroom > 0
     ? bedtimeH - 5.5 * Math.log2(CUP_MG / headroom)
     : bedtimeH - 10
-  const cutoffTotalMin = Math.round(((cutoffH * 60) % 1440 + 1440) % 1440)
-  const cutoffStr = `${Math.floor(cutoffTotalMin / 60)}:${(cutoffTotalMin % 60).toString().padStart(2, '0')}`
-  const hoursUntilCutoff = cutoffH - nowH
+  const caffCutoffMins = Math.round(((caffCutoffH * 60) % 1440 + 1440) % 1440)
+  const caffCutoffStr = fmtMins(caffCutoffMins)
+  const hoursUntilCaff = caffCutoffH - nowH
 
-  if (coffeeCount > 0) {
-    if (hoursUntilCutoff <= 0) {
-      tips.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg caffeine still active at bedtime` })
-    } else if (hoursUntilCutoff < 1.5) {
-      tips.push({ emoji: '☕', label: `Last coffee by ${cutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — cutoff approaching` })
-    } else {
-      tips.push({ emoji: '☕', label: `Coffee okay until ${cutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — ${Math.round(remainingMg)}mg active at sleep` })
-    }
-  } else if (hoursUntilCutoff <= 0 && nowH < bedtimeH) {
-    tips.push({ emoji: '☕', label: 'Skip caffeine now', sub: `Only ${Math.round((bedtimeH - nowH) * 60)}min until bedtime` })
-  } else if (hoursUntilCutoff < 1.5 && hoursUntilCutoff > 0) {
-    tips.push({ emoji: '☕', label: `Coffee cutoff at ${cutoffStr}`, sub: 'After that, sleep quality drops' })
-  }
+  // ── Variable tips (max 2, shown before the fixed 4) ──
+  const variableTips: FocusTip[] = []
 
-  // ── HRV warning ──
   if (hrvBelowBaseline) {
-    tips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
+    variableTips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
   }
-
-  // ── Readiness advice ──
   if (unifiedReadinessPct < 55) {
-    tips.push({ emoji: '🛋️', label: 'Rest or easy walk only', sub: 'Recovery is the training today' })
+    variableTips.push({ emoji: '🛋️', label: 'Rest or easy walk only', sub: 'Recovery is the training today' })
   } else if (unifiedReadinessPct >= 85) {
-    tips.push({ emoji: '⚡', label: 'Your body is ready — go for it', sub: 'Readiness is high' })
+    variableTips.push({ emoji: '⚡', label: 'Your body is ready — go for it', sub: 'Readiness is high' })
   }
 
-  // ── Pre-workout nutrition ──
   const todayCalEvent = (effectiveData?.calendarEvents ?? []).find((e: any) => isToday(e) && isSport(e))
   if (todayCalEvent?.start_datetime) {
     const hoursUntil = (new Date(todayCalEvent.start_datetime).getTime() - Date.now()) / 3_600_000
     if (hoursUntil > 0.5 && hoursUntil <= 2.5) {
       const t = fmtTime(todayCalEvent.start_datetime)
-      tips.push({ emoji: '🍌', label: `Eat before your ${t} session`, sub: 'Light carbs 60–90 min before' })
+      variableTips.push({ emoji: '🍌', label: `Eat before your ${t} session`, sub: 'Light carbs 60–90 min before' })
     }
   }
 
-  // ── Hydration nudge on training days ──
   const hasTrainingToday = (effectiveData?.calendarEvents ?? []).some((e: any) => isToday(e) && isSport(e))
   const tempC = weatherData?.temp_c
   if (tempC != null && tempC >= 28) {
-    tips.push({ emoji: '🌡️', label: `Train early — it's ${Math.round(tempC)}°C today`, sub: 'Heat raises HR and reduces performance. Morning or indoor training recommended.' })
-    if (tips.length < 4) tips.push({ emoji: '💧', label: 'Drink 3L+ today', sub: `${Math.round(tempC)}°C increases fluid loss significantly` })
-  } else if (hasTrainingToday && tips.length < 3) {
-    tips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
+    variableTips.push({ emoji: '🌡️', label: `Train early — it's ${Math.round(tempC)}°C today`, sub: 'Heat raises HR and reduces performance.' })
+    variableTips.push({ emoji: '💧', label: 'Drink 3L+ today', sub: `${Math.round(tempC)}°C increases fluid loss significantly` })
+  } else if (hasTrainingToday) {
+    variableTips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
   }
 
-  return tips.slice(0, 5)
+  // ── Fixed bedtime tips — always the last 4 ──
+  const fixed: FocusTip[] = []
+
+  // 1. Bedtime
+  fixed.push({ emoji: '🌙', label: `Go to sleep by ${bedtimeStr}`, sub: `${neededLabel} — ${bedtimeSub}` })
+
+  // 2. No more eating (3h before bedtime)
+  const eatCutoffMins = ((bedtimeMins - 180) + 1440) % 1440
+  if (isPast(eatCutoffMins)) {
+    fixed.push({ emoji: '🍽️', label: 'No more food tonight', sub: 'Digestion disrupts deep sleep' })
+  } else {
+    fixed.push({ emoji: '🍽️', label: `Last meal by ${fmtMins(eatCutoffMins)}`, sub: '3h before sleep — aids digestion' })
+  }
+
+  // 3. No more coffee
+  if (coffeeCount > 0) {
+    if (hoursUntilCaff <= 0) {
+      fixed.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg caffeine still active at bedtime` })
+    } else if (hoursUntilCaff < 1.5) {
+      fixed.push({ emoji: '☕', label: `Last coffee by ${caffCutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — cutoff approaching` })
+    } else {
+      fixed.push({ emoji: '☕', label: `Coffee okay until ${caffCutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} logged today` })
+    }
+  } else {
+    fixed.push({ emoji: '☕', label: `No coffee after ${caffCutoffStr}`, sub: `Caffeine cutoff for ${bedtimeStr} bedtime` })
+  }
+
+  // 4. No screens (1h before bedtime)
+  const screenCutoffMins = ((bedtimeMins - 60) + 1440) % 1440
+  if (isPast(screenCutoffMins)) {
+    fixed.push({ emoji: '📵', label: 'Put your phone down', sub: 'Blue light suppresses melatonin' })
+  } else {
+    fixed.push({ emoji: '📵', label: `No screens after ${fmtMins(screenCutoffMins)}`, sub: '1h before sleep — blue light disrupts melatonin' })
+  }
+
+  return [...variableTips.slice(0, 2), ...fixed]
 }
 
 function LifestyleFocusCard({ tips }: { tips: FocusTip[] }) {
