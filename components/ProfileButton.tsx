@@ -1061,16 +1061,22 @@ async function saveTraining() {
                         style={{ background: 'rgba(0,178,202,0.15)' }}>⌚</div>
                       <div className="flex-1">
                         <p className="text-[15px] font-medium text-white">Google Health</p>
-                        <p className="text-[12px] text-white/40">Sleep, HRV & Activity</p>
+                        {services?.fitbit && services.fitbitNeedsReconnect
+                          ? <p className="text-[12px] text-orange-300">Connection expired — reconnect to resume sleep & HRV</p>
+                          : <p className="text-[12px] text-white/40">Sleep, HRV & Activity</p>}
                       </div>
                       {services?.fitbit === true ? (
-                        <div className="flex items-center gap-2">
-                          <button onClick={syncFitbit} disabled={fitbitSyncing}
-                            className="text-[14px] font-semibold text-teal-400 disabled:opacity-50 active:opacity-60">
-                            {fitbitSyncing ? 'Syncing…' : 'Sync'}
-                          </button>
-                          <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
-                        </div>
+                        services.fitbitNeedsReconnect ? (
+                          <button onClick={connectFitbit} className="text-[14px] font-semibold text-orange-400 active:opacity-60">Reconnect</button>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button onClick={syncFitbit} disabled={fitbitSyncing}
+                              className="text-[14px] font-semibold text-teal-400 disabled:opacity-50 active:opacity-60">
+                              {fitbitSyncing ? 'Syncing…' : 'Sync'}
+                            </button>
+                            <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
+                          </div>
+                        )
                       ) : services?.fitbit === false
                         ? <button onClick={connectFitbit} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
                         : <span className="text-[14px] text-white/30">…</span>}

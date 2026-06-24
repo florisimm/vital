@@ -41,11 +41,12 @@ export async function GET(req: NextRequest) {
   }
 
   await supabase.from('fitbit_tokens').upsert({
-    user_id:        userId,
+    user_id:         userId,
     access_token,
     refresh_token,
-    expires_at:     new Date(Date.now() + expires_in * 1000).toISOString(),
-    fitbit_user_id: 'google',
+    expires_at:      new Date(Date.now() + expires_in * 1000).toISOString(),
+    fitbit_user_id:  'google',
+    needs_reconnect: false,
   })
 
   return NextResponse.redirect(`${siteUrl}/health?fitbit=connected`)

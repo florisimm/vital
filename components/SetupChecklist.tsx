@@ -20,7 +20,11 @@ export function SetupChecklist() {
   })
 
   if (!services) return null
-  const connectedCount = ITEMS.filter(i => services[i.key]).length
+  // Google Health can be "connected" yet have a dead refresh token — treat that
+  // as not-done so the checklist nudges a reconnect instead of showing green.
+  const isDone = (key: keyof Services) =>
+    key === 'fitbit' ? services.fitbit && !services.fitbitNeedsReconnect : !!services[key]
+  const connectedCount = ITEMS.filter(i => isDone(i.key)).length
   if (connectedCount === ITEMS.length) return null // all set — hide entirely
 
   return (
@@ -36,7 +40,8 @@ export function SetupChecklist() {
 
       <div className="flex flex-col gap-2">
         {ITEMS.map(item => {
-          const on = services[item.key]
+          const on = isDone(item.key)
+          const reconnect = item.key === 'fitbit' && services.fitbit && services.fitbitNeedsReconnect
           return (
             <button
               key={item.key}
@@ -44,21 +49,23 @@ export function SetupChecklist() {
               disabled={on}
               className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] text-left transition-all"
               style={{
-                background: on ? 'rgba(74,222,128,0.07)' : 'rgba(255,255,255,0.05)',
-                border: `1px solid ${on ? 'rgba(74,222,128,0.22)' : 'rgba(255,255,255,0.08)'}`,
+                background: on ? 'rgba(74,222,128,0.07)' : reconnect ? 'rgba(251,146,60,0.08)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${on ? 'rgba(74,222,128,0.22)' : reconnect ? 'rgba(251,146,60,0.28)' : 'rgba(255,255,255,0.08)'}`,
               }}>
               <span className="text-[20px] shrink-0">{item.emoji}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-[15px] font-semibold text-white leading-tight">{item.label}</p>
-                <p className="text-[12px] text-white/40 mt-0.5">{item.desc}</p>
+                <p className={`text-[12px] mt-0.5 ${reconnect ? 'text-orange-300' : 'text-white/40'}`}>
+                  {reconnect ? 'Connection expired — tap to reconnect' : item.desc}
+                </p>
               </div>
               {on ? (
                 <span className="flex items-center gap-1 text-[13px] font-semibold text-green-400 shrink-0">
                   <Check size={15} strokeWidth={2.6} /> Done
                 </span>
               ) : (
-                <span className="flex items-center gap-0.5 text-[13px] font-semibold text-teal-400 shrink-0">
-                  Connect <ChevronRight size={15} />
+                <span className={`flex items-center gap-0.5 text-[13px] font-semibold shrink-0 ${reconnect ? 'text-orange-400' : 'text-teal-400'}`}>
+                  {reconnect ? 'Reconnect' : 'Connect'} <ChevronRight size={15} />
                 </span>
               )}
             </button>
