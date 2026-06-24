@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, Activity, ArrowRight, Sparkles } from 'lucide-react'
+import { Mail, Lock, Activity, ArrowRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
-import { SignupOnboarding } from '@/components/SignupOnboarding'
 
 type Tab = 'signin' | 'signup'
 
@@ -29,7 +28,6 @@ export default function LoginPage() {
       setError('Inloggen mislukt. Probeer het opnieuw.')
     }
   }, [])
-  const [showWizard, setShowWizard] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
 
   async function handleGoogleAuth() {
@@ -57,11 +55,26 @@ export default function LoginPage() {
     router.refresh()
   }
 
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true); setError(null); setNotice(null)
+    const { data, error } = await createClient().auth.signUp({ email, password })
+    if (error) { setError(error.message); setLoading(false); return }
+    if (data.session) {
+      router.push('/')
+      router.refresh()
+    } else {
+      setLoading(false)
+      setNotice('Check your email and click the confirmation link to activate your account.')
+    }
+  }
+
   async function handleForgotPassword() {
     if (!email) { setError('Enter your email address first'); return }
     setLoading(true); setError(null); setNotice(null)
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
     await createClient().auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: `${siteUrl}/auth/callback`,
     })
     setLoading(false)
     setNotice('Reset link sent — check your email')
@@ -185,26 +198,46 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* Sign up — launches the guided wizard so we collect the profile
-            that powers coaching, with a short "why" on every step. */}
+        {/* Sign up — simple email + password; wizard shows after email confirmation */}
         {tab === 'signup' && (
-          <div className="flex flex-col gap-3">
-            <div className="rounded-[18px] px-4 py-4 flex gap-3"
-              style={{ background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.18)' }}>
-              <Sparkles size={18} className="text-teal-400 shrink-0 mt-0.5" />
-              <p className="text-[13.5px] leading-relaxed text-white/55">
-                We&apos;ll ask a few quick questions so your coach is tailored to you from day one —
-                and explain why each one matters. Takes about a minute.
-              </p>
+          <form onSubmit={handleSignUp} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2.5">
+              <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                />
+              </Field>
+              <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
+                <input
+                  type="password"
+                  placeholder="Choose a password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                />
+              </Field>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowWizard(true)}
-              className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-            >
-              Get started <ArrowRight size={18} strokeWidth={2.3} />
-            </button>
+            {error  && <p className="text-red-400  text-[14px] text-center px-2">{error}</p>}
+            {notice && <p className="text-teal-400 text-[14px] text-center px-2">{notice}</p>}
+
+            {!notice && (
+              <button
+                type="submit"
+                disabled={loading}
+                className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
+              >
+                {loading ? 'Creating account…' : <>Create account <ArrowRight size={18} strokeWidth={2.3} /></>}
+              </button>
+            )}
 
             <OrDivider />
             <GoogleButton loading={googleLoading} onClick={handleGoogleAuth} />
@@ -212,7 +245,7 @@ export default function LoginPage() {
             <p className="text-[12px] text-white/25 text-center mt-1 px-4">
               By signing up you agree to our terms of service.
             </p>
-          </div>
+          </form>
         )}
       </div>
 
@@ -220,7 +253,6 @@ export default function LoginPage() {
         Kern — AI Fitness & Health Coaching
       </p>
 
-      {showWizard && <SignupOnboarding mode="signup" onClose={() => setShowWizard(false)} />}
     </div>
   )
 }
