@@ -50,7 +50,7 @@ async function fetchTodayData() {
     { data: weekActivities },
   ] = await Promise.all([
     supabase.from('gezondheid').select('stappen,gewicht,datum').eq('user_id', user.id).eq('datum', today).maybeSingle(),
-    supabase.from('food_log').select('kcal,protein,carbs,fat').eq('user_id', user.id).eq('date', today),
+    supabase.from('food_log').select('kcal,protein,carbs,fat,food_name,logged_at').eq('user_id', user.id).eq('date', today),
     supabase.from('food_log').select('date,protein').eq('user_id', user.id).gte('date', sevenDaysAgoStr).order('date', { ascending: false }),
     supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,step_goal,training_intensity').eq('user_id', user.id).maybeSingle(),
     supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
@@ -171,6 +171,59 @@ function buildLifestyleFocus({
   const neededLabel = Number.isInteger(neededHours) ? `${neededHours}h` : `${neededHours.toFixed(1).replace('.0', '')}h`
   tips.push({ emoji: '🌙', label: `Go to sleep by ${bh}:${bm.toString().padStart(2, '0')}`, sub: `${neededLabel} — ${bedtimeSub}` })
 
+  // ── Caffeine cutoff ──
+  const CAFFEINE_KW: [string, number][] = [
+    ['espresso', 60], ['ristretto', 60], ['cappuccino', 60], ['latte', 60],
+    ['flat white', 60], ['macchiato', 60], ['americano', 80], ['lungo', 80],
+    ['red bull', 80], ['energy drink', 80], ['monster', 160],
+    ['pre-workout', 150], ['pre workout', 150],
+    ['koffie', 80], ['coffee', 80],
+  ]
+  const MEAL_CAT_HOUR: Record<string, number> = {
+    ontbijt: 8, snack_ochtend: 10.5, lunch: 12.5,
+    snack_middag: 15, avondeten: 18, snack_avond: 20, supps: 8,
+  }
+  const nowH = new Date().getHours() + new Date().getMinutes() / 60
+  const bedtimeH = bedtimeMins / 60
+
+  let coffeeCount = 0
+  let remainingMg = 0
+  for (const item of (effectiveData?.foodLogToday ?? [])) {
+    const name = (item.food_name ?? '').toLowerCase()
+    let cafMg = 0
+    for (const [kw, mg] of CAFFEINE_KW) { if (name.includes(kw)) { cafMg = mg; break } }
+    if (cafMg === 0) continue
+    coffeeCount++
+    const loggedH = item.logged_at
+      ? new Date(item.logged_at).getHours() + new Date(item.logged_at).getMinutes() / 60
+      : (MEAL_CAT_HOUR[item.meal_category] ?? nowH)
+    remainingMg += cafMg * Math.pow(0.5, (bedtimeH - loggedH) / 5.5)
+  }
+
+  const CUP_MG = 80
+  const THRESHOLD_MG = 50
+  const headroom = Math.max(0, THRESHOLD_MG - remainingMg)
+  const cutoffH = headroom > 0
+    ? bedtimeH - 5.5 * Math.log2(CUP_MG / headroom)
+    : bedtimeH - 10
+  const cutoffTotalMin = Math.round(((cutoffH * 60) % 1440 + 1440) % 1440)
+  const cutoffStr = `${Math.floor(cutoffTotalMin / 60)}:${(cutoffTotalMin % 60).toString().padStart(2, '0')}`
+  const hoursUntilCutoff = cutoffH - nowH
+
+  if (coffeeCount > 0) {
+    if (hoursUntilCutoff <= 0) {
+      tips.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg caffeine still active at bedtime` })
+    } else if (hoursUntilCutoff < 1.5) {
+      tips.push({ emoji: '☕', label: `Last coffee by ${cutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — cutoff approaching` })
+    } else {
+      tips.push({ emoji: '☕', label: `Coffee okay until ${cutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — ${Math.round(remainingMg)}mg active at sleep` })
+    }
+  } else if (hoursUntilCutoff <= 0 && nowH < bedtimeH) {
+    tips.push({ emoji: '☕', label: 'Skip caffeine now', sub: `Only ${Math.round((bedtimeH - nowH) * 60)}min until bedtime` })
+  } else if (hoursUntilCutoff < 1.5 && hoursUntilCutoff > 0) {
+    tips.push({ emoji: '☕', label: `Coffee cutoff at ${cutoffStr}`, sub: 'After that, sleep quality drops' })
+  }
+
   // ── HRV warning ──
   if (hrvBelowBaseline) {
     tips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
@@ -203,7 +256,7 @@ function buildLifestyleFocus({
     tips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
   }
 
-  return tips.slice(0, 4)
+  return tips.slice(0, 5)
 }
 
 function LifestyleFocusCard({ tips }: { tips: FocusTip[] }) {
