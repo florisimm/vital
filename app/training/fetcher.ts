@@ -34,7 +34,7 @@ export async function trainingFetcher() {
       .eq('user_id', user.id).gte('start_date', sixtyDaysAgoDate).order('start_date', { ascending: true }),
     supabase
       .from('user_settings')
-      .select('training_frequencies,training_goal,training_sport_priority,training_goal_priority,training_intensity,training_injuries,training_self_planned,age,max_hr')
+      .select('training_frequencies,training_goal,training_sport_priority,training_goal_priority,training_intensity,training_injuries,training_self_planned,age,max_hr,training_zone_targets')
       .eq('user_id', user.id)
       .single(),
     supabase
@@ -68,6 +68,7 @@ export async function trainingFetcher() {
   const goalPriority: string[] = (settings as any)?.training_goal_priority ?? []
   const injuries: Record<string, boolean> = (settings as any)?.training_injuries ?? {}
   const selfPlanned: Record<string, boolean> = (settings as any)?.training_self_planned ?? {}
+  const zoneTargets: Record<string, any> = (settings as any)?.training_zone_targets ?? {}
 
   // Personalized max heart rate: explicit override wins, else Tanaka (208 − 0.7·age).
   // null → calculations fall back to the legacy absolute HR zones (HRmax ≈ 190).
@@ -95,5 +96,6 @@ export async function trainingFetcher() {
     injuries,
     selfPlanned,
     maxHeartRate,
+    zoneTargets,
   }
 }
