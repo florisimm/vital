@@ -101,11 +101,6 @@ export function SignupOnboarding({
   const [freq, setFreq] = useState<Record<Sport, number>>({ running: 0, cycling: 0, swimming: 0, gym: 0 })
   const [intensity, setIntensity] = useState<Intensity>('moderate')
   const [sportOrder, setSportOrder] = useState<Sport[]>(['running', 'cycling', 'swimming', 'gym'])
-  const [injuries, setInjuries] = useState<Record<Sport, boolean>>({ running: false, cycling: false, swimming: false, gym: false })
-  const [stepGoal, setStepGoal] = useState(10000)
-  const [squat, setSquat] = useState(100)
-  const [bench, setBench] = useState(70)
-  const [deadlift, setDeadlift] = useState(120)
   const [devices, setDevices] = useState<string[]>([])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -113,12 +108,11 @@ export function SignupOnboarding({
 
   const wUnit = units === 'metric' ? 'kg' : 'lb'
   const hUnit = units === 'metric' ? 'cm' : 'in'
-  const doesGym = freq.gym > 0
 
   // Step list — the account step only exists when creating a new account.
   const steps = [
     'welcome', 'about', 'goal', 'nutrition', 'sports', 'intensity',
-    'priority', 'injuries', 'targets', ...(doesGym ? ['strength'] : []),
+    'priority',
     'devices', ...(mode === 'signup' ? ['account'] : []), 'done',
   ] as const
   const current = steps[step]
@@ -142,7 +136,6 @@ export function SignupOnboarding({
 
   // Build the user_settings payload from the collected answers.
   function buildPayload() {
-    const toKg = (v: number) => units === 'imperial' ? Math.round(v / 2.2046) : v
     const kg = units === 'imperial' ? Number(weight) / 2.2046 : Number(weight)
     const cm = units === 'imperial' ? Number(height) * 2.54 : Number(height)
     const a = Number(age) || 0
@@ -165,15 +158,10 @@ export function SignupOnboarding({
       gender: sex,
       age: a || null,
       height_cm: cm > 0 ? Math.round(cm) : null,
-      step_goal: stepGoal,
-      strength_squat_ref: toKg(squat),
-      strength_bench_ref: toKg(bench),
-      strength_deadlift_ref: toKg(deadlift),
       training_goal: goal,
       training_frequencies: freq,
       training_intensity: intensity,
       training_sport_priority: sportOrder,
-      training_injuries: injuries,
       ...macros,
       onboarded: true,
     }
@@ -403,51 +391,8 @@ export function SignupOnboarding({
           </StepWrap>
         )}
 
-        {current === 'injuries' && (
-          <StepWrap title="Any injuries?" subtitle="Kern will avoid recommending these sports.">
-            <div className="flex flex-col gap-2.5">
-              {SPORTS.map(s => (
-                <Toggle key={s.id} emoji={s.emoji} label={s.label} on={injuries[s.id]}
-                  onClick={() => setInjuries(prev => ({ ...prev, [s.id]: !prev[s.id] }))} />
-              ))}
-            </div>
-            <Why>Flagged sports are kept out of your advice until you switch them back on — so you don&apos;t get pushed onto an injury.</Why>
-          </StepWrap>
-        )}
 
-        {current === 'targets' && (
-          <StepWrap title="Your targets" subtitle="You can fine-tune these later.">
-            <div className="flex items-center gap-3 px-4 py-3.5 rounded-[16px]"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <span className="text-[22px] shrink-0">👟</span>
-              <span className="flex-1 text-[16px] font-semibold text-white">Daily steps</span>
-              <Stepper value={stepGoal} onChange={(d) => setStepGoal(v => Math.max(1000, v + d * 1000))} fmt={(v) => v.toLocaleString()} />
-            </div>
-            <Why>Your step goal feeds your daily activity score on the Today and Health tabs.</Why>
-          </StepWrap>
-        )}
-
-        {current === 'strength' && (
-          <StepWrap title="Strength standards" subtitle={`Your reference 1-rep maxes (${wUnit}).`}>
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-3 px-4 py-3.5 rounded-[16px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <span className="flex-1 text-[16px] font-semibold text-white">Squat</span>
-                <Stepper value={squat} onChange={(d) => setSquat(v => Math.max(0, v + d * 5))} suffix={wUnit} />
-              </div>
-              <div className="flex items-center gap-3 px-4 py-3.5 rounded-[16px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <span className="flex-1 text-[16px] font-semibold text-white">Bench Press</span>
-                <Stepper value={bench} onChange={(d) => setBench(v => Math.max(0, v + d * 5))} suffix={wUnit} />
-              </div>
-              <div className="flex items-center gap-3 px-4 py-3.5 rounded-[16px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <span className="flex-1 text-[16px] font-semibold text-white">Deadlift</span>
-                <Stepper value={deadlift} onChange={(d) => setDeadlift(v => Math.max(0, v + d * 5))} suffix={wUnit} />
-              </div>
-            </div>
-            <Why>Your reference maxes let Kern judge each strength session against your own level instead of a generic baseline.</Why>
-          </StepWrap>
-        )}
-
-        {current === 'devices' && (
+{current === 'devices' && (
           <StepWrap title="Connect your devices" subtitle="Any wearable works — pick what you use.">
             <div className="flex flex-col gap-2.5">
               {DEVICES.map(d => (
