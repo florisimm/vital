@@ -417,21 +417,27 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
   }
 
   function openMacroCalc() {
-    const latestWeight = healthRows.find((r: any) => r.gewicht != null)?.gewicht ?? null
-    const weight = latestWeight ? String(Math.round(Number(latestWeight) * 10) / 10) : ''
+    const latestWeightRow = healthRows.find((r: any) => r.gewicht != null)
+    const weightIsRecent = latestWeightRow?.datum
+      ? Date.now() - new Date(latestWeightRow.datum).getTime() <= 14 * 24 * 60 * 60 * 1000
+      : false
+    const weight = latestWeightRow && weightIsRecent
+      ? String(Math.round(Number(latestWeightRow.gewicht) * 10) / 10)
+      : ''
+
     setCalcGender(savedCalcGender)
     setCalcAge(savedCalcAge)
     setCalcHeight(savedCalcHeight)
     setCalcWeight(weight)
-    setCalcGoal(savedCalcGoal)
-    setCalcActivity(savedCalcActivity)
-    setCalcTargetKg(savedCalcTargetKg)
-    setCalcTargetWeeks(savedCalcTargetWeeks)
+    setCalcGoal(null)       // user fills each time
+    setCalcActivity(null)   // user fills each time
+    setCalcTargetKg('')     // user fills each time
+    setCalcTargetWeeks('')  // user fills each time
     setCalcSaved(false)
-    // Jump straight to result if all required inputs are already known
-    const allKnown = !!savedCalcGender && !!savedCalcAge && !!savedCalcHeight &&
-                     !!weight && savedCalcActivity !== null && !!savedCalcGoal
-    setCalcStep(allKnown ? 7 : 0)
+
+    const hasBodyStats = !!savedCalcGender && !!savedCalcAge && !!savedCalcHeight
+    setCalcStep(hasBodyStats && weight ? 4 : hasBodyStats ? 3 : 0)
+
     setEditingMacroMode(false)
     setEditingMacroCalc(true)
   }
