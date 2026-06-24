@@ -8,8 +8,10 @@ import {
   SwimmingSection, StrengthSection, HistorySection,
 } from './sections'
 import { PerformanceSection } from './PerformanceSection'
+import { SportPlanCard } from './SportPlanCard'
 import { trainingFetcher } from './fetcher'
 import { createClient } from '@/lib/supabase'
+import type { ZoneTargets } from '@/lib/training-plan'
 
 const ALL_TABS = [
   { label: 'Overview',  key: 'overview',    href: null,                     freqKey: null    },
@@ -39,6 +41,16 @@ export default function TrainingPage() {
   function switchTab(key: string) {
     setActiveTab(key)
     window.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
+  async function handleSaveTargets(sport: 'running' | 'cycling' | 'swimming', newTargets: ZoneTargets) {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('user_settings')
+      .update({ training_zone_targets: { ...(data as any)?.zoneTargets, [sport]: newTargets } })
+      .eq('user_id', user.id)
+    mutate('training')
   }
 
   useEffect(() => {
@@ -118,9 +130,18 @@ export default function TrainingPage() {
       {/* Tab content — only after mount so SSR and first client render match */}
       <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
         {mounted && activeTab === 'overview'    && <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} sportPriority={sportPriority} goalPriority={goalPriority} trainingIntensity={trainingIntensity} maxHeartRate={maxHeartRate} onSwitchTab={switchTab} />}
-        {mounted && activeTab === 'running'     && <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />}
-        {mounted && activeTab === 'cycling'     && <CyclingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />}
-        {mounted && activeTab === 'swimming'    && <SwimmingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />}
+        {mounted && activeTab === 'running' && <>
+          <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />
+          <SportPlanCard sport="running" freq={freqs.running ?? 0} injured={!!injuries.running} activities={activities} savedTargets={(data as any)?.zoneTargets?.running ?? null} onSaveTargets={t => handleSaveTargets('running', t)} />
+        </>}
+        {mounted && activeTab === 'cycling' && <>
+          <CyclingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />
+          <SportPlanCard sport="cycling" freq={freqs.cycling ?? 0} injured={!!injuries.cycling} activities={activities} savedTargets={(data as any)?.zoneTargets?.cycling ?? null} onSaveTargets={t => handleSaveTargets('cycling', t)} />
+        </>}
+        {mounted && activeTab === 'swimming' && <>
+          <SwimmingSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />
+          <SportPlanCard sport="swimming" freq={freqs.swimming ?? 0} injured={!!injuries.swimming} activities={activities} savedTargets={(data as any)?.zoneTargets?.swimming ?? null} onSaveTargets={t => handleSaveTargets('swimming', t)} />
+        </>}
         {mounted && activeTab === 'strength'    && <StrengthSection hevy={hevy} />}
         {mounted && activeTab === 'history'     && <HistorySection activities={activities} hevy={hevy} />}
         {mounted && activeTab === 'performance' && <PerformanceSection />}
