@@ -4,6 +4,7 @@ import { BottomNav } from '@/components/BottomNav'
 import { DataProvider } from '@/components/DataProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { SWRProvider } from '@/components/SWRProvider'
+import { PasswordRecoveryGuard } from '@/components/PasswordRecoveryGuard'
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vital.app'
 
@@ -67,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <SWRProvider>
+          <PasswordRecoveryGuard />
           <DataProvider />
           <div className="relative">
             {children}

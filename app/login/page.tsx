@@ -74,7 +74,7 @@ export default function LoginPage() {
     setLoading(true); setError(null); setNotice(null)
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
     await createClient().auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/auth/callback?next=/auth/reset-password`,
+      redirectTo: `${siteUrl}/auth/reset-password`,
     })
     setLoading(false)
     setNotice('Reset link sent — check your email')
