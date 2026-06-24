@@ -60,6 +60,20 @@ async function fetchTodayData() {
     supabase.from('strava_activities').select('id,name,sport_type,start_date').eq('user_id', user.id).gte('start_date', weekStartStr),
   ])
 
+  // Secondary lookup: caffeine_mg per product name for today's logged items
+  const foodNames = (foodLogToday ?? []).map((f: any) => f.food_name).filter(Boolean)
+  let caffeineByName: Record<string, number> = {}
+  if (foodNames.length > 0) {
+    const { data: prods } = await supabase
+      .from('products')
+      .select('name,caffeine_mg')
+      .in('name', foodNames)
+      .not('caffeine_mg', 'is', null)
+    for (const p of prods ?? []) {
+      if (p.caffeine_mg) caffeineByName[(p.name ?? '').toLowerCase()] = Number(p.caffeine_mg)
+    }
+  }
+
   return {
     latestGezondheid,
     foodLogToday:   foodLogToday   ?? [],
@@ -70,6 +84,7 @@ async function fetchTodayData() {
     todayActivities: todayActivities ?? [],
     allHevy:        weekHevy       ?? [],
     allActivities:  weekActivities ?? [],
+    caffeineByName,
   }
 }
 
@@ -186,12 +201,17 @@ function buildLifestyleFocus({
   const nowH = new Date().getHours() + new Date().getMinutes() / 60
   const bedtimeH = bedtimeMins / 60
 
+  const caffeineByName: Record<string, number> = effectiveData?.caffeineByName ?? {}
+
   let coffeeCount = 0
   let remainingMg = 0
   for (const item of (effectiveData?.foodLogToday ?? [])) {
     const name = (item.food_name ?? '').toLowerCase()
-    let cafMg = 0
-    for (const [kw, mg] of CAFFEINE_KW) { if (name.includes(kw)) { cafMg = mg; break } }
+    // Product DB takes priority over keyword defaults
+    let cafMg = caffeineByName[name] ?? 0
+    if (cafMg === 0) {
+      for (const [kw, mg] of CAFFEINE_KW) { if (name.includes(kw)) { cafMg = mg; break } }
+    }
     if (cafMg === 0) continue
     coffeeCount++
     const loggedH = item.logged_at
