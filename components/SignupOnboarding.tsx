@@ -198,20 +198,19 @@ export function SignupOnboarding({
     if (password.length < 6) { setErr('Password must be at least 6 characters'); return false }
     setBusy(true); setErr(null)
     const supabase = createClient()
+    const payload = buildPayload()
     const { data, error } = await supabase.auth.signUp({
-      email, password, options: { data: { full_name: name } },
+      email, password,
+      options: { data: { full_name: name, kern_profile: JSON.stringify(payload) } },
     })
     if (error) { setErr(error.message); setBusy(false); return false }
 
-    const payload = buildPayload()
     if (data.session) {
-      // Auto-confirm on: persist immediately
       await supabase.from('user_settings')
         .upsert({ user_id: data.user!.id, ...payload }, { onConflict: 'user_id' })
       setSessionCreated(true)
     } else {
-      // Email confirmation required — stash the profile so it isn't lost.
-      // The app replays it on first login (see app/page.tsx).
+      // Fallback: also stash in localStorage for same-device confirmation
       try { localStorage.setItem(PENDING_PROFILE_KEY, JSON.stringify(payload)) } catch { /* ignore */ }
     }
     setBusy(false)

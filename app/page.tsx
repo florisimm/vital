@@ -629,16 +629,25 @@ export default function HomePage() {
         return
       }
 
-      // Replay a profile collected during signup (email-confirmation flow)
+      // Replay a profile collected during signup — check user metadata first
+      // (works cross-device), then localStorage as fallback (same-device only).
       let pending: Record<string, unknown> | null = null
       try {
-        const raw = localStorage.getItem(PENDING_PROFILE_KEY)
-        if (raw) pending = JSON.parse(raw)
+        const metaRaw = user.user_metadata?.kern_profile
+        if (metaRaw) pending = JSON.parse(metaRaw)
       } catch { /* ignore */ }
+      if (!pending) {
+        try {
+          const raw = localStorage.getItem(PENDING_PROFILE_KEY)
+          if (raw) pending = JSON.parse(raw)
+        } catch { /* ignore */ }
+      }
 
       if (pending) {
         await supabase.from('user_settings').upsert({ user_id: user.id, ...pending }, { onConflict: 'user_id' })
         try { localStorage.removeItem(PENDING_PROFILE_KEY) } catch { /* ignore */ }
+        // Clear from metadata so it doesn't persist unnecessarily
+        supabase.auth.updateUser({ data: { kern_profile: null } }).then(() => {})
         if (active) setOnboarded(true)
         return
       }
