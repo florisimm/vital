@@ -644,7 +644,7 @@ export default function HomePage() {
       }
 
       if (pending) {
-        await supabase.from('user_settings').upsert({ user_id: user.id, ...pending }, { onConflict: 'user_id' })
+        await supabase.from('user_settings').upsert({ user_id: user.id, user_email: user.email, ...pending }, { onConflict: 'user_id' })
         try { localStorage.removeItem(PENDING_PROFILE_KEY) } catch { /* ignore */ }
         // Clear from metadata so it doesn't persist unnecessarily
         supabase.auth.updateUser({ data: { kern_profile: null } }).then(() => {})

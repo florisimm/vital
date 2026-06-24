@@ -189,8 +189,9 @@ export function SignupOnboarding({
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('user_settings')
-      .upsert({ user_id: user.id, ...buildPayload() }, { onConflict: 'user_id' })
+    const { error } = await supabase.from('user_settings')
+      .upsert({ user_id: user.id, user_email: user.email, ...buildPayload() }, { onConflict: 'user_id' })
+    if (error) setErr(error.message)
   }
 
   async function createAccount(): Promise<boolean> {
@@ -207,7 +208,7 @@ export function SignupOnboarding({
 
     if (data.session) {
       await supabase.from('user_settings')
-        .upsert({ user_id: data.user!.id, ...payload }, { onConflict: 'user_id' })
+        .upsert({ user_id: data.user!.id, user_email: data.user!.email, ...payload }, { onConflict: 'user_id' })
       setSessionCreated(true)
     } else {
       // Fallback: also stash in localStorage for same-device confirmation
@@ -238,7 +239,7 @@ export function SignupOnboarding({
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       await supabase.from('user_settings')
-        .upsert({ user_id: user.id, onboarded: true }, { onConflict: 'user_id' })
+        .upsert({ user_id: user.id, user_email: user.email, onboarded: true }, { onConflict: 'user_id' })
     }
   }
 
