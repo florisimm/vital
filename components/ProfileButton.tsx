@@ -525,6 +525,8 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     const today = new Date().toISOString().split('T')[0]
     mutate('food-log')
     mutate(`food-log-${today}`)
+    mutate('today')
+    mutate('training')
     setManualSaving(false)
     setEditingMacroManual(false)
   }
