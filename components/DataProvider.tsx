@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { saveCache } from '@/components/SWRProvider'
+import { fetchServices } from '@/lib/services'
 
 // Prefetches all app data into the SWR cache on first render,
 // so every tab has data ready before the user clicks it.
@@ -28,7 +29,7 @@ export function DataProvider() {
         { data: foodLog }, { data: settings },
         { data: weather }, { data: upcoming }, { data: gezondheid },
         { data: activities }, { data: hevy }, { data: calendarEvents },
-        { data: gcalToken },
+        { data: gcalToken }, services,
       ] = await Promise.all([
         supabase.from('food_log').select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
         supabase.from('user_settings').select('macro_kcal,macro_protein,macro_carbs,macro_fat,training_frequencies,training_goal,training_sport_priority,training_goal_priority,training_intensity,training_injuries,training_self_planned,training_zone_targets').eq('user_id', user.id).single(),
@@ -39,7 +40,12 @@ export function DataProvider() {
         supabase.from('hevy_workouts').select('id,title,start_time,end_time,duration,volume_kg,sets,exercises').eq('user_id', user.id).gte('start_time', thirtyDaysAgo).order('start_time', { ascending: false }),
         supabase.from('calendar_events').select('id,title,start_date,start_datetime,end_datetime').eq('user_id', user.id).gte('start_date', today).order('start_date', { ascending: true }),
         supabase.from('google_calendar_tokens').select('user_id').eq('user_id', user.id).maybeSingle(),
+        fetchServices(),
       ])
+
+      // Warm the profile/connections cache so Strava/Hevy/Health/Calendar show
+      // their real connected state immediately instead of an empty "…" placeholder.
+      mutate('profile-services', services, false)
 
       // Populate SWR cache for all pages
       mutate('food-log', {

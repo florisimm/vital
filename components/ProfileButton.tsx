@@ -98,6 +98,12 @@ export function ProfileButton() {
   const [editingEmail, setEditingEmail] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
   const [editCurrentPassword, setEditCurrentPassword] = useState('')
+  const [passwordStep, setPasswordStep] = useState<'current' | 'new'>('current')
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteStep, setDeleteStep] = useState<'password' | 'confirm'>('password')
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteMsg, setDeleteMsg] = useState<string | null>(null)
   const [hevySyncing, setHevySyncing] = useState(false)
   const [showHevyInput, setShowHevyInput] = useState(false)
   const [hevyKeyInput, setHevyKeyInput] = useState('')
@@ -257,8 +263,26 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     }
   }
 
+  // Step 1: verify the current password before showing the new-password screen
+  async function verifyCurrentPassword() {
+    if (!editCurrentPassword) return
+    setEditSaving(true); setEditMsg(null)
+    const { error: verifyError } = await createClient().auth.signInWithPassword({
+      email: email!,
+      password: editCurrentPassword,
+    })
+    setEditSaving(false)
+    if (verifyError) {
+      setEditMsg({ type: 'err', text: 'Huidig wachtwoord is onjuist' })
+      return
+    }
+    setEditMsg(null)
+    setPasswordStep('new')
+  }
+
+  // Step 2: save the new password
   async function savePassword() {
-    if (!editCurrentPassword || !editPassword) return
+    if (!editPassword) return
     if (editPassword !== editPasswordConfirm) {
       setEditMsg({ type: 'err', text: 'Wachtwoorden komen niet overeen' }); return
     }
@@ -266,15 +290,6 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
       setEditMsg({ type: 'err', text: 'Minimaal 6 tekens vereist' }); return
     }
     setEditSaving(true); setEditMsg(null)
-    // Verify current password first
-    const { error: verifyError } = await createClient().auth.signInWithPassword({
-      email: email!,
-      password: editCurrentPassword,
-    })
-    if (verifyError) {
-      setEditMsg({ type: 'err', text: 'Huidig wachtwoord is onjuist' })
-      setEditSaving(false); return
-    }
     const { error } = await createClient().auth.updateUser({ password: editPassword })
     setEditSaving(false)
     if (error) {
@@ -315,6 +330,30 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     await createClient().auth.signOut()
     router.push('/login')
     router.refresh()
+  }
+
+  async function handleDeleteAccount() {
+    setDeleteBusy(true); setDeleteMsg(null)
+    try {
+      const res = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePassword }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.ok) {
+        setDeleteMsg(data?.error ?? 'Verwijderen mislukt. Probeer het opnieuw.')
+        setDeleteBusy(false)
+        return
+      }
+      // Account gone — sign out locally and return to login
+      await createClient().auth.signOut().catch(() => {})
+      router.push('/login')
+      router.refresh()
+    } catch {
+      setDeleteMsg('Verwijderen mislukt. Probeer het opnieuw.')
+      setDeleteBusy(false)
+    }
   }
 
   function connectGoogleCalendar() {
@@ -518,9 +557,12 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     setSavedCalcTargetWeeks(calcTargetWeeks)
     setSavedMacroKcal(m.kcal); setSavedMacroProtein(m.protein)
     setSavedMacroCarbs(m.carbs); setSavedMacroFat(m.fat)
-    const today = new Date().toISOString().split('T')[0]
+    mutate(
+      (key) => typeof key === 'string' && key.startsWith('food-log-'),
+      (cur: any) => cur && cur.targets ? { ...cur, targets: { ...cur.targets, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat } } : cur,
+      { revalidate: true },
+    )
     mutate('food-log')
-    mutate(`food-log-${today}`)
     mutate('training')
     mutate('today')
     setCalcSaving(false)
@@ -540,9 +582,14 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
       .eq('user_id', userId)
     setSavedMacroKcal(kcal); setSavedMacroProtein(protein)
     setSavedMacroCarbs(carbs); setSavedMacroFat(fat)
-    const today = new Date().toISOString().split('T')[0]
+    // Optimistically patch the macro targets into every cached food-log day so the
+    // Food tab shows the new numbers immediately, without needing a reload.
+    mutate(
+      (key) => typeof key === 'string' && key.startsWith('food-log-'),
+      (cur: any) => cur && cur.targets ? { ...cur, targets: { ...cur.targets, kcal, protein, carbs, fat } } : cur,
+      { revalidate: true },
+    )
     mutate('food-log')
-    mutate(`food-log-${today}`)
     mutate('today')
     mutate('training')
     setManualSaving(false)
@@ -842,58 +889,73 @@ async function saveTraining() {
             </div>
           )}
 
-          {/* Password overlay */}
+          {/* Password overlay — two steps: verify current, then set new */}
           {editingPassword && (
             <div className="absolute inset-0 z-10 flex flex-col"
               style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
               <div className="flex items-center justify-between px-5 py-4 shrink-0">
-                <button onClick={() => { setEditingPassword(false); setEditMsg(null); setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm('') }}
+                <button onClick={() => {
+                    if (passwordStep === 'new') { setPasswordStep('current'); setEditMsg(null); setEditPassword(''); setEditPasswordConfirm(''); return }
+                    setEditingPassword(false); setEditMsg(null); setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm('')
+                  }}
                   className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
                   Back
                 </button>
                 <span className="text-[17px] font-semibold text-white">Wachtwoord</span>
-                <button onClick={savePassword} disabled={editSaving || !editCurrentPassword || !editPassword || !editPasswordConfirm}
-                  className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
-                  {editSaving ? '…' : 'Save'}
-                </button>
+                {passwordStep === 'current' ? (
+                  <button onClick={verifyCurrentPassword} disabled={editSaving || !editCurrentPassword}
+                    className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                    {editSaving ? '…' : 'Volgende'}
+                  </button>
+                ) : (
+                  <button onClick={savePassword} disabled={editSaving || !editPassword || !editPasswordConfirm}
+                    className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                    {editSaving ? '…' : 'Save'}
+                  </button>
+                )}
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
-                <ProfileSection title="Huidig wachtwoord">
-                  <ProfileRow>
-                    <input
-                      type="password"
-                      autoFocus
-                      value={editCurrentPassword}
-                      onChange={e => setEditCurrentPassword(e.target.value)}
-                      placeholder="Huidig wachtwoord"
-                      autoComplete="current-password"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
-                    />
-                  </ProfileRow>
-                </ProfileSection>
-                <ProfileSection title="Nieuw wachtwoord">
-                  <ProfileRow separator>
-                    <input
-                      type="password"
-                      value={editPassword}
-                      onChange={e => setEditPassword(e.target.value)}
-                      placeholder="Nieuw wachtwoord"
-                      autoComplete="new-password"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
-                    />
-                  </ProfileRow>
-                  <ProfileRow>
-                    <input
-                      type="password"
-                      value={editPasswordConfirm}
-                      onChange={e => setEditPasswordConfirm(e.target.value)}
-                      placeholder="Bevestig wachtwoord"
-                      autoComplete="new-password"
-                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
-                    />
-                  </ProfileRow>
-                </ProfileSection>
+                {passwordStep === 'current' ? (
+                  <ProfileSection title="Huidig wachtwoord">
+                    <ProfileRow>
+                      <input
+                        type="password"
+                        autoFocus
+                        value={editCurrentPassword}
+                        onChange={e => setEditCurrentPassword(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && editCurrentPassword) verifyCurrentPassword() }}
+                        placeholder="Huidig wachtwoord"
+                        autoComplete="current-password"
+                        className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                      />
+                    </ProfileRow>
+                  </ProfileSection>
+                ) : (
+                  <ProfileSection title="Nieuw wachtwoord">
+                    <ProfileRow separator>
+                      <input
+                        type="password"
+                        autoFocus
+                        value={editPassword}
+                        onChange={e => setEditPassword(e.target.value)}
+                        placeholder="Nieuw wachtwoord"
+                        autoComplete="new-password"
+                        className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                      />
+                    </ProfileRow>
+                    <ProfileRow>
+                      <input
+                        type="password"
+                        value={editPasswordConfirm}
+                        onChange={e => setEditPasswordConfirm(e.target.value)}
+                        placeholder="Bevestig wachtwoord"
+                        autoComplete="new-password"
+                        className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                      />
+                    </ProfileRow>
+                  </ProfileSection>
+                )}
                 {editMsg && (
                   <p className={`text-[14px] text-center px-1 ${editMsg.type === 'ok' ? 'text-teal-400' : 'text-red-400'}`}>
                     {editMsg.text}
@@ -1896,9 +1958,19 @@ async function saveTraining() {
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
               </ProfileRow>
+              <ProfileRow separator>
+                <button className="flex items-center justify-between w-full gap-3"
+                  onClick={() => { setEditEmail(email ?? ''); setEditMsg(null); setEditingEmail(true) }}>
+                  <span className="text-[17px] text-white shrink-0">Email</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[15px] text-white/40 truncate">{maskEmail(email ?? '—')}</span>
+                    <ChevronRight size={18} className="text-white/25 shrink-0" />
+                  </div>
+                </button>
+              </ProfileRow>
               <ProfileRow>
                 <button className="flex items-center justify-between w-full"
-                  onClick={() => { setEditPassword(''); setEditPasswordConfirm(''); setEditMsg(null); setEditingPassword(true) }}>
+                  onClick={() => { setPasswordStep('current'); setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm(''); setEditMsg(null); setEditingPassword(true) }}>
                   <span className="text-[17px] text-white">Password</span>
                   <ChevronRight size={18} className="text-white/25 shrink-0" />
                 </button>
@@ -1970,7 +2042,9 @@ async function saveTraining() {
                 </button>
               </ProfileRow>
               <ProfileRow>
-                <button className="w-full text-left py-0.5 text-[17px] font-medium text-red-400/50">
+                <button
+                  onClick={() => { setDeleteStep('password'); setDeletePassword(''); setDeleteMsg(null); setDeletingAccount(true) }}
+                  className="w-full text-left py-0.5 text-[17px] font-medium text-red-400">
                   Delete Account
                 </button>
               </ProfileRow>
@@ -2005,6 +2079,75 @@ async function saveTraining() {
               style={{ background: 'rgba(28,28,30,0.99)' }}>
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete account — step 1: password, step 2: confirm */}
+      {deletingAccount && (
+        <div className="fixed inset-0 z-[10001] flex flex-col"
+          style={{ background: 'rgb(5, 6, 8)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-5 py-4 shrink-0">
+            <button onClick={() => {
+                if (deleteStep === 'confirm') { setDeleteStep('password'); setDeleteMsg(null); return }
+                setDeletingAccount(false); setDeletePassword(''); setDeleteMsg(null)
+              }}
+              className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold"
+              style={{ background: 'rgba(255,255,255,0.10)' }}>
+              {deleteStep === 'confirm' ? 'Back' : 'Cancel'}
+            </button>
+            <span className="text-[17px] font-semibold text-white">Delete Account</span>
+            {deleteStep === 'password' ? (
+              <button onClick={() => { setDeleteMsg(null); setDeleteStep('confirm') }} disabled={!deletePassword}
+                className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
+                Volgende
+              </button>
+            ) : <div className="w-16" />}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
+            {deleteStep === 'password' ? (
+              <>
+                <ProfileSection title="Bevestig je wachtwoord">
+                  <ProfileRow>
+                    <input
+                      type="password"
+                      autoFocus
+                      value={deletePassword}
+                      onChange={e => setDeletePassword(e.target.value)}
+                      placeholder="Wachtwoord"
+                      autoComplete="current-password"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                    />
+                  </ProfileRow>
+                </ProfileSection>
+                <p className="text-[13px] text-white/40 px-1 leading-relaxed">
+                  Voer je wachtwoord in om door te gaan. In de volgende stap bevestig je het definitief verwijderen.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="rounded-[18px] px-4 py-4"
+                  style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.25)' }}>
+                  <p className="text-[15px] font-semibold text-red-400 mb-1.5">Weet je het zeker?</p>
+                  <p className="text-[13.5px] text-white/55 leading-relaxed">
+                    Dit verwijdert je account en <strong className="text-white/80">alle</strong> bijbehorende data
+                    permanent — voeding, trainingen, gezondheid, koppelingen en instellingen. Dit kan niet ongedaan
+                    worden gemaakt.
+                  </p>
+                </div>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteBusy}
+                  className="h-[54px] rounded-[16px] text-white font-semibold text-[16px] flex items-center justify-center disabled:opacity-50 active:scale-[0.98] transition-transform"
+                  style={{ background: 'rgb(220,38,38)' }}>
+                  {deleteBusy ? 'Verwijderen…' : 'Verwijder mijn account permanent'}
+                </button>
+              </>
+            )}
+            {deleteMsg && (
+              <p className="text-[14px] text-center px-1 text-red-400">{deleteMsg}</p>
+            )}
           </div>
         </div>
       )}

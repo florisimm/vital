@@ -4,7 +4,7 @@ import { SWRConfig } from 'swr'
 const STORAGE_KEY = 'kern-swr-v2'
 const TTL_MS = 24 * 60 * 60 * 1000
 
-const PERSIST_KEYS = new Set(['today', 'training', 'health-gezondheid', 'food-log', 'products'])
+const PERSIST_KEYS = new Set(['today', 'training', 'health-gezondheid', 'food-log', 'products', 'profile-services'])
 
 let cacheMap: Map<string, any> | null = null
 
