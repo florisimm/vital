@@ -20,8 +20,8 @@ import { MealsListView } from './MealsListView'
 
 type SheetView = 'options' | 'search' | 'detail' | 'scan' | 'meals' | 'create-meal' | 'meal-confirm' | 'custom-food'
 
-export function AddFoodSheet({ products, preselectedMeal, userId, today, totals, targets, onAdded, onClose }: {
-  products: Product[]; preselectedMeal: string; userId: string; today: string
+export function AddFoodSheet({ products, productsLoading, preselectedMeal, userId, today, totals, targets, onAdded, onClose }: {
+  products: Product[]; productsLoading?: boolean; preselectedMeal: string; userId: string; today: string
   totals: { kcal: number; protein: number; carbs: number; fat: number }
   targets: Targets
   onAdded: (entry: FoodLogEntry) => void; onClose: () => void
@@ -267,24 +267,35 @@ export function AddFoodSheet({ products, preselectedMeal, userId, today, totals,
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[16px] outline-none" />
             </div>
-            <div className="overflow-y-auto flex flex-col rounded-[16px] overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {filtered.map((p, i) => (
-                <button key={p.id}
-                  onClick={() => { setSelected(p); navigate('detail') }}
-                  className="flex items-center justify-between px-4 py-3.5 text-left"
-                  style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                  <div>
-                    <p className="text-[16px] font-semibold text-white">{cap(p.name)}</p>
-                    {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
-                    <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
-                    <ChevronRight size={14} className="text-white/20" />
-                  </div>
-                </button>
-              ))}
-            </div>
+            {productsLoading && products.length === 0 ? (
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="animate-pulse h-[58px] rounded-[14px]"
+                    style={{ background: 'rgba(255,255,255,0.06)' }} />
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-y-auto flex flex-col rounded-[16px] overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.06)' }}>
+                {filtered.length === 0 && search.trim() ? (
+                  <p className="px-4 py-5 text-[14px] text-white/30 text-center">No results for "{search}"</p>
+                ) : filtered.map((p, i) => (
+                  <button key={p.id}
+                    onClick={() => { setSelected(p); navigate('detail') }}
+                    className="flex items-center justify-between px-4 py-3.5 text-left"
+                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                    <div>
+                      <p className="text-[16px] font-semibold text-white">{cap(p.name)}</p>
+                      {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
+                      <ChevronRight size={14} className="text-white/20" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

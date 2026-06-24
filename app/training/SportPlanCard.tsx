@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { ArrowRight } from 'lucide-react'
 import {
   computeZones,
   computeWeekProgress,
@@ -240,6 +241,21 @@ export function SportPlanCard({
           <p className="text-[13px] text-green-400/80 leading-snug">Body is ready — push quality today</p>
         </div>
       )}
+
+      <a
+        href={SESSION_HREF[sport]}
+        className="mt-3 flex items-center justify-center gap-1.5 py-3 rounded-[14px] active:opacity-60 transition-opacity"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        <span className="text-[13px] text-white/40 font-medium">View session advice</span>
+        <ArrowRight size={13} className="text-white/25" />
+      </a>
     </div>
   )
+}
+
+const SESSION_HREF: Record<string, string> = {
+  running:  '/training/session?title=Easy+Run',
+  cycling:  '/training/session?title=Endurance+Ride',
+  swimming: '/training/session?title=Endurance+Swim',
 }

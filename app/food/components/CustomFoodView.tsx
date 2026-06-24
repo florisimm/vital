@@ -13,6 +13,8 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
 }) {
   const [form, setForm] = useState({ name: '', brand: '', kcal: '', protein: '', carbs: '', sugars: '', fat: '', caffeine: '', alcohol: '', barcode: '' })
   const [grams, setGrams] = useState('100')
+  const [portionG, setPortionG] = useState('')
+  const [portionLabel, setPortionLabel] = useState('')
   const [saving, setSaving] = useState(false)
 
   function set(key: string, val: string) { setForm(f => ({ ...f, [key]: val })) }
@@ -30,12 +32,17 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
     setSaving(true)
     try {
       const supabase = createClient()
+      const portionGN = Number(portionG)
+      const servings = portionGN > 0
+        ? [{ label: portionLabel.trim() || `${portionGN}g`, amount_g: portionGN }]
+        : null
       const { data: savedProduct } = await supabase.from('products').insert({
         user_id: userId, name: form.name.trim(), brand: form.brand || '',
         kcal: Number(form.kcal), protein: Number(form.protein), carbs: Number(form.carbs),
         sugars: Number(form.sugars), fat: Number(form.fat),
         caffeine: form.caffeine ? Number(form.caffeine) : null,
         alcohol: form.alcohol ? Number(form.alcohol) : null,
+        servings,
       }).select('id, name, brand, kcal, protein, carbs, fat, servings, barcode, image_url').single()
       const { data, error } = await supabase.from('food_log').insert({
         user_id: userId, date: today, meal_category: meal,
@@ -92,6 +99,19 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
             </div>
           </div>
         ))}
+      </div>
+
+      <p className="text-[12px] font-semibold text-white/40 uppercase tracking-widest -mb-1">Serving size (optional)</p>
+      <div className="flex gap-2">
+        <input type="text" placeholder="Label (e.g. 1 glass)" value={portionLabel} onChange={e => setPortionLabel(e.target.value)}
+          className="flex-1 h-[46px] px-4 rounded-[12px] text-white placeholder:text-white/25 text-[15px] outline-none"
+          style={{ background: 'rgba(255,255,255,0.07)' }} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <input type="number" inputMode="decimal" placeholder="0" value={portionG} onChange={e => setPortionG(e.target.value)}
+            className="w-20 h-[46px] px-3 rounded-[12px] text-white text-[15px] font-semibold outline-none text-right"
+            style={{ background: 'rgba(255,255,255,0.07)' }} />
+          <span className="text-[13px] text-white/40 pr-1">g</span>
+        </div>
       </div>
 
       <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.kcal}

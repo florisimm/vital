@@ -89,7 +89,7 @@ export function FoodClient() {
     () => fetchFoodData(selectedDate),
     { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000 }
   )
-  const { data: products = [] } = useSWR('products', fetchProducts, {
+  const { data: products = [], isLoading: productsLoading } = useSWR('products', fetchProducts, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
   })
@@ -401,6 +401,7 @@ export function FoodClient() {
       {showAddSheet && (
         <AddFoodSheet
           products={products}
+          productsLoading={productsLoading}
           preselectedMeal={preselectedMeal}
           userId={userId}
           today={selectedDate}
