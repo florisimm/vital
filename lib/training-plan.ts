@@ -131,19 +131,16 @@ function getWeekBounds(weekOffset = 0): { start: Date; end: Date } {
   return { start, end }
 }
 
-function classifyActivity(a: any, estimatedMaxHR: number, zones?: Zones): 'z2' | 'quality' | 'moderate' {
+function classifyActivity(a: any, estimatedMaxHR: number, zones?: Zones): 'z2' | 'quality' {
   const name = (a.name ?? '').toLowerCase()
 
   // 1. Keyword override — highest confidence
   if (Z2_KEYWORDS.some(kw => name.includes(kw))) return 'z2'
   if (QUALITY_KEYWORDS.some(kw => name.includes(kw))) return 'quality'
 
-  // 2. HR-based classification
+  // 2. HR-based: anything ≤82% maxHR counts as Zone 2 (zone 3 is polarized "no man's land")
   if (a.average_heartrate) {
-    const r = (a.average_heartrate as number) / estimatedMaxHR
-    if (r <= 0.75) return 'z2'
-    if (r >= 0.82) return 'quality'
-    return 'moderate' // 75-82% = grey zone, handled by caller
+    return (a.average_heartrate as number) / estimatedMaxHR <= 0.82 ? 'z2' : 'quality'
   }
 
   // 3. Speed-based fallback (if zone calibration available)
@@ -151,7 +148,7 @@ function classifyActivity(a: any, estimatedMaxHR: number, zones?: Zones): 'z2' |
     return (a.average_speed as number) <= (zones.z2Speed * 1.08) ? 'z2' : 'quality'
   }
 
-  // 4. Default to Zone 2 when nothing else tells us (unknown intensity = likely easy)
+  // 4. Default to Zone 2
   return 'z2'
 }
 
@@ -181,7 +178,6 @@ export function computeWeekProgress(
     if (durationMin < 5) continue
 
     const zone = classifyActivity(a, estimated, zones)
-    // 'moderate' (75-82% HR) counts toward quality in the polarized model
     if (zone === 'z2') z2Minutes += durationMin
     else qualityMinutes += durationMin
   }

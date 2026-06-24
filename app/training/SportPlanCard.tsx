@@ -242,20 +242,28 @@ export function SportPlanCard({
         </div>
       )}
 
-      <a
-        href={SESSION_HREF[sport]}
-        className="mt-3 flex items-center justify-center gap-1.5 py-3 rounded-[14px] active:opacity-60 transition-opacity"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-      >
-        <span className="text-[13px] text-white/40 font-medium">View session advice</span>
-        <ArrowRight size={13} className="text-white/25" />
-      </a>
+      <div className="mt-3 flex gap-2">
+        {SESSION_LINKS[sport]?.map(({ label, href }) => (
+          <a
+            key={href}
+            href={href}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-[14px] active:opacity-60 transition-opacity"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <span className="text-[13px] text-white/40 font-medium">{label}</span>
+            <ArrowRight size={13} className="text-white/25" />
+          </a>
+        ))}
+      </div>
     </div>
   )
 }
 
-const SESSION_HREF: Record<string, string> = {
-  running:  '/training/session?title=Easy+Run',
-  cycling:  '/training/session?title=Endurance+Ride',
-  swimming: '/training/session?title=Endurance+Swim',
+const SESSION_LINKS: Record<string, Array<{ label: string; href: string }>> = {
+  running:  [{ label: 'Session advice', href: '/training/session?title=Easy+Run' }],
+  cycling:  [
+    { label: 'Zone 2 ride',        href: '/training/session?title=Endurance+Ride' },
+    { label: 'Interval training',  href: '/training/session?title=Interval+Training' },
+  ],
+  swimming: [{ label: 'Session advice', href: '/training/session?title=Endurance+Swim' }],
 }
