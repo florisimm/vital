@@ -1,5 +1,3 @@
-import { computeAdvice } from './training-algorithm'
-
 export type Zones = {
   z2Speed: number | null
   thresholdSpeed: number | null
@@ -18,77 +16,143 @@ export type ZoneProgress = {
   qualityMinutes: number
 }
 
+// All Strava sport_type values, normalized (lowercase, underscores stripped)
 const SPORT_TYPES: Record<string, string[]> = {
-  running:  ['run', 'virtualrun', 'trailrun'],
-  cycling:  ['ride', 'virtualride', 'ebikeride', 'gravelride', 'mountainbikeride'],
-  swimming: ['swim'],
+  running:  ['run', 'virtualrun', 'trailrun', 'treadmill', 'track', 'ultrarun'],
+  cycling:  ['ride', 'virtualride', 'ebikeride', 'gravelride', 'mountainbikeride', 'handcycle', 'velomobile', 'cycling'],
+  swimming: ['swim', 'openwaterswim', 'poolswim'],
+  gym:      ['weighttraining', 'workout', 'crossfit', 'elliptical', 'stairstepper', 'yoga', 'pilates', 'rowing', 'highintensityintervaltraining', 'coreandflexibility', 'hiit'],
 }
 
+// Dutch + English keywords for aerobic/Zone 2 effort (positive signal)
+const Z2_KEYWORDS = [
+  'easy', 'zone 2', 'zone2', 'z2', 'endurance', 'aerobic', 'base', 'recovery',
+  'duurloop', 'rustig', 'rustige', 'lsd', 'lange duur', 'duur', 'herstel',
+  'aerobe', 'basisuithouding', 'ontspannen', 'long run', 'long ride', 'lange rit',
+  'slow', 'conversational', 'foundation',
+]
+
+// Dutch + English keywords for quality/high-intensity effort
+const QUALITY_KEYWORDS = [
+  'interval', 'intervals', 'tempo', 'ftp', 'speed', 'vo2', 'threshold', 'drempel',
+  'race', 'wedstrijd', 'koers', 'tijdrit', 'time trial',
+  'repeat', 'repeats', 'sprint', 'strides', 'surge', 'progressie', 'progression',
+  'lactate', 'lactaat', 'anaerob', 'sweetspot', 'sweet spot', 'above threshold',
+  '4x', '5x', '6x', '8x', '10x', '12x', 'wvo2', 'watt', 'tt ',
+]
+
 function normalizeSport(s: string): string {
-  return s.toLowerCase().replace(/_/g, '')
+  return s.toLowerCase().replace(/[_ ]/g, '')
+}
+
+function matchesSport(sportType: string, sport: string): boolean {
+  const norm = normalizeSport(sportType)
+  return (SPORT_TYPES[sport] ?? []).includes(norm)
+}
+
+// Use the 95th-percentile average HR divided by a conservative factor to estimate maxHR.
+// This is more robust than using the single highest value (which may be an anomaly).
+function estimateMaxHR(activities: any[], provided?: number): number {
+  if (provided) return provided
+  const hrs = activities
+    .map(a => a.average_heartrate as number)
+    .filter(Boolean)
+    .sort((a, b) => a - b)
+  if (hrs.length === 0) return 190
+  // Hard steady efforts land ~88% of maxHR; we sample the 95th percentile to stay robust
+  const idx = Math.min(Math.floor(hrs.length * 0.95), hrs.length - 1)
+  return Math.round(hrs[idx] / 0.88)
 }
 
 export function computeZones(activities: any[], sport: string, maxHR?: number): Zones {
-  const types = SPORT_TYPES[sport] ?? []
-  const sportActs = activities.filter(a => types.includes(normalizeSport(a.sport_type ?? '')))
-  const withHR = sportActs.filter(a => a.average_heartrate && a.average_speed)
+  const sportActs = activities.filter(a => matchesSport(a.sport_type ?? '', sport))
+  const withHR    = sportActs.filter(a => a.average_heartrate && a.average_speed)
   const longestDist = sportActs.length > 0 ? Math.max(...sportActs.map(a => a.distance ?? 0)) : 0
 
   if (withHR.length < 3) {
     return { z2Speed: null, thresholdSpeed: null, longDist: longestDist > 0 ? longestDist : null }
   }
 
-  const estimatedMaxHR = maxHR ?? Math.round(
-    Math.max(...withHR.map(a => a.average_heartrate as number)) / 0.92
-  )
-  const avgSpd = (arr: typeof withHR) =>
+  const estimated = estimateMaxHR(withHR, maxHR)
+  const avg = (arr: typeof withHR) =>
     arr.length ? arr.reduce((s, a) => s + (a.average_speed as number), 0) / arr.length : null
 
-  const z2Acts = withHR.filter(a => {
-    const r = (a.average_heartrate as number) / estimatedMaxHR
-    return r >= 0.60 && r <= 0.72
+  // Zone 2: 60-75% maxHR (aerobic base)
+  const z2Acts  = withHR.filter(a => {
+    const r = (a.average_heartrate as number) / estimated
+    return r >= 0.60 && r <= 0.75
   })
+  // Threshold / Zone 4: 83-92% maxHR
   const thrActs = withHR.filter(a => {
-    const r = (a.average_heartrate as number) / estimatedMaxHR
-    return r >= 0.83 && r <= 0.92
+    const r = (a.average_heartrate as number) / estimated
+    return r >= 0.83 && r <= 0.95
   })
 
   return {
-    z2Speed: avgSpd(z2Acts),
-    thresholdSpeed: avgSpd(thrActs),
-    longDist: longestDist > 0 ? longestDist : null,
+    z2Speed:        avg(z2Acts),
+    thresholdSpeed: avg(thrActs),
+    longDist:       longestDist > 0 ? longestDist : null,
   }
+}
+
+// Derive avg session duration from real history; falls back to sport-specific defaults.
+function historicalAvgSessionMin(activities: any[], sport: string): number {
+  const DEFAULTS: Record<string, number> = { running: 50, cycling: 75, swimming: 45, gym: 60 }
+  const sportActs = activities
+    .filter(a => matchesSport(a.sport_type ?? '', sport) && (a.moving_time ?? 0) > 600)
+  if (sportActs.length === 0) return DEFAULTS[sport] ?? 50
+  const total = sportActs.reduce((s: number, a: any) => s + (a.moving_time as number), 0)
+  return Math.round(total / sportActs.length / 60)
 }
 
 export function suggestZoneTargets(sport: string, freq: number, activities?: any[]): ZoneTargets {
   if (freq === 0) return { z2Minutes: 0, qualityMinutes: 0 }
 
-  let avgSessionMin = 50
-  if (activities?.length && (sport === 'running' || sport === 'cycling')) {
-    const titleMap: Record<string, string> = { running: 'Easy Run', cycling: 'Endurance Ride' }
-    const res = computeAdvice(sport as 'running' | 'cycling', activities, titleMap[sport])
-    avgSessionMin = res.advice.durationMin
-  }
+  const avgMin    = historicalAvgSessionMin(activities ?? [], sport)
+  const totalMin  = freq * avgMin
 
-  const totalMin = freq * avgSessionMin
-  const z2Minutes = Math.max(30, Math.round((totalMin * 0.80) / 15) * 15)
-  const qualityMinutes = Math.max(15, Math.round((totalMin * 0.20) / 15) * 15)
+  // Polarized model: 80% aerobic base, 20% quality — rounded to nearest 5 min
+  const z2Minutes      = Math.max(30, Math.round((totalMin * 0.80) / 5) * 5)
+  const qualityMinutes = Math.max(15, Math.round((totalMin * 0.20) / 5) * 5)
   return { z2Minutes, qualityMinutes }
 }
 
 function getWeekBounds(weekOffset = 0): { start: Date; end: Date } {
-  const now = new Date()
-  const day = now.getDay()
-  const diffToMon = day === 0 ? -6 : 1 - day
-  const thisMonday = new Date(now)
-  thisMonday.setDate(now.getDate() + diffToMon)
-  thisMonday.setHours(0, 0, 0, 0)
+  const now       = new Date()
+  const diffToMon = now.getDay() === 0 ? -6 : 1 - now.getDay()
+  const monday    = new Date(now)
+  monday.setDate(now.getDate() + diffToMon)
+  monday.setHours(0, 0, 0, 0)
 
-  const start = new Date(thisMonday)
+  const start = new Date(monday)
   start.setDate(start.getDate() + weekOffset * 7)
   const end = new Date(start)
   end.setDate(end.getDate() + 7)
   return { start, end }
+}
+
+function classifyActivity(a: any, estimatedMaxHR: number, zones?: Zones): 'z2' | 'quality' | 'moderate' {
+  const name = (a.name ?? '').toLowerCase()
+
+  // 1. Keyword override — highest confidence
+  if (Z2_KEYWORDS.some(kw => name.includes(kw))) return 'z2'
+  if (QUALITY_KEYWORDS.some(kw => name.includes(kw))) return 'quality'
+
+  // 2. HR-based classification
+  if (a.average_heartrate) {
+    const r = (a.average_heartrate as number) / estimatedMaxHR
+    if (r <= 0.75) return 'z2'
+    if (r >= 0.82) return 'quality'
+    return 'moderate' // 75-82% = grey zone, handled by caller
+  }
+
+  // 3. Speed-based fallback (if zone calibration available)
+  if (zones?.z2Speed && a.average_speed) {
+    return (a.average_speed as number) <= (zones.z2Speed * 1.08) ? 'z2' : 'quality'
+  }
+
+  // 4. Default to Zone 2 when nothing else tells us (unknown intensity = likely easy)
+  return 'z2'
 }
 
 export function computeWeekProgress(
@@ -98,39 +162,27 @@ export function computeWeekProgress(
   maxHR?: number,
   weekOffset = 0,
 ): ZoneProgress {
-  const { start: weekStart, end: weekEnd } = getWeekBounds(weekOffset)
-  const types = SPORT_TYPES[sport] ?? []
+  const { start, end } = getWeekBounds(weekOffset)
 
   const weekActs = activities.filter(a => {
     if (!a.start_date) return false
     const d = new Date(a.start_date)
-    return d >= weekStart && d < weekEnd && types.includes(normalizeSport(a.sport_type ?? ''))
+    return d >= start && d < end && matchesSport(a.sport_type ?? '', sport)
   })
 
-  const allWithHR = activities.filter(a => a.average_heartrate)
-  const estimatedMaxHR = maxHR ?? (allWithHR.length > 0
-    ? Math.round(Math.max(...allWithHR.map(a => a.average_heartrate as number)) / 0.92)
-    : 190)
+  // Estimate maxHR from ALL activities (broader sample = better estimate)
+  const estimated = estimateMaxHR(activities.filter(a => a.average_heartrate), maxHR)
 
-  let z2Minutes = 0
+  let z2Minutes      = 0
   let qualityMinutes = 0
 
   for (const a of weekActs) {
     const durationMin = Math.round((a.moving_time ?? 0) / 60)
     if (durationMin < 5) continue
 
-    let isZone2: boolean
-    if (a.average_heartrate) {
-      isZone2 = (a.average_heartrate as number) / estimatedMaxHR < 0.75
-    } else if (zones?.z2Speed && a.average_speed) {
-      isZone2 = (a.average_speed as number) <= (zones.z2Speed ?? 0) * 1.05
-    } else {
-      const name = (a.name ?? '').toLowerCase()
-      const qualityKw = ['interval', 'tempo', 'ftp', 'speed', 'vo2', 'threshold', 'race', 'repeat', 'sprint']
-      isZone2 = !qualityKw.some(kw => name.includes(kw))
-    }
-
-    if (isZone2) z2Minutes += durationMin
+    const zone = classifyActivity(a, estimated, zones)
+    // 'moderate' (75-82% HR) counts toward quality in the polarized model
+    if (zone === 'z2') z2Minutes += durationMin
     else qualityMinutes += durationMin
   }
 
@@ -139,11 +191,11 @@ export function computeWeekProgress(
 
 export function applyWeeklyProgression(targets: ZoneTargets, adherencePct: number): ZoneTargets {
   if (adherencePct < 60) return targets
-  const factor = adherencePct >= 90 ? 1.05 : 1.0
+  const factor       = adherencePct >= 90 ? 1.05 : 1.0
   const maxIncrement = 15
   return {
     ...targets,
-    z2Minutes: Math.round(Math.min(targets.z2Minutes * factor, targets.z2Minutes + maxIncrement) / 5) * 5,
+    z2Minutes:      Math.round(Math.min(targets.z2Minutes * factor,      targets.z2Minutes      + maxIncrement) / 5) * 5,
     qualityMinutes: Math.round(Math.min(targets.qualityMinutes * factor, targets.qualityMinutes + maxIncrement) / 5) * 5,
   }
 }
