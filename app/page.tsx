@@ -270,21 +270,16 @@ function buildLifestyleFocus({
     variableTips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
   }
 
-  // ── Fixed bedtime tips — always the last 4 ──
+  // Minutes until bedtime (wraps correctly across midnight)
+  const minsUntilBed = ((bedtimeMins - nowMins) + 1440) % 1440
+
+  // ── Fixed bedtime tips ──
   const fixed: FocusTip[] = []
 
-  // 1. Bedtime
+  // 1. Bedtime — always visible
   fixed.push({ emoji: '🌙', label: `Go to sleep by ${bedtimeStr}`, sub: `${neededLabel} — ${bedtimeSub}` })
 
-  // 2. No more eating (3h before bedtime)
-  const eatCutoffMins = ((bedtimeMins - 180) + 1440) % 1440
-  if (isPast(eatCutoffMins)) {
-    fixed.push({ emoji: '🍽️', label: 'No more food tonight', sub: 'Digestion disrupts deep sleep' })
-  } else {
-    fixed.push({ emoji: '🍽️', label: `Last meal by ${fmtMins(eatCutoffMins)}`, sub: '3h before sleep — aids digestion' })
-  }
-
-  // 3. No more coffee
+  // 2. Coffee — always visible
   if (coffeeCount > 0) {
     if (hoursUntilCaff <= 0) {
       fixed.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg caffeine still active at bedtime` })
@@ -297,12 +292,19 @@ function buildLifestyleFocus({
     fixed.push({ emoji: '☕', label: `No coffee after ${caffCutoffStr}`, sub: `Caffeine cutoff for ${bedtimeStr} bedtime` })
   }
 
-  // 4. No screens (1h before bedtime)
-  const screenCutoffMins = ((bedtimeMins - 60) + 1440) % 1440
-  if (isPast(screenCutoffMins)) {
+  // 3. No more eating — only within 3h of bedtime
+  if (minsUntilBed <= 180) {
+    fixed.push({ emoji: '🍽️', label: 'No more food tonight', sub: 'Digestion disrupts deep sleep' })
+  }
+
+  // 4. No more drinks — only within 2h of bedtime
+  if (minsUntilBed <= 120) {
+    fixed.push({ emoji: '💧', label: 'Stop drinking now', sub: 'No fluids 2h before sleep — prevents waking up at night' })
+  }
+
+  // 5. No screens — only within 1h of bedtime
+  if (minsUntilBed <= 60) {
     fixed.push({ emoji: '📵', label: 'Put your phone down', sub: 'Blue light suppresses melatonin' })
-  } else {
-    fixed.push({ emoji: '📵', label: `No screens after ${fmtMins(screenCutoffMins)}`, sub: '1h before sleep — blue light disrupts melatonin' })
   }
 
   return [...variableTips.slice(0, 2), ...fixed]
