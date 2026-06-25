@@ -4,9 +4,11 @@
 export type Activity = {
   id: number; name: string; sport_type: string; start_date: string
   distance: number | null; moving_time: number | null; elapsed_time: number | null
-  total_elevation_gain: number | null; average_speed: number | null
-  average_heartrate: number | null; average_cadence: number | null; kilojoules: number | null
+  total_elevation_gain: number | null; average_speed: number | null; max_speed?: number | null
+  average_heartrate: number | null; max_heartrate?: number | null
+  average_cadence: number | null; kilojoules: number | null
   average_watts?: number | null; weighted_average_watts?: number | null
+  suffer_score?: number | null; map_polyline?: string | null
 }
 
 export type HevyWorkout = {

@@ -1153,6 +1153,54 @@ function normalCDF(x: number, mu: number, sigma: number): number {
   return 0.5 * (1 + erf)
 }
 
+function decodePolyline(encoded: string): [number, number][] {
+  const coords: [number, number][] = []
+  let idx = 0, lat = 0, lng = 0
+  while (idx < encoded.length) {
+    let b: number, shift = 0, result = 0
+    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5 } while (b >= 0x20)
+    lat += result & 1 ? ~(result >> 1) : result >> 1
+    shift = 0; result = 0
+    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5 } while (b >= 0x20)
+    lng += result & 1 ? ~(result >> 1) : result >> 1
+    coords.push([lat / 1e5, lng / 1e5])
+  }
+  return coords
+}
+
+function RouteMapSVG({ polyline }: { polyline: string }) {
+  const coords = decodePolyline(polyline)
+  if (coords.length < 2) return null
+  const lats = coords.map(c => c[0])
+  const lngs = coords.map(c => c[1])
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
+  const latSpan = maxLat - minLat || 0.001
+  const lngSpan = maxLng - minLng || 0.001
+  const pad = 0.1
+  const pts = coords.map(([lat, lng]) => {
+    const x = pad * 100 + ((lng - minLng) / lngSpan) * 100 * (1 - 2 * pad)
+    const y = 100 - (pad * 100 + ((lat - minLat) / latSpan) * 100 * (1 - 2 * pad))
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  const [sx, sy] = pts.split(' ')[0].split(',').map(Number)
+  const lastPt = pts.split(' ').at(-1)!
+  const [ex, ey] = lastPt.split(',').map(Number)
+  return (
+    <div className="rounded-[18px] overflow-hidden relative" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="w-full" style={{ height: 200, display: 'block' }}>
+        <polyline points={pts} fill="none" stroke="rgba(45,212,191,0.9)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <circle cx={sx} cy={sy} r="3" fill="rgb(45,212,191)" vectorEffect="non-scaling-stroke" />
+        <circle cx={ex} cy={ey} r="3" fill="rgb(251,146,60)" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="absolute bottom-3 left-3 flex gap-3 text-[11px] font-medium">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-400 inline-block" /> Start</span>
+        <span className="flex items-center gap-1 text-orange-400"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" /> Finish</span>
+      </div>
+    </div>
+  )
+}
+
 function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
   const t = (a.sport_type ?? '').toLowerCase()
   const isRide = t.includes('ride') || t.includes('cycl')
@@ -1162,30 +1210,41 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
     ? isSwimA ? `${Math.round(a.distance)} m` : `${distKm!.toFixed(2)} km`
     : null
   const pace = !isRide && !isSwimA && a.average_speed ? formatPace(a.average_speed) : null
+  const maxPace = !isRide && !isSwimA && a.max_speed ? formatPace(a.max_speed) : null
   const speed = isRide && a.average_speed ? `${(a.average_speed * 3.6).toFixed(1)} km/h` : null
+  const maxSpeed = isRide && a.max_speed ? `${(a.max_speed * 3.6).toFixed(1)} km/h` : null
   const swimPace = isSwimA && a.distance && a.moving_time
     ? (() => { const s = a.moving_time / a.distance * 100; return `${Math.floor(s / 60)}:${Math.round(s % 60).toString().padStart(2, '0')}` })()
     : null
   const dur = a.moving_time ? formatDuration(a.moving_time) : null
+  const restSecs = (a.elapsed_time ?? 0) - (a.moving_time ?? 0)
+  const rest = restSecs > 60 ? formatDuration(restSecs) : null
   const elev = a.total_elevation_gain && a.total_elevation_gain > 0 ? `${Math.round(a.total_elevation_gain)} m` : null
   const hr = a.average_heartrate ? `${Math.round(a.average_heartrate)} bpm` : null
+  const maxHr = a.max_heartrate ? `${Math.round(a.max_heartrate)} bpm` : null
   const cadence = a.average_cadence
     ? isRide ? `${Math.round(a.average_cadence)} rpm` : `${Math.round(a.average_cadence * 2)} spm`
     : null
   const kj = a.kilojoules && a.kilojoules > 0 ? `${Math.round(a.kilojoules)} kJ` : null
   const watts = (a.average_watts ?? 0) > 0 ? `${Math.round(a.average_watts!)} W` : (a.weighted_average_watts ?? 0) > 0 ? `${Math.round(a.weighted_average_watts!)} W NP` : null
+  const suffer = a.suffer_score ? `${a.suffer_score}` : null
 
   const tiles = [
-    dist    && { label: 'Distance',  value: dist,           color: 'text-white' },
-    pace    && { label: 'Pace',      value: `${pace} /km`,  color: 'text-teal-400' },
-    speed   && { label: 'Avg Speed', value: speed,          color: 'text-cyan-400' },
-    swimPace && { label: 'Pace',     value: `${swimPace} /100m`, color: 'text-blue-400' },
-    dur     && { label: 'Duration',  value: dur,            color: 'text-white' },
-    elev    && { label: 'Elevation', value: `↑ ${elev}`,   color: 'text-orange-400' },
-    hr      && { label: 'Avg HR',    value: hr,             color: 'text-red-400' },
-    cadence && { label: 'Cadence',   value: cadence,        color: 'text-white/70' },
-    kj      && { label: 'Energy',    value: kj,             color: 'text-yellow-400' },
-    watts   && { label: 'Power',     value: watts,          color: 'text-purple-400' },
+    dist     && { label: 'Distance',   value: dist,              color: 'text-white' },
+    pace     && { label: 'Avg Pace',   value: `${pace} /km`,     color: 'text-teal-400' },
+    maxPace  && { label: 'Best Pace',  value: `${maxPace} /km`,  color: 'text-teal-300' },
+    speed    && { label: 'Avg Speed',  value: speed,             color: 'text-cyan-400' },
+    maxSpeed && { label: 'Max Speed',  value: maxSpeed,          color: 'text-cyan-300' },
+    swimPace && { label: 'Pace',       value: `${swimPace} /100m`, color: 'text-blue-400' },
+    dur      && { label: 'Moving Time',value: dur,               color: 'text-white' },
+    rest     && { label: 'Rest',       value: rest,              color: 'text-white/50' },
+    elev     && { label: 'Elevation',  value: `↑ ${elev}`,      color: 'text-orange-400' },
+    hr       && { label: 'Avg HR',     value: hr,                color: 'text-red-400' },
+    maxHr    && { label: 'Max HR',     value: maxHr,             color: 'text-red-300' },
+    cadence  && { label: 'Cadence',    value: cadence,           color: 'text-white/70' },
+    kj       && { label: 'Energy',     value: kj,                color: 'text-yellow-400' },
+    watts    && { label: 'Power',      value: watts,             color: 'text-purple-400' },
+    suffer   && { label: 'Suffer Score', value: suffer,          color: 'text-orange-400' },
   ].filter(Boolean) as { label: string; value: string; color: string }[]
 
   // HR zone breakdown using Gaussian model (σ=12 bpm around average HR)
@@ -1209,51 +1268,81 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
     })).filter(z => z.pct > 0)
   })()
 
+  const hasMap = !!(a.map_polyline && a.map_polyline.length > 4)
+  const emoji = isSwimA ? '🏊' : isRide ? '🚴' : '🏃'
+
   return (
     <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
+      {/* Nav */}
       <div className="flex items-center justify-between px-5 py-4 shrink-0">
         <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
-        <span className="text-[17px] font-semibold text-white">{isSwimA ? '🏊 Swim' : isRide ? '🚴 Ride' : '🏃 Run'}</span>
+        <span className="text-[17px] font-semibold text-white">{emoji} {isSwimA ? 'Swim' : isRide ? 'Ride' : 'Run'}</span>
         <a
           href={`https://www.strava.com/activities/${a.id}`}
           target="_blank" rel="noopener noreferrer"
           className="px-3 h-[34px] rounded-full text-[13px] font-semibold flex items-center"
           style={{ background: 'rgba(252,100,45,0.18)', color: '#fc642d', border: '1px solid rgba(252,100,45,0.35)' }}
         >
-          Strava
+          Strava ↗
         </a>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 pb-12" style={{ scrollbarWidth: 'none' }}>
-        <div className="flex flex-col gap-5">
-          <div>
-            <span className="text-[22px] font-bold text-white leading-snug">{a.name}</span>
-            <p className="text-[13px] text-white/40 mt-0.5">{formatDate(a.start_date)}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {tiles.map((m, i) => (
-              <div key={i} className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">{m.label}</span>
-                <span className={`text-[22px] font-bold leading-none ${m.color}`}>{m.value}</span>
-              </div>
-            ))}
-          </div>
-          {hrZones && (
-            <div className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate Zones (est.)</span>
+
+      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
+        {/* Title */}
+        <div>
+          <span className="text-[22px] font-bold text-white leading-snug">{a.name}</span>
+          <p className="text-[13px] text-white/40 mt-0.5">{formatDate(a.start_date)}</p>
+        </div>
+
+        {/* Route map */}
+        {hasMap && <RouteMapSVG polyline={a.map_polyline!} />}
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-3">
+          {tiles.map((m, i) => (
+            <div key={i} className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">{m.label}</span>
+              <span className={`text-[22px] font-bold leading-none ${m.color}`}>{m.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* HR zones */}
+        {hrZones && (
+          <div className="p-4 rounded-[18px] flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate Zones</span>
+              <span className="text-[11px] text-white/30">estimated</span>
+            </div>
+
+            {/* Stacked zone bar */}
+            <div className="h-4 rounded-full flex overflow-hidden gap-[2px]">
               {hrZones.map(z => (
-                <div key={z.label} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-medium" style={{ color: z.color }}>{z.label}</span>
-                    <span className="text-[13px] text-white/50">{z.minutes} min · {z.pct}%</span>
-                  </div>
-                  <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${z.pct}%`, background: z.color }} />
-                  </div>
+                <div key={z.label} className="h-full rounded-sm first:rounded-l-full last:rounded-r-full" style={{ width: `${z.pct}%`, background: z.color }} />
+              ))}
+            </div>
+
+            {/* Zone rows */}
+            <div className="flex flex-col gap-2.5">
+              {hrZones.map(z => (
+                <div key={z.label} className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: z.color }} />
+                  <span className="text-[13px] text-white/70 flex-1">{z.label}</span>
+                  <span className="text-[13px] font-semibold text-white">{z.minutes} min</span>
+                  <span className="text-[12px] text-white/40 w-8 text-right">{z.pct}%</span>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+
+            {/* HR range if both avg + max available */}
+            {hr && maxHr && (
+              <div className="pt-1 border-t border-white/[0.07] flex justify-between text-[12px] text-white/40">
+                <span>Avg {hr}</span>
+                <span>Max {maxHr}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
