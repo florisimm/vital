@@ -163,16 +163,34 @@ export function FoodClient() {
       )
       if (!isDupe) deduped.push(a)
     }
-    return Math.round(deduped.reduce((sum, a) => {
-      if (a.kilojoules && a.kilojoules > 0) return sum + a.kilojoules
+    const WEIGHT_KG = 75
+    function metKcal(a: (typeof deduped)[0]): number {
+      if (a.kilojoules && a.kilojoules > 0) return a.kilojoules
       const sport = (a.sport_type ?? '').toLowerCase()
-      const distKm = (a.distance ?? 0) / 1000
-      const mins = (a.moving_time ?? 0) / 60
-      if (sport.includes('run')) return sum + distKm * 65
-      if (sport.includes('ride') || sport.includes('cycl')) return sum + distKm * 30
-      if (sport.includes('swim')) return sum + distKm * 400
-      return sum + (mins / 60) * 400
-    }, 0))
+      const hours = (a.moving_time ?? 0) / 3600
+      const kmh = a.average_speed ? a.average_speed * 3.6 : 0
+      let met: number
+      if (sport.includes('ride') || sport.includes('cycl')) {
+        if (kmh < 16) met = 4.0
+        else if (kmh < 20) met = 6.0
+        else if (kmh < 24) met = 8.0
+        else if (kmh < 28) met = 10.0
+        else if (kmh < 32) met = 12.0
+        else met = 15.8
+      } else if (sport.includes('run')) {
+        if (kmh < 8)  met = 7.0
+        else if (kmh < 10) met = 8.5
+        else if (kmh < 12) met = 10.0
+        else if (kmh < 14) met = 11.5
+        else met = 13.5
+      } else if (sport.includes('swim')) {
+        met = 6.0
+      } else {
+        met = 5.0
+      }
+      return met * WEIGHT_KG * hours
+    }
+    return Math.round(deduped.reduce((sum, a) => sum + metKcal(a), 0))
   }, [trainingData, selectedDate])
 
   async function deleteEntry(id: string) {
