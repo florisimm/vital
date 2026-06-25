@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { Check, ChevronRight } from 'lucide-react'
 import { fetchServices, openDevices, type Services } from '@/lib/services'
@@ -11,14 +12,41 @@ const ITEMS: { key: keyof Services; emoji: string; label: string; desc: string }
   { key: 'google', emoji: '📅', label: 'Google Calendar', desc: 'Your training schedule' },
 ]
 
+// Sticky flag: once everything has been connected once, never show the checklist
+// again — not even briefly. This stops the card from flashing big on the Today
+// page while services revalidate in the background.
+const SETUP_DONE_KEY = 'kern-setup-complete'
+
 // Onboarding nudge on the Today tab: shows which data sources are still missing
 // and links straight into the connect screen. Disappears once everything is
 // connected so it never nags an established user.
 export function SetupChecklist() {
-  const { data: services } = useSWR('profile-services', fetchServices, {
+  // done: null = haven't checked localStorage yet, false = show if incomplete,
+  // true = fully connected before → render nothing and never fetch again.
+  const [done, setDone] = useState<boolean | null>(null)
+  useEffect(() => {
+    try { setDone(localStorage.getItem(SETUP_DONE_KEY) === '1') } catch { setDone(false) }
+  }, [])
+
+  // Only fetch services while we still need to nudge the user (done === false).
+  const { data: services } = useSWR(done === false ? 'profile-services' : null, fetchServices, {
     revalidateOnFocus: false, dedupingInterval: 300_000,
   })
 
+  const isAllConnected = (s: Services) =>
+    ITEMS.every(i => i.key === 'fitbit' ? s.fitbit && !s.fitbitNeedsReconnect : !!s[i.key])
+
+  // Persist the sticky flag the moment everything is connected.
+  useEffect(() => {
+    if (services && isAllConnected(services)) {
+      try { localStorage.setItem(SETUP_DONE_KEY, '1') } catch {}
+      setDone(true)
+    }
+  }, [services])
+
+  // Render nothing until we know we still need the checklist (done === false).
+  // This avoids any flash on initial load and on already-set-up devices.
+  if (done !== false) return null
   if (!services) return null
   // Google Health can be "connected" yet have a dead refresh token — treat that
   // as not-done so the checklist nudges a reconnect instead of showing green.
