@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import useSWR from 'swr'
@@ -19,6 +20,8 @@ import { openDevices } from '@/lib/services'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
 import { InjuryToggle } from '@/components/InjuryToggle'
+
+const RouteMap = dynamic(() => import('./session/RouteMap').then(m => m.RouteMap), { ssr: false, loading: () => <div className="h-[240px] rounded-[18px]" style={{ background: 'rgba(255,255,255,0.04)' }} /> })
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1168,35 +1171,12 @@ function decodePolyline(encoded: string): [number, number][] {
   return coords
 }
 
-function RouteMapSVG({ polyline }: { polyline: string }) {
+function ActivityRouteMap({ polyline }: { polyline: string }) {
   const coords = decodePolyline(polyline)
   if (coords.length < 2) return null
-  const lats = coords.map(c => c[0])
-  const lngs = coords.map(c => c[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
-  const latSpan = maxLat - minLat || 0.001
-  const lngSpan = maxLng - minLng || 0.001
-  const pad = 0.1
-  const pts = coords.map(([lat, lng]) => {
-    const x = pad * 100 + ((lng - minLng) / lngSpan) * 100 * (1 - 2 * pad)
-    const y = 100 - (pad * 100 + ((lat - minLat) / latSpan) * 100 * (1 - 2 * pad))
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-  const [sx, sy] = pts.split(' ')[0].split(',').map(Number)
-  const lastPt = pts.split(' ').at(-1)!
-  const [ex, ey] = lastPt.split(',').map(Number)
   return (
-    <div className="rounded-[18px] overflow-hidden relative" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="w-full" style={{ height: 200, display: 'block' }}>
-        <polyline points={pts} fill="none" stroke="rgba(45,212,191,0.9)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        <circle cx={sx} cy={sy} r="3" fill="rgb(45,212,191)" vectorEffect="non-scaling-stroke" />
-        <circle cx={ex} cy={ey} r="3" fill="rgb(251,146,60)" vectorEffect="non-scaling-stroke" />
-      </svg>
-      <div className="absolute bottom-3 left-3 flex gap-3 text-[11px] font-medium">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-400 inline-block" /> Start</span>
-        <span className="flex items-center gap-1 text-orange-400"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" /> Finish</span>
-      </div>
+    <div className="rounded-[18px] overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+      <RouteMap coords={coords} />
     </div>
   )
 }
@@ -1295,7 +1275,7 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
         </div>
 
         {/* Route map */}
-        {hasMap && <RouteMapSVG polyline={a.map_polyline!} />}
+        {hasMap && <ActivityRouteMap polyline={a.map_polyline!} />}
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-3">
