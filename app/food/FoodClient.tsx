@@ -153,18 +153,26 @@ export function FoodClient() {
   const { data: trainingData } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const burnedKcal = useMemo(() => {
     const activities = trainingData?.activities ?? []
-    return Math.round(activities
-      .filter(a => a.start_date.startsWith(selectedDate))
-      .reduce((sum, a) => {
-        if (a.kilojoules && a.kilojoules > 0) return sum + a.kilojoules
-        const sport = (a.sport_type ?? '').toLowerCase()
-        const distKm = (a.distance ?? 0) / 1000
-        const mins = (a.moving_time ?? 0) / 60
-        if (sport.includes('run')) return sum + distKm * 65
-        if (sport.includes('ride') || sport.includes('cycl')) return sum + distKm * 30
-        if (sport.includes('swim')) return sum + distKm * 400
-        return sum + (mins / 60) * 400
-      }, 0))
+    const todayActivities = activities.filter(a => a.start_date.startsWith(selectedDate))
+    // Deduplicate: same sport type starting within 5 minutes = same activity synced twice
+    const deduped: typeof todayActivities = []
+    for (const a of todayActivities) {
+      const t = new Date(a.start_date).getTime()
+      const isDupe = deduped.some(b =>
+        b.sport_type === a.sport_type && Math.abs(new Date(b.start_date).getTime() - t) < 300_000
+      )
+      if (!isDupe) deduped.push(a)
+    }
+    return Math.round(deduped.reduce((sum, a) => {
+      if (a.kilojoules && a.kilojoules > 0) return sum + a.kilojoules
+      const sport = (a.sport_type ?? '').toLowerCase()
+      const distKm = (a.distance ?? 0) / 1000
+      const mins = (a.moving_time ?? 0) / 60
+      if (sport.includes('run')) return sum + distKm * 65
+      if (sport.includes('ride') || sport.includes('cycl')) return sum + distKm * 30
+      if (sport.includes('swim')) return sum + distKm * 400
+      return sum + (mins / 60) * 400
+    }, 0))
   }, [trainingData, selectedDate])
 
   async function deleteEntry(id: string) {
