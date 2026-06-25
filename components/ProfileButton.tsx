@@ -636,6 +636,12 @@ async function saveTraining() {
       ...prev,
       [sport]: Math.round(Math.max(0, Math.min(20, (prev[sport] ?? 0) + delta)) * 2) / 2,
     }))
+    // Clear saved zone targets so SportPlanCard re-derives them from the new freq
+    setZoneTargets(prev => {
+      const next = { ...prev }
+      delete next[sport]
+      return next
+    })
   }
 
   function fmtFreq(h: number): string {
