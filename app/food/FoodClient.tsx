@@ -18,6 +18,7 @@ import { MacroDrillSheet } from './components/MacroDrillSheet'
 import { EditFoodSheet }   from './components/EditFoodSheet'
 import { MealSection }     from './components/MealSection'
 import { trainingFetcher } from '@/app/training/fetcher'
+import { healthFetcher } from '@/app/health/fetcher'
 
 // Hour of day from which each meal becomes relevant (for time-aware empty meal display)
 const MEAL_VISIBLE_FROM: Record<string, number> = {
@@ -151,6 +152,12 @@ export function FoodClient() {
   }), [log])
 
   const { data: trainingData } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data: healthRows } = useSWR('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const bodyWeight = useMemo(() => {
+    const row = (healthRows ?? []).find(r => r.gewicht != null)
+    return row?.gewicht ?? 75
+  }, [healthRows])
+
   const burnedKcal = useMemo(() => {
     const activities = trainingData?.activities ?? []
     const todayActivities = activities.filter(a => a.start_date.startsWith(selectedDate))
@@ -163,7 +170,7 @@ export function FoodClient() {
       )
       if (!isDupe) deduped.push(a)
     }
-    const WEIGHT_KG = 75
+    const WEIGHT_KG = bodyWeight
     function metKcal(a: (typeof deduped)[0]): number {
       if (a.kilojoules && a.kilojoules > 0) return a.kilojoules
       const sport = (a.sport_type ?? '').toLowerCase()
@@ -191,7 +198,7 @@ export function FoodClient() {
       return met * WEIGHT_KG * hours
     }
     return Math.round(deduped.reduce((sum, a) => sum + metKcal(a), 0))
-  }, [trainingData, selectedDate])
+  }, [trainingData, selectedDate, bodyWeight])
 
   async function deleteEntry(id: string) {
     mutate(prev => prev ? { ...prev, foodLog: prev.foodLog.filter(f => f.id !== id) } : prev, false)
