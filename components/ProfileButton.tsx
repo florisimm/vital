@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import useSWR, { mutate } from 'swr'
-import { User, ChevronRight } from 'lucide-react'
+import { User, ChevronRight, Dumbbell, Flame, Cable, SlidersHorizontal, LogOut, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { fetchServices } from '@/lib/services'
@@ -795,6 +795,16 @@ async function saveTraining() {
                       <span className="text-[15px] text-white/40 shrink-0">Email</span>
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[17px] text-white truncate">{maskEmail(email ?? '—')}</span>
+                        <ChevronRight size={16} className="text-white/25 shrink-0" />
+                      </div>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full gap-3"
+                      onClick={() => { setPasswordStep('current'); setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm(''); setEditMsg(null); setEditingPassword(true) }}>
+                      <span className="text-[15px] text-white/40 shrink-0">Password</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[17px] text-white truncate">••••••</span>
                         <ChevronRight size={16} className="text-white/25 shrink-0" />
                       </div>
                     </button>
@@ -1964,112 +1974,70 @@ async function saveTraining() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-            {/* Account info */}
-            <ProfileSection>
-              <ProfileRow separator>
-                <button className="flex items-center gap-4 py-1 w-full text-left active:opacity-70"
-                  onClick={() => { setEditingAccountInfo(true); loadShortcutToken() }}>
-                  <div className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(255,255,255,0.10)' }}>
-                    <User size={22} className="text-white/50" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[17px] font-semibold text-white truncate">{editName || '—'}</p>
-                    <p className="text-[13px] text-white/40 truncate">{maskEmail(email ?? '—')}</p>
-                  </div>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full gap-3"
-                  onClick={() => { setEditEmail(email ?? ''); setEditMsg(null); setEditingEmail(true) }}>
-                  <span className="text-[17px] text-white shrink-0">Email</span>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[15px] text-white/40 truncate">{maskEmail(email ?? '—')}</span>
-                    <ChevronRight size={18} className="text-white/25 shrink-0" />
-                  </div>
-                </button>
-              </ProfileRow>
-              <ProfileRow>
-                <button className="flex items-center justify-between w-full"
-                  onClick={() => { setPasswordStep('current'); setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm(''); setEditMsg(null); setEditingPassword(true) }}>
-                  <span className="text-[17px] text-white">Password</span>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
+            {/* Profile hero */}
+            <button onClick={() => { setEditingAccountInfo(true); loadShortcutToken() }}
+              className="flex items-center gap-4 w-full p-4 rounded-[18px] text-left active:opacity-70"
+              style={{ background: 'rgba(255,255,255,0.07)' }}>
+              <div className="w-[56px] h-[56px] rounded-full flex items-center justify-center shrink-0"
+                style={{ background: 'linear-gradient(135deg, rgba(45,212,191,0.28), rgba(45,212,191,0.05))', border: '1px solid rgba(45,212,191,0.25)' }}>
+                <User size={26} className="text-teal-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[19px] font-semibold text-white truncate">{editName || '—'}</p>
+                <p className="text-[13px] text-white/40 truncate">{maskEmail(email ?? '—')}</p>
+              </div>
+              <ChevronRight size={20} className="text-white/25 shrink-0" />
+            </button>
+
+            {/* Your Plan */}
+            <ProfileSection title="Your Plan">
+              <MenuRow separator
+                icon={<Dumbbell size={16} className="text-teal-300" />} tint="rgba(45,212,191,0.15)"
+                label="Training"
+                value={trainingGoal ? trainingGoal.replace('_', ' ').replace(/\b\w/, c => c.toUpperCase()) : undefined}
+                onClick={() => setEditingTraining(true)} />
+              <MenuRow
+                icon={<Flame size={16} className="text-orange-300" />} tint="rgba(251,146,60,0.15)"
+                label="Nutrition & Macros"
+                value={savedMacroKcal > 0 ? `${savedMacroKcal} kcal` : undefined}
+                onClick={openMacroChoice} />
             </ProfileSection>
 
-            {/* Devices & Apps */}
-            <ProfileSection title="Devices & Apps">
-              <ProfileRow>
-                <button className="flex items-center justify-between w-full" onClick={() => setEditingDevices(true)}>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[17px] text-white">Connected services</span>
-                    <span className="text-[13px] text-white/40">
-                      {(() => {
-                        const names = [
-                          services?.strava  && 'Strava',
-                          services?.fitbit  && 'Google Health',
-                          services?.hevy    && 'Hevy',
-                          services?.google  && 'Calendar',
-                        ].filter(Boolean) as string[]
-                        return names.length ? names.join(' · ') : 'Nothing connected'
-                      })()}
-                    </span>
-                  </div>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
+            {/* Connections */}
+            <ProfileSection title="Connections">
+              <MenuRow
+                icon={<Cable size={16} className="text-sky-300" />} tint="rgba(56,189,248,0.15)"
+                label="Devices & Apps"
+                value={(() => {
+                  const count = [
+                    services?.strava, services?.fitbit, services?.hevy, services?.google,
+                  ].filter(Boolean).length
+                  return count ? `${count} connected` : 'None'
+                })()}
+                onClick={() => setEditingDevices(true)} />
             </ProfileSection>
 
-            {/* Goals & Training */}
-            <ProfileSection title="Goals & Training">
-              <ProfileRow separator>
-                <button className="flex items-center justify-between w-full" onClick={() => setEditingTraining(true)}>
-                  <span className="text-[17px] text-white">Training</span>
-                  <div className="flex items-center gap-2">
-                    {trainingGoal && (
-                      <span className="text-[13px] text-white/40 capitalize">{trainingGoal.replace('_', ' ')}</span>
-                    )}
-                    <ChevronRight size={18} className="text-white/25 shrink-0" />
-                  </div>
-                </button>
-              </ProfileRow>
-              <ProfileRow>
-                <button className="flex items-center justify-between w-full" onClick={openMacroChoice}>
-                  <span className="text-[17px] text-white">Nutrition & Macros</span>
-                  <div className="flex items-center gap-2">
-                    {savedMacroKcal > 0 && <span className="text-[13px] text-white/40">{savedMacroKcal} kcal</span>}
-                    <ChevronRight size={18} className="text-white/25 shrink-0" />
-                  </div>
-                </button>
-              </ProfileRow>
-            </ProfileSection>
-
-            {/* App Settings */}
-            <ProfileSection title="App">
-              <ProfileRow>
-                <button className="flex items-center justify-between w-full" onClick={() => setEditingSettings(true)}>
-                  <span className="text-[17px] text-white">Settings</span>
-                  <ChevronRight size={18} className="text-white/25 shrink-0" />
-                </button>
-              </ProfileRow>
+            {/* Preferences */}
+            <ProfileSection title="Preferences">
+              <MenuRow
+                icon={<SlidersHorizontal size={16} className="text-white/70" />} tint="rgba(255,255,255,0.10)"
+                label="App Settings"
+                onClick={() => setEditingSettings(true)} />
             </ProfileSection>
 
             {/* Account */}
             <ProfileSection title="Account">
-              <ProfileRow separator>
-                <button onClick={handleSignOut} className="w-full text-left py-0.5 text-[17px] font-medium text-red-400">
-                  Sign Out
-                </button>
-              </ProfileRow>
-              <ProfileRow>
-                <button
-                  onClick={() => { setDeleteStep('password'); setDeletePassword(''); setDeleteMsg(null); setDeletingAccount(true) }}
-                  className="w-full text-left py-0.5 text-[17px] font-medium text-red-400">
-                  Delete Account
-                </button>
-              </ProfileRow>
+              <button onClick={handleSignOut}
+                className="flex items-center gap-3.5 w-full px-4 py-3.5 text-left active:opacity-60"
+                style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <LogOut size={18} className="text-red-400 shrink-0" />
+                <span className="text-[17px] font-medium text-red-400">Sign Out</span>
+              </button>
+              <button onClick={() => { setDeleteStep('password'); setDeletePassword(''); setDeleteMsg(null); setDeletingAccount(true) }}
+                className="flex items-center gap-3.5 w-full px-4 py-3.5 text-left active:opacity-60">
+                <Trash2 size={18} className="text-red-400 shrink-0" />
+                <span className="text-[17px] font-medium text-red-400">Delete Account</span>
+              </button>
             </ProfileSection>
 
           </div>
@@ -2226,6 +2194,25 @@ function ProfileRow({ children, separator }: { children: React.ReactNode; separa
     <div className="px-4 py-3.5" style={{ borderBottom: separator ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
       {children}
     </div>
+  )
+}
+
+function MenuRow({ icon, tint, label, value, onClick, separator }: {
+  icon: React.ReactNode; tint?: string; label: string; value?: string
+  onClick: () => void; separator?: boolean
+}) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-3.5 w-full px-4 py-3 text-left active:opacity-60"
+      style={{ borderBottom: separator ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+      <div className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center shrink-0"
+        style={{ background: tint ?? 'rgba(255,255,255,0.08)' }}>
+        {icon}
+      </div>
+      <span className="flex-1 text-[17px] text-white">{label}</span>
+      {value && <span className="text-[13px] text-white/40">{value}</span>}
+      <ChevronRight size={18} className="text-white/25 shrink-0" />
+    </button>
   )
 }
 
