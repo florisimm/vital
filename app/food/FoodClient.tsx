@@ -372,11 +372,11 @@ export function FoodClient() {
               <SectionHeader title="Macros" />
               <div className="text-right">
                 <p className="text-[13px] font-semibold text-white">
-                  {Math.round(totals.kcal).toLocaleString('nl-NL')}
+                  {Math.round(totals.kcal).toLocaleString('nl-NL')} / {targets.kcal.toLocaleString('nl-NL')}
                   {burnedKcal > 0 && (
                     <span className="text-orange-400"> +{burnedKcal.toLocaleString('nl-NL')}</span>
                   )}
-                  {' '}/ {targets.kcal.toLocaleString('nl-NL')} kcal
+                  {' '}kcal
                 </p>
                 <p className="text-[12px] mt-0.5 font-medium"
                   style={{ color: proteinHit ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.4)' }}>
