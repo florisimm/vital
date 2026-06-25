@@ -189,11 +189,20 @@ export function FoodClient() {
         else if (kmh < 10) met = 8.5
         else if (kmh < 12) met = 10.0
         else if (kmh < 14) met = 11.5
-        else met = 13.5
+        else if (kmh < 16) met = 13.5
+        else met = 16.0
       } else if (sport.includes('swim')) {
-        met = 6.0
+        // swimming: speed in km/h (typical pool pace 2–4 km/h)
+        if (kmh < 1.8) met = 5.0
+        else if (kmh < 2.8) met = 6.0
+        else if (kmh < 3.5) met = 8.0
+        else met = 10.0
+      } else if (sport.includes('weight') || sport === 'weighttraining') {
+        met = 4.0  // moderate strength training
+      } else if (sport.includes('crossfit') || sport.includes('circuit')) {
+        met = 7.5
       } else {
-        met = 5.0
+        met = 5.0  // general exercise
       }
       return met * WEIGHT_KG * hours
     }
