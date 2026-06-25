@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { createClient } from '@/lib/supabase'
 import { BedDouble, Activity, Heart, Scale, Footprints, Flame, Timer, Moon, Zap, ArrowUpRight, Trash2 } from 'lucide-react'
@@ -1300,6 +1300,8 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
         </div>
       </Card>
 
+      <MeasurementsSection />
+
       {/* Fullscreen weight log */}
       {showList && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgb(5,6,8)' }}>
@@ -1414,6 +1416,203 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Body Measurements ────────────────────────────────────────────────────────
+
+type BodyMeasurement = {
+  date: string
+  chest: number | null
+  schouders: number | null
+  bicep: number | null
+  taille: number | null
+  heupen: number | null
+  bovenbeen: number | null
+  kuiten: number | null
+  nek: number | null
+}
+
+const MEASUREMENT_FIELDS: { key: keyof Omit<BodyMeasurement, 'date'>; label: string }[] = [
+  { key: 'chest',     label: 'Chest' },
+  { key: 'taille',   label: 'Waist' },
+  { key: 'heupen',   label: 'Hips' },
+  { key: 'bicep',    label: 'Arms' },
+  { key: 'bovenbeen',label: 'Thighs' },
+  { key: 'kuiten',   label: 'Calves' },
+  { key: 'nek',      label: 'Neck' },
+  { key: 'schouders',label: 'Shoulders' },
+]
+
+export function MeasurementsSection() {
+  const [rows, setRows] = useState<BodyMeasurement[]>([])
+  const [showLog, setShowLog] = useState(false)
+  const [inputs, setInputs] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      setUserId(user.id)
+      const { data } = await supabase
+        .from('body_measurements')
+        .select('date,chest,schouders,bicep,taille,heupen,bovenbeen,kuiten,nek')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(10)
+      if (data) setRows(data as BodyMeasurement[])
+    }
+    load()
+  }, [])
+
+  const latest = rows[0] ?? null
+  const prev = rows[1] ?? null
+  const today = localDateStr(new Date())
+  const hasToday = latest?.date === today
+
+  function openLog() {
+    const pre = hasToday ? latest : prev
+    const initial: Record<string, string> = {}
+    MEASUREMENT_FIELDS.forEach(({ key }) => {
+      const v = pre?.[key]
+      initial[key] = v != null ? String(v) : ''
+    })
+    if (hasToday) {
+      MEASUREMENT_FIELDS.forEach(({ key }) => {
+        const v = latest?.[key]
+        if (v != null) initial[key] = String(v)
+      })
+    }
+    setInputs(initial)
+    setShowLog(true)
+  }
+
+  async function save() {
+    if (!userId) return
+    setSaving(true)
+    const payload: Record<string, any> = { user_id: userId, date: today }
+    MEASUREMENT_FIELDS.forEach(({ key }) => {
+      const v = inputs[key]
+      if (v && v.trim() !== '') payload[key] = parseFloat(v)
+    })
+    const supabase = createClient()
+    await supabase.from('body_measurements').upsert(payload, { onConflict: 'user_id,date' })
+    // Refresh rows
+    const { data } = await supabase
+      .from('body_measurements')
+      .select('date,chest,schouders,bicep,taille,heupen,bovenbeen,kuiten,nek')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(10)
+    if (data) setRows(data as BodyMeasurement[])
+    setSaving(false)
+    setShowLog(false)
+  }
+
+  function delta(key: keyof Omit<BodyMeasurement, 'date'>) {
+    if (!latest || !prev) return null
+    const cur = latest[key]
+    const old = prev[key]
+    if (cur == null || old == null) return null
+    return cur - old
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <span className="text-[20px] font-bold text-white">Body Measurements</span>
+        {latest && (
+          <button onClick={openLog} className="text-[15px] font-semibold text-teal-400">Edit</button>
+        )}
+      </div>
+
+      {!latest ? (
+        <button
+          onClick={openLog}
+          className="w-full py-4 rounded-2xl text-[15px] font-semibold text-teal-400 border border-teal-400/30"
+          style={{ background: 'rgba(45,212,191,0.07)' }}
+        >
+          Log measurements
+        </button>
+      ) : (
+        <Card>
+          <div className="grid grid-cols-2 gap-3">
+            {MEASUREMENT_FIELDS.map(({ key, label }) => {
+              const val = latest[key]
+              const d = delta(key)
+              return (
+                <div key={key} className="flex flex-col gap-0.5">
+                  <span className="text-[12px] text-white/50">{label}</span>
+                  <span className="text-[17px] font-semibold text-white">
+                    {val != null ? `${val} cm` : '–'}
+                  </span>
+                  {d != null && Math.abs(d) >= 0.1 && (
+                    <span className={`text-[12px] font-medium ${d < 0 ? 'text-teal-400' : 'text-orange-400'}`}>
+                      {d < 0 ? '▼' : '▲'} {Math.abs(d).toFixed(1)} cm
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-4 pt-3 border-t border-white/10 text-[13px] text-white/40">
+            {latest.date}
+          </div>
+        </Card>
+      )}
+
+      {/* Log overlay */}
+      {showLog && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgb(5,6,8)' }}>
+          <div
+            className="flex items-center justify-between px-5 border-b border-white/10 shrink-0"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', paddingBottom: '14px' }}
+          >
+            <button onClick={() => setShowLog(false)} className="text-white/50 text-[15px]">Cancel</button>
+            <span className="text-[17px] font-semibold text-white">Body Measurements</span>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="text-teal-400 font-semibold text-[15px] disabled:opacity-40"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+
+          <div
+            className="flex-1 overflow-y-auto px-5 pt-5 pb-10 flex flex-col gap-4"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 40px)' }}
+          >
+            <p className="text-[13px] text-white/40">{today}</p>
+            {MEASUREMENT_FIELDS.map(({ key, label }) => {
+              const prevVal = (hasToday ? prev : latest)?.[key]
+              return (
+                <div key={key} className="flex flex-col gap-1.5">
+                  <span className="text-[13px] text-white/50">{label}</span>
+                  <div
+                    className="flex items-center gap-2 px-4 rounded-xl"
+                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
+                  >
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={inputs[key] ?? ''}
+                      onChange={e => setInputs(p => ({ ...p, [key]: e.target.value }))}
+                      placeholder={prevVal != null ? String(prevVal) : '—'}
+                      className="flex-1 bg-transparent py-3.5 text-[16px] text-white outline-none placeholder-white/25"
+                    />
+                    <span className="text-[14px] text-white/40">cm</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
