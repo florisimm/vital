@@ -17,6 +17,7 @@ import { AddFoodSheet }    from './components/AddFoodSheet'
 import { MacroDrillSheet } from './components/MacroDrillSheet'
 import { EditFoodSheet }   from './components/EditFoodSheet'
 import { MealSection }     from './components/MealSection'
+import { trainingFetcher } from '@/app/training/fetcher'
 
 // Hour of day from which each meal becomes relevant (for time-aware empty meal display)
 const MEAL_VISIBLE_FROM: Record<string, number> = {
@@ -148,6 +149,23 @@ export function FoodClient() {
     carbs:   log.reduce((s, f) => s + Number(f.carbs   ?? 0), 0),
     fat:     log.reduce((s, f) => s + Number(f.fat     ?? 0), 0),
   }), [log])
+
+  const { data: trainingData } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const burnedKcal = useMemo(() => {
+    const activities = trainingData?.activities ?? []
+    return Math.round(activities
+      .filter(a => a.start_date.startsWith(selectedDate))
+      .reduce((sum, a) => {
+        if (a.kilojoules && a.kilojoules > 0) return sum + a.kilojoules
+        const sport = (a.sport_type ?? '').toLowerCase()
+        const distKm = (a.distance ?? 0) / 1000
+        const mins = (a.moving_time ?? 0) / 60
+        if (sport.includes('run')) return sum + distKm * 65
+        if (sport.includes('ride') || sport.includes('cycl')) return sum + distKm * 30
+        if (sport.includes('swim')) return sum + distKm * 400
+        return sum + (mins / 60) * 400
+      }, 0))
+  }, [trainingData, selectedDate])
 
   async function deleteEntry(id: string) {
     mutate(prev => prev ? { ...prev, foodLog: prev.foodLog.filter(f => f.id !== id) } : prev, false)
@@ -318,6 +336,11 @@ export function FoodClient() {
                   style={{ color: proteinHit ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.4)' }}>
                   {Math.round(totals.protein)}g / {targets.protein}g protein{proteinHit ? ' ✓' : ''}
                 </p>
+                {burnedKcal > 0 && (
+                  <p className="text-[12px] mt-1 font-medium text-orange-400">
+                    🔥 {burnedKcal.toLocaleString('nl-NL')} kcal burned · net {Math.max(0, Math.round(totals.kcal - burnedKcal)).toLocaleString('nl-NL')}
+                  </p>
+                )}
               </div>
             </div>
             {([
