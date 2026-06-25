@@ -41,6 +41,7 @@ export function ProfileButton() {
   const [fitbitSyncing, setFitbitSyncing] = useState(false)
   const [fitbitSyncMessage, setFitbitSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [timeFormat, setTimeFormat] = useState<'24h' | '12h'>('24h')
+  const [addBurned, setAddBurned] = useState(false)
 
   // Training preferences
   const [editingTraining, setEditingTraining] = useState(false)
@@ -131,6 +132,7 @@ export function ProfileButton() {
   useEffect(() => {
     if (!open) return
     setTimeFormat((localStorage.getItem('time_format') as '24h' | '12h') ?? '24h')
+    setAddBurned(localStorage.getItem('add_burned_to_target') === '1')
     const supabase = createClient()
 
     if ('Notification' in window) {
@@ -467,6 +469,13 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     const next: '24h' | '12h' = timeFormat === '24h' ? '12h' : '24h'
     setTimeFormat(next)
     localStorage.setItem('time_format', next)
+  }
+
+  function toggleAddBurned() {
+    const next = !addBurned
+    setAddBurned(next)
+    localStorage.setItem('add_burned_to_target', next ? '1' : '0')
+    window.dispatchEvent(new Event('kern:add-burned-changed'))
   }
 
   function openMacroChoice() {
@@ -1156,6 +1165,19 @@ async function saveTraining() {
                     <button className="flex items-center justify-between w-full" onClick={toggleTimeFormat}>
                       <span className="text-[17px] text-white">Time Format</span>
                       <span className="text-[15px] text-white/40">{timeFormat === '12h' ? '12h (AM/PM)' : '24h'}</span>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full" onClick={toggleAddBurned}>
+                      <div className="flex flex-col items-start">
+                        <span className="text-[17px] text-white">Add Burned Calories</span>
+                        <span className="text-[13px] text-white/40">{addBurned ? 'Added to daily budget' : 'Shown separately'}</span>
+                      </div>
+                      <div className="w-[44px] h-[26px] rounded-full flex items-center p-[3px] transition-colors shrink-0"
+                        style={{ background: addBurned ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.15)' }}>
+                        <div className="w-[20px] h-[20px] rounded-full bg-white transition-transform"
+                          style={{ transform: addBurned ? 'translateX(18px)' : 'translateX(0)' }} />
+                      </div>
                     </button>
                   </ProfileRow>
                   <ProfileRow>

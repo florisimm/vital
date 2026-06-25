@@ -153,6 +153,14 @@ export function FoodClient() {
 
   const { data: trainingData } = useSWR('training', trainingFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
   const { data: healthRows } = useSWR('health-gezondheid', healthFetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+
+  const [addBurned, setAddBurned] = useState(false)
+  useEffect(() => {
+    const read = () => setAddBurned(localStorage.getItem('add_burned_to_target') === '1')
+    read()
+    window.addEventListener('kern:add-burned-changed', read)
+    return () => window.removeEventListener('kern:add-burned-changed', read)
+  }, [])
   const bodyWeight = useMemo(() => {
     const row = (healthRows ?? []).find(r => r.gewicht != null)
     return row?.gewicht ?? 75
@@ -245,6 +253,9 @@ export function FoodClient() {
   const currentHour = new Date().getHours()
   const coachTip = buildCoachTip(totals, targets, isToday)
   const proteinHit = totals.protein >= targets.protein
+
+  // When "Add Burned Calories" is on, fold the day's burn into the kcal budget
+  const kcalTarget = addBurned ? targets.kcal + burnedKcal : targets.kcal
 
   // For today: show time-relevant meals + any with entries; for other days: entries only
   const visibleMeals = isToday
@@ -372,8 +383,8 @@ export function FoodClient() {
               <SectionHeader title="Macros" />
               <div className="text-right">
                 <p className="text-[13px] font-semibold text-white">
-                  {Math.round(totals.kcal).toLocaleString('nl-NL')} / {targets.kcal.toLocaleString('nl-NL')}
-                  {burnedKcal > 0 && (
+                  {Math.round(totals.kcal).toLocaleString('nl-NL')} / {kcalTarget.toLocaleString('nl-NL')}
+                  {burnedKcal > 0 && !addBurned && (
                     <span className="text-orange-400"> +{burnedKcal.toLocaleString('nl-NL')}</span>
                   )}
                   {' '}kcal
@@ -394,7 +405,7 @@ export function FoodClient() {
                 className="w-full text-left active:opacity-60 transition-opacity"
                 onClick={() => setMacroDrill(key)}>
                 <NutritionProgressBar
-                  label={label} current={totals[key]} target={targets[key]} unit={unit} tint={tint} />
+                  label={label} current={totals[key]} target={key === 'kcal' ? kcalTarget : targets[key]} unit={unit} tint={tint} />
               </button>
             ))}
           </div>
