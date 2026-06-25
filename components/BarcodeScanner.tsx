@@ -16,6 +16,11 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
   const detectedRef = useRef(false)
 
   useEffect(() => {
+    // Lock to portrait so the UI never flips when the user tilts the phone to scan
+    if (typeof screen !== 'undefined' && 'orientation' in screen) {
+      try { (screen.orientation as any).lock('portrait') } catch {}
+    }
+
     let readerInstance: any
     let cancelled = false
 
@@ -67,19 +72,15 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
       if (videoRef.current) {
         videoRef.current.srcObject = null
       }
+      // Unlock orientation when scanner closes
+      if (typeof screen !== 'undefined' && 'orientation' in screen) {
+        try { (screen.orientation as any).unlock() } catch {}
+      }
     }
   }, [onDetected])
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(0,0,0)' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-safe pt-4 pb-4 shrink-0">
-        <span className="text-[17px] font-bold text-white">Scan Barcode</span>
-        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
-          <X size={18} className="text-white" />
-        </button>
-      </div>
-
       {error ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
           <p className="text-white/60 text-[15px] text-center">{error}</p>
@@ -96,15 +97,11 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
 
           {/* Overlay with scanning window */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {/* Dark overlay top */}
             <div className="absolute inset-0 bg-black/50" />
 
             {/* Scan window */}
             <div className="relative z-10 w-72 h-44">
-              {/* Clear window */}
               <div className="absolute inset-0 rounded-xl overflow-hidden" style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} />
-
-              {/* Corner markers */}
               {[
                 'top-0 left-0 border-t-2 border-l-2 rounded-tl-xl',
                 'top-0 right-0 border-t-2 border-r-2 rounded-tr-xl',
@@ -113,8 +110,6 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
               ].map((cls, i) => (
                 <div key={i} className={`absolute w-8 h-8 border-teal-400 ${cls}`} />
               ))}
-
-              {/* Scanning line animation */}
               <div className="absolute inset-x-0 h-0.5 bg-teal-400 opacity-80 animate-scan" style={{ top: '50%' }} />
             </div>
 
@@ -122,6 +117,18 @@ export function BarcodeScanner({ onDetected, onClose }: BarcodeScannerProps) {
           </div>
         </div>
       )}
+
+      {/* Bottom bar — close button well within thumb reach */}
+      <div className="shrink-0 flex items-center justify-between px-6 pt-4 pb-safe pb-6">
+        <span className="text-[17px] font-semibold text-white">Scan Barcode</span>
+        <button
+          onClick={onClose}
+          className="w-10 h-10 flex items-center justify-center rounded-full"
+          style={{ background: 'rgba(255,255,255,0.15)' }}
+        >
+          <X size={20} className="text-white" />
+        </button>
+      </div>
 
       <style jsx>{`
         @keyframes scan {
