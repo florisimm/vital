@@ -27,7 +27,6 @@ import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
 import { InjuryToggle } from '@/components/InjuryToggle'
 
-const RouteMap = dynamic(() => import('./session/RouteMap').then(m => m.RouteMap), { ssr: false, loading: () => <div className="h-[240px] rounded-[18px]" style={{ background: 'rgba(255,255,255,0.04)' }} /> })
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1162,30 +1161,6 @@ function normalCDF(x: number, mu: number, sigma: number): number {
   return 0.5 * (1 + erf)
 }
 
-function decodePolyline(encoded: string): [number, number][] {
-  const coords: [number, number][] = []
-  let idx = 0, lat = 0, lng = 0
-  while (idx < encoded.length) {
-    let b: number, shift = 0, result = 0
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5 } while (b >= 0x20)
-    lat += result & 1 ? ~(result >> 1) : result >> 1
-    shift = 0; result = 0
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5 } while (b >= 0x20)
-    lng += result & 1 ? ~(result >> 1) : result >> 1
-    coords.push([lat / 1e5, lng / 1e5])
-  }
-  return coords
-}
-
-function ActivityRouteMap({ polyline }: { polyline: string }) {
-  const coords = decodePolyline(polyline)
-  if (coords.length < 2) return null
-  return (
-    <div className="rounded-[18px] overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-      <RouteMap coords={coords} />
-    </div>
-  )
-}
 
 function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
   const t = (a.sport_type ?? '').toLowerCase()
@@ -1215,22 +1190,27 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
   const watts = (a.average_watts ?? 0) > 0 ? `${Math.round(a.average_watts!)} W` : (a.weighted_average_watts ?? 0) > 0 ? `${Math.round(a.weighted_average_watts!)} W NP` : null
   const suffer = a.suffer_score ? `${a.suffer_score}` : null
 
-  const tiles = [
-    dist     && { label: 'Distance',   value: dist,              color: 'text-white' },
-    pace     && { label: 'Avg Pace',   value: `${pace} /km`,     color: 'text-teal-400' },
-    maxPace  && { label: 'Best Pace',  value: `${maxPace} /km`,  color: 'text-teal-300' },
-    speed    && { label: 'Avg Speed',  value: speed,             color: 'text-cyan-400' },
-    maxSpeed && { label: 'Max Speed',  value: maxSpeed,          color: 'text-cyan-300' },
-    swimPace && { label: 'Pace',       value: `${swimPace} /100m`, color: 'text-blue-400' },
-    dur      && { label: 'Moving Time',value: dur,               color: 'text-white' },
-    rest     && { label: 'Rest',       value: rest,              color: 'text-white/50' },
-    elev     && { label: 'Elevation',  value: `↑ ${elev}`,      color: 'text-orange-400' },
-    hr       && { label: 'Avg HR',     value: hr,                color: 'text-red-400' },
-    maxHr    && { label: 'Max HR',     value: maxHr,             color: 'text-red-300' },
-    cadence  && { label: 'Cadence',    value: cadence,           color: 'text-white/70' },
-    kj       && { label: 'Energy',     value: kj,                color: 'text-yellow-400' },
-    watts    && { label: 'Power',      value: watts,             color: 'text-purple-400' },
-    suffer   && { label: 'Suffer Score', value: suffer,          color: 'text-orange-400' },
+  // Hero metrics: the 3 most important numbers for this sport
+  const heroLeft   = { label: isSwimA ? 'Afstand' : 'Afstand', value: dist,  unit: '' }
+  const heroMid    = { label: 'Duur',    value: dur,   unit: '' }
+  const heroRight  = isRide
+    ? { label: 'Snelheid', value: speed,    unit: '' }
+    : isSwimA
+    ? { label: 'Pace',     value: swimPace, unit: '/100m' }
+    : { label: 'Pace',     value: pace,     unit: '/km' }
+
+  // Secondary stats
+  const secondary = [
+    elev     && { label: 'Elevation', value: `↑ ${elev}`,     color: '#fb923c' },
+    hr       && { label: 'Avg HR',    value: hr,               color: '#f87171' },
+    maxHr    && { label: 'Max HR',    value: maxHr,            color: '#fca5a5' },
+    cadence  && { label: 'Cadence',   value: cadence,          color: 'rgba(255,255,255,0.7)' },
+    watts    && { label: 'Power',     value: watts,            color: '#c084fc' },
+    kj       && { label: 'Energie',   value: kj,               color: '#fbbf24' },
+    rest     && { label: 'Pauze',     value: rest,             color: 'rgba(255,255,255,0.35)' },
+    isRide && maxSpeed && { label: 'Max speed', value: maxSpeed, color: '#67e8f9' },
+    !isRide && !isSwimA && maxPace && { label: 'Best pace', value: `${maxPace}/km`, color: '#5eead4' },
+    suffer   && { label: 'Suffer',    value: suffer,           color: '#fb923c' },
   ].filter(Boolean) as { label: string; value: string; color: string }[]
 
   // HR zone breakdown using Gaussian model (σ=12 bpm around average HR)
@@ -1266,69 +1246,87 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
         <a
           href={`https://www.strava.com/activities/${a.id}`}
           target="_blank" rel="noopener noreferrer"
-          className="px-3 h-[34px] rounded-full text-[13px] font-semibold flex items-center"
-          style={{ background: 'rgba(252,100,45,0.18)', color: '#fc642d', border: '1px solid rgba(252,100,45,0.35)' }}
+          className="px-3 h-[34px] rounded-full text-[13px] font-semibold flex items-center gap-1"
+          style={{ background: 'rgba(252,100,45,0.15)', color: '#fc642d', border: '1px solid rgba(252,100,45,0.28)' }}
         >
           Strava ↗
         </a>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
-        {/* Title */}
-        <div>
-          <span className="text-[22px] font-bold text-white leading-snug">{a.name}</span>
-          <p className="text-[13px] text-white/40 mt-0.5">{formatDate(a.start_date)}</p>
-        </div>
+      <div className="flex-1 overflow-y-auto pb-12 flex flex-col gap-0" style={{ scrollbarWidth: 'none' }}>
+        {/* Route map — full bleed, no padding */}
+        {hasMap && (
+          <div className="px-5 mb-5">
+            <ActivityRouteMap polyline={a.map_polyline!} />
+          </div>
+        )}
 
-        {/* Route map */}
-        {hasMap && <ActivityRouteMap polyline={a.map_polyline!} />}
+        <div className="px-5 flex flex-col gap-5">
+          {/* Title + date */}
+          <div>
+            <span className="text-[20px] font-bold text-white leading-snug">{a.name}</span>
+            <p className="text-[13px] text-white/40 mt-0.5">{formatDate(a.start_date)}</p>
+          </div>
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 gap-3">
-          {tiles.map((m, i) => (
-            <div key={i} className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">{m.label}</span>
-              <span className={`text-[22px] font-bold leading-none ${m.color}`}>{m.value}</span>
-            </div>
-          ))}
-        </div>
+          {/* Hero row — 3 key stats */}
+          <div className="grid grid-cols-3 gap-3">
+            {[heroLeft, heroMid, heroRight].map((m, i) => m.value && (
+              <div key={i} className="flex flex-col gap-1 p-3.5 rounded-[18px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] text-white/35 uppercase tracking-[0.08em]">{m.label}</span>
+                <span className="text-[18px] font-bold text-white leading-none">{m.value}</span>
+                {m.unit && <span className="text-[10px] text-white/30">{m.unit}</span>}
+              </div>
+            ))}
+          </div>
 
-        {/* HR zones */}
-        {hrZones && (
-          <div className="p-4 rounded-[18px] flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate Zones</span>
-              <span className="text-[11px] text-white/30">estimated</span>
-            </div>
-
-            {/* Stacked zone bar */}
-            <div className="h-4 rounded-full flex overflow-hidden gap-[2px]">
-              {hrZones.map(z => (
-                <div key={z.label} className="h-full rounded-sm first:rounded-l-full last:rounded-r-full" style={{ width: `${z.pct}%`, background: z.color }} />
-              ))}
-            </div>
-
-            {/* Zone rows */}
-            <div className="flex flex-col gap-2.5">
-              {hrZones.map(z => (
-                <div key={z.label} className="flex items-center gap-2.5">
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: z.color }} />
-                  <span className="text-[13px] text-white/70 flex-1">{z.label}</span>
-                  <span className="text-[13px] font-semibold text-white">{z.minutes} min</span>
-                  <span className="text-[12px] text-white/40 w-8 text-right">{z.pct}%</span>
+          {/* Secondary stats — 3-column compact */}
+          {secondary.length > 0 && (
+            <div className="grid grid-cols-3 gap-2.5">
+              {secondary.map((m, i) => (
+                <div key={i} className="flex flex-col gap-0.5 px-3 py-2.5 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <span className="text-[10px] text-white/30 uppercase tracking-[0.07em]">{m.label}</span>
+                  <span className="text-[15px] font-semibold leading-none" style={{ color: m.color }}>{m.value}</span>
                 </div>
               ))}
             </div>
+          )}
 
-            {/* HR range if both avg + max available */}
-            {hr && maxHr && (
-              <div className="pt-1 border-t border-white/[0.07] flex justify-between text-[12px] text-white/40">
-                <span>Avg {hr}</span>
-                <span>Max {maxHr}</span>
+          {/* HR zones */}
+          {hrZones && (
+            <div className="p-4 rounded-[18px] flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate Zones</span>
+                <span className="text-[11px] text-white/25">estimated</span>
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Stacked zone bar */}
+              <div className="h-3 rounded-full flex overflow-hidden gap-[2px]">
+                {hrZones.map(z => (
+                  <div key={z.label} className="h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${z.pct}%`, background: z.color }} />
+                ))}
+              </div>
+
+              {/* Zone rows */}
+              <div className="flex flex-col gap-2">
+                {hrZones.map(z => (
+                  <div key={z.label} className="flex items-center gap-2.5">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: z.color }} />
+                    <span className="text-[13px] text-white/60 flex-1">{z.label}</span>
+                    <span className="text-[13px] font-semibold text-white">{z.minutes} min</span>
+                    <span className="text-[11px] text-white/35 w-8 text-right">{z.pct}%</span>
+                  </div>
+                ))}
+              </div>
+
+              {hr && maxHr && (
+                <div className="pt-1 border-t border-white/[0.06] flex justify-between text-[12px] text-white/35">
+                  <span>Avg {hr}</span>
+                  <span>Max {maxHr}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -4178,8 +4176,7 @@ function RunningCoachCard({ readinessPct, suggestion, activities, trainingIntens
     : null
 
   const { advice } = computeAdvice('running', activities as any[], suggestion, trainingIntensity, recoveryPct)
-  const paceStr = advice.targetPace ? `${advice.targetPace}/km` : null
-  const specific = paceStr ? `${advice.targetKm} km · ${paceStr} · ${advice.zone}` : `${advice.targetKm} km · ${advice.zone}`
+  const specific = `${advice.durationMin} min · ${advice.zone}`
 
   const reasons: string[] = []
   if (hoursSince !== null && hoursSince < 36) reasons.push(`Last run ${hoursSince}h ago`)
@@ -4355,9 +4352,7 @@ function CyclingAdviceCard({ readinessPct, suggestion, activities, trainingInten
     : null
 
   const { advice } = computeAdvice('cycling', activities as any[], suggestion, trainingIntensity, recoveryPct)
-  const specific = advice.targetSpeed
-    ? `${advice.targetKm} km · ${advice.targetSpeed} km/h · ${advice.zone}`
-    : `${advice.targetKm} km · ${advice.zone}`
+  const specific = `${advice.durationMin} min · ${advice.zone}`
 
   const reasons: string[] = []
   if (hoursSince !== null) reasons.push(`Last ride ${hoursSince}h ago`)
