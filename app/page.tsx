@@ -279,17 +279,34 @@ function buildLifestyleFocus({
   // 1. Bedtime — always visible
   fixed.push({ emoji: '🌙', label: `Go to sleep by ${bedtimeStr}`, sub: `${neededLabel} — ${bedtimeSub}` })
 
-  // 2. Coffee — always visible
-  if (coffeeCount > 0) {
-    if (hoursUntilCaff <= 0) {
-      fixed.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg caffeine still active at bedtime` })
-    } else if (hoursUntilCaff < 1.5) {
-      fixed.push({ emoji: '☕', label: `Last coffee by ${caffCutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — cutoff approaching` })
+  // 2. Coffee — hard cutoff at 15:00; before that show dynamic calculation
+  const COFFEE_HARD_CUTOFF = 15 // 15:00
+  const WORN_OFF_MG = 30 // mg below which caffeine is considered cleared
+
+  if (nowH >= COFFEE_HARD_CUTOFF) {
+    // After 15:00: always "no more coffee" + show when it clears
+    if (coffeeCount > 0 && remainingMg > WORN_OFF_MG) {
+      const hoursAfterBed = 5.5 * Math.log2(remainingMg / WORN_OFF_MG)
+      const wornOffStr = fmtMins(bedtimeMins + Math.round(hoursAfterBed * 60))
+      fixed.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg active at bedtime — clear by ~${wornOffStr}` })
+    } else if (coffeeCount > 0) {
+      fixed.push({ emoji: '☕', label: 'No more coffee today', sub: 'Caffeine nearly clear by bedtime' })
     } else {
-      fixed.push({ emoji: '☕', label: `Coffee okay until ${caffCutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} logged today` })
+      fixed.push({ emoji: '☕', label: 'No more coffee after 15:00', sub: 'Caffeine takes ~10h to fully clear' })
     }
   } else {
-    fixed.push({ emoji: '☕', label: `No coffee after ${caffCutoffStr}`, sub: `Caffeine cutoff for ${bedtimeStr} bedtime` })
+    // Before 15:00: dynamic cutoff based on bedtime
+    if (coffeeCount > 0) {
+      if (hoursUntilCaff <= 0) {
+        fixed.push({ emoji: '☕', label: 'No more coffee today', sub: `${Math.round(remainingMg)}mg caffeine still active at bedtime` })
+      } else if (hoursUntilCaff < 1.5) {
+        fixed.push({ emoji: '☕', label: `Last coffee by ${caffCutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} today — cutoff approaching` })
+      } else {
+        fixed.push({ emoji: '☕', label: `Coffee okay until ${caffCutoffStr}`, sub: `${coffeeCount} cup${coffeeCount > 1 ? 's' : ''} logged today` })
+      }
+    } else {
+      fixed.push({ emoji: '☕', label: `No coffee after ${caffCutoffStr}`, sub: `Caffeine cutoff for ${bedtimeStr} bedtime` })
+    }
   }
 
   // 3. No more eating — only within 3h of bedtime
