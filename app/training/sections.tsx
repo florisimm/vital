@@ -2,6 +2,12 @@
 
 import dynamic from 'next/dynamic'
 import { useState, useEffect, useRef, useMemo } from 'react'
+import dynamic from 'next/dynamic'
+
+const ActivityRouteMap = dynamic(
+  () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
+  { ssr: false, loading: () => <div style={{ height: 220, borderRadius: 16, background: 'rgba(255,255,255,0.04)' }} /> }
+)
 import { createClient } from '@/lib/supabase'
 import useSWR from 'swr'
 import { TrendingUp, Timer, Dumbbell, Bike, PersonStanding, ChevronLeft, ChevronRight, X, Moon, Waves, Activity as ActivityIcon, Calendar, Check, ArrowRight } from 'lucide-react'
