@@ -11,7 +11,7 @@ const ALL_CATEGORIES = [
   { label: 'Sleep',    href: '/health/sleep'    },
   { label: 'Recovery', href: '/health/recovery' },
   { label: 'Heart',    href: '/health/heart'    },
-  { label: 'Weight',   href: '/health/weight'   },
+  { label: 'Weight & Body', href: '/health/weight' },
   { label: 'Activity', href: '/health/activity' },
 ]
 

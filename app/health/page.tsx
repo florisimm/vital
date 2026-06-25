@@ -53,7 +53,7 @@ const ALL_TABS = [
   { label: 'Sleep',    key: 'sleep',    href: '/health/sleep'    },
   { label: 'Recovery', key: 'recovery', href: '/health/recovery' },
   { label: 'Heart',    key: 'heart',    href: '/health/heart'    },
-  { label: 'Weight',   key: 'weight',   href: '/health/weight'   },
+  { label: 'Weight & Body', key: 'weight', href: '/health/weight' },
   { label: 'Activity', key: 'activity', href: '/health/activity' },
 ]
 
