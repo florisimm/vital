@@ -270,6 +270,29 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     return () => { cancelled = true }
   }, [selected.name, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load any custom servings previously saved for this food
+  useEffect(() => {
+    let cancelled = false
+    async function fetchSavedServings() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('custom_foods')
+        .select('servings')
+        .eq('user_id', userId)
+        .ilike('name', selected.name)
+        .maybeSingle()
+      if (cancelled || !data?.servings) return
+      const saved: { label: string; amount_g: number }[] = Array.isArray(data.servings) ? data.servings : []
+      setAllServings(prev => {
+        const existing = new Set(prev.map(s => s.label))
+        const merged = [...prev, ...saved.filter(s => !existing.has(s.label))]
+        return merged
+      })
+    }
+    fetchSavedServings()
+    return () => { cancelled = true }
+  }, [selected.name, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const active = selectedServing ?? allServings[0] ?? GRAM_SERVING
   const stepAmt = active.amount_g > 1 ? active.amount_g : 10
   const g = Math.max(0, Number(grams) || 0)
@@ -305,16 +328,19 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     setAllServings(updated)
     setShowAddServing(false)
     pickServing(serving)
-    // Persist new serving to user's products table
+    // Persist new serving to user's custom_foods table
     const supabase = createClient()
-    await supabase.from('products').upsert(
-      {
+    const { data: existing } = await supabase
+      .from('custom_foods').select('id').eq('user_id', userId).ilike('name', selected.name).maybeSingle()
+    if (existing?.id) {
+      await supabase.from('custom_foods').update({ servings: updated }).eq('id', existing.id)
+    } else {
+      await supabase.from('custom_foods').insert({
         user_id: userId, name: selected.name, brand: selected.brand ?? null,
         kcal: per100.kcal, protein: per100.protein, carbs: per100.carbs, fat: per100.fat,
-        servings: updated, image_url: selected.image_url ?? null, barcode: selected.barcode ?? null,
-      },
-      { onConflict: 'user_id,name' },
-    )
+        servings: updated,
+      })
+    }
   }
 
   async function handleSave() {
