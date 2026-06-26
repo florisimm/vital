@@ -1625,49 +1625,95 @@ async function saveTraining() {
                 <span className="text-[17px] font-semibold text-white">Macro Targets</span>
                 <div className="w-16" />
               </div>
-              <div className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col gap-6 pt-4">
-                <div>
-                  <p className="text-[30px] font-bold text-white leading-tight">How do you want to set your macros?</p>
-                  <p className="text-[15px] text-white/40 mt-1.5">The calculator uses your body stats and goal to compute optimal targets.</p>
-                </div>
-                <div className="flex flex-col gap-3">
-                  <CalcCard emoji="🧮" title="Calculator"
-                    desc="Answer a few questions and we'll calculate your targets"
-                    selected={false} onSelect={openMacroCalc} />
-                  <CalcCard emoji="✏️" title="Set manually"
-                    desc="Enter your calorie and macro targets directly"
-                    selected={false} onSelect={openMacroManual} />
-                </div>
-                {(savedMacroKcal > 0) && (
-                  <div className="rounded-[14px] px-4 py-3"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <p className="text-[12px] text-white/35 mb-1 uppercase tracking-[0.08em] font-semibold">Current targets</p>
-                    <p className="text-[15px] text-white/70">
-                      {savedMacroKcal} kcal · {savedMacroProtein}g protein · {savedMacroCarbs}g carbs · {savedMacroFat}g fat
-                    </p>
+              <div className="flex-1 overflow-y-auto px-5 pb-10 flex flex-col gap-6 pt-3">
+
+                {/* Current targets */}
+                {savedMacroKcal > 0 && (
+                  <div>
+                    <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Current targets</p>
+                    <div className="rounded-[18px] px-5 py-5"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-baseline gap-1.5 mb-4">
+                        <span className="text-[44px] font-bold text-white leading-none">{savedMacroKcal}</span>
+                        <span className="text-[16px] text-white/35 font-medium">kcal / day</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          { label: 'Protein', value: savedMacroProtein, color: 'rgba(45,212,191,0.12)' },
+                          { label: 'Carbs',   value: savedMacroCarbs,   color: 'rgba(251,146,60,0.10)' },
+                          { label: 'Fat',     value: savedMacroFat,     color: 'rgba(167,139,250,0.10)' },
+                        ] as const).map(({ label, value, color }) => (
+                          <div key={label} className="rounded-[12px] px-3 py-3 flex flex-col gap-1" style={{ background: color }}>
+                            <span className="text-[10px] font-semibold text-white/35 uppercase tracking-[0.08em]">{label}</span>
+                            <span className="text-[20px] font-bold text-white leading-none">
+                              {value}<span className="text-[11px] text-white/30 ml-0.5">g</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 
+                {/* Estimated maintenance from recent training */}
                 {estimatedMaint && (
-                  <div className="rounded-[14px] px-4 py-4"
-                    style={{ background: 'rgba(45,212,191,0.05)', border: '1px solid rgba(45,212,191,0.18)' }}>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[12px] text-teal-400/80 uppercase tracking-[0.08em] font-semibold">Estimated maintenance</p>
-                      <p className="text-[11px] text-white/30">~{estimatedMaint.sessionsPerWeek} sessions/wk</p>
+                  <div>
+                    <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Estimated maintenance</p>
+                    <div className="rounded-[18px] px-5 py-5"
+                      style={{ background: 'rgba(45,212,191,0.05)', border: '1px solid rgba(45,212,191,0.14)' }}>
+                      <div className="flex items-end justify-between mb-4">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[44px] font-bold text-white leading-none">{estimatedMaint.kcal}</span>
+                          <span className="text-[16px] text-white/35 font-medium">kcal / day</span>
+                        </div>
+                        <span className="text-[12px] text-teal-400/60 font-semibold pb-1">~{estimatedMaint.sessionsPerWeek} sessions/wk</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          { label: 'Protein', value: estimatedMaint.protein },
+                          { label: 'Carbs',   value: estimatedMaint.carbs },
+                          { label: 'Fat',     value: estimatedMaint.fat },
+                        ] as const).map(({ label, value }) => (
+                          <div key={label} className="rounded-[12px] px-3 py-3 flex flex-col gap-1"
+                            style={{ background: 'rgba(45,212,191,0.08)' }}>
+                            <span className="text-[10px] font-semibold text-teal-400/50 uppercase tracking-[0.08em]">{label}</span>
+                            <span className="text-[20px] font-bold text-white leading-none">
+                              {value}<span className="text-[11px] text-white/30 ml-0.5">g</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-white/20 mt-3">Mifflin–St Jeor · based on your workouts the last 4 weeks</p>
                     </div>
-                    <p className="text-[26px] font-bold text-white leading-none mb-2.5">
-                      {estimatedMaint.kcal} <span className="text-[14px] font-normal text-white/40">kcal</span>
-                    </p>
-                    <div className="flex gap-3">
-                      <span className="text-[13px] text-white/55">{estimatedMaint.protein}g protein</span>
-                      <span className="text-[13px] text-white/25">·</span>
-                      <span className="text-[13px] text-white/55">{estimatedMaint.carbs}g carbs</span>
-                      <span className="text-[13px] text-white/25">·</span>
-                      <span className="text-[13px] text-white/55">{estimatedMaint.fat}g fat</span>
-                    </div>
-                    <p className="text-[11px] text-white/25 mt-2.5">Based on your workouts · last 4 weeks · Mifflin–St Jeor</p>
                   </div>
                 )}
+
+                {/* Actions */}
+                <div>
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Update targets</p>
+                  <div className="flex flex-col gap-2.5">
+                    {([
+                      { emoji: '🧮', title: 'Calculator', desc: 'Compute from body stats & goal', action: openMacroCalc },
+                      { emoji: '✏️', title: 'Set manually', desc: 'Enter targets directly', action: openMacroManual },
+                    ] as const).map(({ emoji, title, desc, action }) => (
+                      <button key={title} onClick={action}
+                        className="flex items-center justify-between px-5 py-4 rounded-[16px] w-full text-left"
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[22px]">{emoji}</span>
+                          <div>
+                            <p className="text-[16px] font-semibold text-white">{title}</p>
+                            <p className="text-[12px] text-white/35 mt-0.5">{desc}</p>
+                          </div>
+                        </div>
+                        <svg width="7" height="12" viewBox="0 0 7 12" fill="none" className="text-white/25 shrink-0">
+                          <path d="M1 1l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}
