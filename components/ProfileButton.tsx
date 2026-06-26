@@ -2031,12 +2031,12 @@ async function saveTraining() {
                   )}
                 </div>
 
-                {(calcStep >= 1 && calcStep <= 3 || calcStep === 6) && (
+                {(calcStep >= 1 && calcStep <= 3 || calcStep === 5) && (
                   <div className="shrink-0 px-5 pb-8 pt-2">
                     <button onClick={() => setCalcStep(s => s + 1)} disabled={!canNext}
                       className="w-full h-[52px] rounded-[16px] font-bold text-[16px] text-white transition-all disabled:opacity-30"
                       style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                      {calcStep === 6 ? 'Calculate my macros →' : 'Next →'}
+                      {calcStep === 5 ? 'Calculate my macros →' : 'Next →'}
                     </button>
                   </div>
                 )}
