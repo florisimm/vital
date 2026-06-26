@@ -23,14 +23,16 @@ async function getValidToken(supabase: Awaited<ReturnType<typeof createServerSup
       refresh_token: row.refresh_token,
     }),
   })
+  const data = await res.json()
   if (!res.ok) {
-    // Refresh token is dead (commonly: Google OAuth app still in "Testing" mode,
-    // where refresh tokens expire after 7 days). Flag for a reconnect prompt.
-    await supabase.from('fitbit_tokens').update({ needs_reconnect: true }).eq('user_id', userId)
+    // Only flag needs_reconnect for invalid_grant — the refresh token is genuinely dead
+    // (e.g. Google OAuth app in "Testing" mode → tokens expire after 7 days, or user revoked).
+    // Transient server errors (5xx, rate limits) should NOT trigger a reconnect prompt.
+    if (res.status === 400 && data?.error === 'invalid_grant') {
+      await supabase.from('fitbit_tokens').update({ needs_reconnect: true }).eq('user_id', userId)
+    }
     return null
   }
-
-  const data = await res.json()
   await supabase.from('fitbit_tokens').update({
     access_token:  data.access_token,
     refresh_token: data.refresh_token ?? row.refresh_token,
