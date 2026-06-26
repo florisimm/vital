@@ -429,13 +429,14 @@ function SessionContent() {
 
       const intensity = settings?.training_intensity ?? 'moderate'
       const maxHr = settings?.max_hr ?? (settings?.age ? Math.round(208 - 0.7 * settings.age) : null)
-      const recovery = computeRecoveryDetail((activities ?? []) as any[], (hevy ?? []) as any[], maxHr)
       const physiology = computePhysiologyReadiness((gezondheid ?? []) as HealthRow[])
-      const blended = physiology.score !== null
-        ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
-        : recovery.pct
-      setRecoveryPct(blended)
-      setResult(computeAdvice(sport, activities ?? [], title, intensity, blended))
+      // Use pure physiology readiness so the number matches the Health page exactly.
+      // Fall back to workout-load recovery when no biometric data is available.
+      const recovery = physiology.score !== null
+        ? physiology.score
+        : computeRecoveryDetail((activities ?? []) as any[], (hevy ?? []) as any[], maxHr).pct
+      setRecoveryPct(recovery)
+      setResult(computeAdvice(sport, activities ?? [], title, intensity, recovery))
     }
     load()
   }, [sport, title])
