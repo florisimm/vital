@@ -1712,7 +1712,7 @@ async function saveTraining() {
                   <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Update targets</p>
                   <div className="flex flex-col gap-2.5">
                     {([
-                      { emoji: '🧮', title: 'Calculator', desc: 'Compute from body stats & goal', action: openMacroCalc },
+                      { emoji: '🧮', title: 'Calculator', desc: 'Compute from body stats & goal', action: () => openMacroCalc() },
                       { emoji: '✏️', title: 'Set manually', desc: 'Enter targets directly', action: openMacroManual },
                     ] as const).map(({ emoji, title, desc, action }) => (
                       <button key={title} onClick={action}
