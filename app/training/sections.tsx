@@ -1607,9 +1607,6 @@ function StrengthDetailScreen({ workout: w, allWorkouts, onBack }: { workout: He
                           <span className="text-[14px] font-semibold text-white">
                             {(s.weight_kg ?? 0) > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
                           </span>
-                          {(s.rpe ?? 0) > 0 && (
-                            <span className="text-[11px] font-medium text-white/30">RPE {s.rpe}</span>
-                          )}
                         </div>
                       ))}
                     </div>
