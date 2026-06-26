@@ -1161,6 +1161,84 @@ function normalCDF(x: number, mu: number, sigma: number): number {
 }
 
 
+function HRChart({ avgHR, maxHR, movingTimeSec }: { avgHR: number; maxHR: number | null; movingTimeSec: number }) {
+  const peak = maxHR ?? Math.round(avgHR * 1.12)
+  const N = 32
+  const pts = Array.from({ length: N }, (_, i) => {
+    const t = i / (N - 1)
+    let hr: number
+    if (t < 0.15) {
+      const warmStart = Math.round(avgHR * 0.68)
+      hr = warmStart + (avgHR - warmStart) * (t / 0.15)
+    } else if (t > 0.88) {
+      const coolEnd = Math.round(avgHR * 0.75)
+      hr = avgHR - (avgHR - coolEnd) * ((t - 0.88) / 0.12)
+    } else {
+      const phase = (t - 0.15) / 0.73
+      const peakBoost = (peak - avgHR) * Math.sin(phase * Math.PI) * 0.65
+      const noise = (Math.sin(i * 2.3 + 1) + Math.cos(i * 3.7)) * 3.5
+      hr = avgHR + peakBoost + noise
+    }
+    return Math.round(Math.max(55, Math.min(peak + 2, hr)))
+  })
+
+  const minV = Math.min(...pts) - 4
+  const maxV = Math.max(...pts) + 4
+  const range = maxV - minV || 1
+  const W = 100, H = 60
+
+  const svgPts = pts.map((v, i) => {
+    const x = (i / (N - 1)) * W
+    const y = H - ((v - minV) / range) * H
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+
+  const areaPath = `M 0,${H} ` + pts.map((v, i) => {
+    const x = (i / (N - 1)) * W
+    const y = H - ((v - minV) / range) * H
+    return `L ${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ') + ` L ${W},${H} Z`
+
+  const avgY = H - ((avgHR - minV) / range) * H
+  const totalMin = Math.round(movingTimeSec / 60)
+
+  return (
+    <div className="p-4 rounded-[18px] flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate</span>
+        <span className="text-[11px] text-white/25">simulated</span>
+      </div>
+      <div className="relative">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[80px]">
+          <defs>
+            <linearGradient id="hr-area-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(248,113,113)" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="rgb(248,113,113)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill="url(#hr-area-fill)" />
+          <line x1="0" y1={avgY.toFixed(1)} x2={W} y2={avgY.toFixed(1)}
+            stroke="rgba(255,255,255,0.18)" strokeWidth="0.8" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />
+          <polyline points={svgPts} fill="none" stroke="rgb(248,113,113)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <div className="absolute inset-y-0 left-0 flex flex-col justify-between pointer-events-none py-1">
+          <span className="text-[9px] text-white/25 leading-none">{Math.max(...pts)}</span>
+          <span className="text-[9px] text-white/25 leading-none">{Math.min(...pts)}</span>
+        </div>
+      </div>
+      <div className="flex justify-between text-[10px] text-white/25">
+        <span>0 min</span>
+        <span>{Math.round(totalMin / 2)} min</span>
+        <span>{totalMin} min</span>
+      </div>
+      <div className="flex justify-between text-[12px]">
+        <span className="text-white/40">Gem <span className="text-red-400 font-semibold">{Math.round(avgHR)} bpm</span></span>
+        {maxHR && <span className="text-white/40">Max <span className="text-red-300 font-semibold">{Math.round(maxHR)} bpm</span></span>}
+      </div>
+    </div>
+  )
+}
+
 function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
   const t = (a.sport_type ?? '').toLowerCase()
   const isRide = t.includes('ride') || t.includes('cycl')
@@ -1288,6 +1366,11 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
                 </div>
               ))}
             </div>
+          )}
+
+          {/* HR chart */}
+          {a.average_heartrate && a.moving_time && (
+            <HRChart avgHR={a.average_heartrate} maxHR={a.max_heartrate ?? null} movingTimeSec={a.moving_time} />
           )}
 
           {/* HR zones */}
@@ -1439,6 +1522,7 @@ function ExerciseProgressScreen({ exerciseTitle, allWorkouts, onBack }: {
 function StrengthDetailScreen({ workout: w, allWorkouts, onBack }: { workout: HevyWorkout; allWorkouts: HevyWorkout[]; onBack: () => void }) {
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
   const exList = w.exercises ?? []
+
   return (
     <>
       {selectedExercise && (
@@ -1449,70 +1533,102 @@ function StrengthDetailScreen({ workout: w, allWorkouts, onBack }: { workout: He
         />
       )}
       <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
+        {/* Nav */}
         <div className="flex items-center justify-between px-5 py-4 shrink-0">
           <button onClick={onBack} className="px-4 h-[34px] rounded-full text-white text-[15px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)' }}>Back</button>
-          <span className="text-[17px] font-semibold text-white">Workout</span>
+          <span className="text-[17px] font-semibold text-white">🏋️ Workout</span>
           <div className="w-[70px]" />
         </div>
-        <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-5" style={{ scrollbarWidth: 'none', paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 3rem)' }}>
+
+        <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-6" style={{ scrollbarWidth: 'none', paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 3rem)' }}>
+          {/* Title + date */}
           <div>
-            <span className="text-[22px] font-bold text-white leading-snug">{w.title}</span>
-            <p className="text-[13px] text-white/40 mt-0.5">{formatDate(w.start_time)}</p>
+            <h1 className="text-[26px] font-bold text-white leading-tight">{w.title}</h1>
+            <p className="text-[13px] text-white/40 mt-1">{formatDate(w.start_time)}</p>
           </div>
+
+          {/* Session totals */}
           <div className="grid grid-cols-3 gap-3">
             {(w.duration ?? 0) > 0 && (
-              <div className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">Duration</span>
-                <span className="text-[18px] font-bold text-white leading-none">{formatDuration(w.duration!)}</span>
+              <div className="p-4 rounded-[18px] flex flex-col gap-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                <span className="text-[10px] text-white/35 uppercase tracking-[0.08em]">Duur</span>
+                <span className="text-[20px] font-bold text-white leading-none">{formatDuration(w.duration!)}</span>
               </div>
             )}
             {(w.volume_kg ?? 0) > 0 && (
-              <div className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">Volume</span>
-                <span className="text-[18px] font-bold text-orange-400 leading-none">{Math.round(w.volume_kg!).toLocaleString('en-US')} kg</span>
+              <div className="p-4 rounded-[18px] flex flex-col gap-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                <span className="text-[10px] text-white/35 uppercase tracking-[0.08em]">Volume</span>
+                <span className="text-[20px] font-bold text-orange-400 leading-none">{Math.round(w.volume_kg!).toLocaleString('nl-NL')}</span>
+                <span className="text-[10px] text-white/30">kg</span>
               </div>
             )}
             {(w.sets ?? 0) > 0 && (
-              <div className="p-4 rounded-[18px] flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <span className="text-[11px] text-white/35 uppercase tracking-[0.08em]">Sets</span>
-                <span className="text-[18px] font-bold text-white leading-none">{w.sets}</span>
+              <div className="p-4 rounded-[18px] flex flex-col gap-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                <span className="text-[10px] text-white/35 uppercase tracking-[0.08em]">Sets</span>
+                <span className="text-[20px] font-bold text-white leading-none">{w.sets}</span>
               </div>
             )}
           </div>
+
+          {/* Exercises */}
           {exList.length > 0 ? (
             <div className="flex flex-col gap-3">
+              <span className="text-[11px] font-semibold text-white/30 uppercase tracking-[0.08em]">Oefeningen</span>
               {exList.map(ex => {
                 const isCompound = COMPOUND_KEYWORDS.some(k => ex.title.toLowerCase().includes(k))
-                const best1RM = isCompound && ex.sets?.length
-                  ? Math.max(0, ...ex.sets.map(s => s.weight_kg > 0 && s.reps > 0 ? epley1RM(s.weight_kg, s.reps) : 0))
+                const sets = ex.sets ?? []
+                const best1RM = isCompound && sets.length
+                  ? Math.max(0, ...sets.map(s => s.weight_kg > 0 && s.reps > 0 ? epley1RM(s.weight_kg, s.reps) : 0))
                   : 0
+                const exVol = sets.reduce((acc, s) => acc + (s.weight_kg ?? 0) * (s.reps ?? 0), 0)
                 return (
                   <button key={ex.title} onClick={() => setSelectedExercise(ex.title)}
-                    className="w-full text-left p-4 rounded-[18px] flex flex-col gap-3 active:opacity-70"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] font-semibold text-white">{ex.title}</span>
-                      <div className="flex items-center gap-2">
+                    className="w-full text-left rounded-[20px] overflow-hidden active:opacity-70"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                    {/* Exercise header */}
+                    <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-2 border-b border-white/[0.06]">
+                      <span className="text-[16px] font-semibold text-white leading-snug flex-1">{ex.title}</span>
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
                         {best1RM > 0 && (
-                          <span className="text-[12px] font-semibold text-purple-400">e1RM {Math.round(best1RM)} kg</span>
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-purple-300"
+                            style={{ background: 'rgba(192,132,252,0.15)', border: '1px solid rgba(192,132,252,0.22)' }}>
+                            e1RM {Math.round(best1RM)} kg
+                          </span>
                         )}
-                        <span className="text-white/30 text-[16px]">›</span>
+                        <span className="text-white/25 text-[17px]">›</span>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {ex.sets.map((s, i) => (
-                        <span key={i} className="text-[13px] font-semibold px-3 py-1 rounded-full"
-                          style={{ background: 'rgba(251,146,60,0.12)', color: 'rgb(251,146,60)', border: '1px solid rgba(251,146,60,0.25)' }}>
-                          {s.weight_kg > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
-                        </span>
+                    {/* Sets */}
+                    <div className="px-4 py-3 flex flex-col gap-2">
+                      {sets.map((s, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-[11px] font-bold text-white/20 w-5 shrink-0 text-center">{i + 1}</span>
+                          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                          <span className="text-[14px] font-semibold text-white">
+                            {(s.weight_kg ?? 0) > 0 ? `${s.weight_kg} kg × ${s.reps}` : `${s.reps} reps`}
+                          </span>
+                          {(s.rpe ?? 0) > 0 && (
+                            <span className="text-[11px] font-medium text-white/30">RPE {s.rpe}</span>
+                          )}
+                        </div>
                       ))}
                     </div>
+                    {/* Footer: per-exercise volume */}
+                    {exVol > 0 && (
+                      <div className="px-4 pb-3 flex items-center gap-1.5 border-t border-white/[0.05]" style={{ paddingTop: 10 }}>
+                        <span className="text-[11px] text-white/25">{Math.round(exVol).toLocaleString('nl-NL')} kg volume</span>
+                      </div>
+                    )}
                   </button>
                 )
               })}
             </div>
           ) : (
-            <p className="text-[13px] text-white/30 text-center pt-4">No exercise detail available from Hevy</p>
+            <div className="flex flex-col items-center gap-2 py-10">
+              <span className="text-[32px]">🏋️</span>
+              <p className="text-[14px] font-semibold text-white/40">Verbind Hevy voor details</p>
+              <p className="text-[12px] text-white/25 text-center">Sync via het profiel-menu om oefeningen te zien</p>
+            </div>
           )}
         </div>
       </div>
