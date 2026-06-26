@@ -38,12 +38,6 @@ const INTENSITIES: { id: Intensity; label: string; desc: string }[] = [
   { id: 'all_out',  label: 'All Out',  desc: 'Max effort, high threshold' },
 ]
 
-const ACTIVITY: { label: string; desc: string; v: number }[] = [
-  { label: 'Sedentary',         desc: 'Desk job, no exercise',  v: 1.2 },
-  { label: 'Lightly active',    desc: '1–3× per week',          v: 1.375 },
-  { label: 'Moderately active', desc: '3–5× per week',          v: 1.55 },
-  { label: 'Very active',       desc: '6–7× per week',          v: 1.725 },
-]
 
 const NUTRITION: { id: NutritionFocus; emoji: string; title: string }[] = [
   { id: 'lose',     emoji: '📉', title: 'Lose fat' },
@@ -115,7 +109,6 @@ export function SignupOnboarding({
   const [weight, setWeight] = useState('')
   const [goal, setGoal] = useState<Goal | null>(null)
   const [nutrition, setNutrition] = useState<NutritionFocus | null>(null)
-  const [activity, setActivity] = useState<number | null>(null)
   const [freq, setFreq] = useState<Record<Sport, number>>({ running: 0, cycling: 0, swimming: 0, gym: 0 })
   const [intensity, setIntensity] = useState<Intensity>('moderate')
   const [sportOrder, setSportOrder] = useState<Sport[]>(['running', 'cycling', 'swimming', 'gym'])
@@ -127,13 +120,18 @@ export function SignupOnboarding({
   const wUnit = units === 'metric' ? 'kg' : 'lb'
   const hUnit = units === 'metric' ? 'cm' : 'in'
 
+  function activityFromFreq(f: Record<string, number>): number {
+    const total = Object.values(f).reduce((a, b) => a + b, 0)
+    return total === 0 ? 1.2 : total <= 3 ? 1.375 : total <= 6 ? 1.55 : total <= 10 ? 1.725 : 1.9
+  }
+
   const computedMacros = (() => {
     const kg = units === 'imperial' ? Number(weight) / 2.2046 : Number(weight)
     const cm = units === 'imperial' ? Number(height) * 2.54 : Number(height)
     const a = Number(age) || 0
     if (!(kg > 0 && cm > 0 && sex && a > 0)) return null
     const bmr = 10 * kg + 6.25 * cm - 5 * a + (sex === 'male' ? 5 : -161)
-    const tdee = bmr * (activity ?? 1.55)
+    const tdee = bmr * activityFromFreq(freq)
     const adj = nutrition === 'lose' ? -500 : nutrition === 'gain' ? 300 : 0
     const kcal = Math.max(1200, Math.round((tdee + adj) / 10) * 10)
     const protein = Math.round(kg * 1.8)
@@ -177,7 +175,7 @@ export function SignupOnboarding({
     let macros: Record<string, number> = {}
     if (kg > 0 && cm > 0 && sex && a > 0) {
       const bmr = 10 * kg + 6.25 * cm - 5 * a + (sex === 'male' ? 5 : -161)
-      const tdee = bmr * (activity ?? 1.55)
+      const tdee = bmr * activityFromFreq(freq)
       const adj = nutrition === 'lose' ? -500 : nutrition === 'gain' ? 300 : 0
       const kcal = Math.max(1200, Math.round((tdee + adj) / 10) * 10)
       const protein = Math.round(kg * 1.8)
@@ -376,13 +374,7 @@ export function SignupOnboarding({
                 <Choice key={n.id} selected={nutrition === n.id} onClick={() => setNutrition(n.id)} emoji={n.emoji} title={n.title} center />
               ))}
             </div>
-            <Label>Daily activity level</Label>
-            <div className="flex flex-col gap-2.5">
-              {ACTIVITY.map(a => (
-                <Choice key={a.v} selected={activity === a.v} onClick={() => setActivity(a.v)} title={a.label} desc={a.desc} />
-              ))}
-            </div>
-            <Why>Your focus and daily activity set your calorie and protein goals on the Food tab. A more active day means a higher calorie budget.</Why>
+            <Why>Your nutrition focus sets your calorie and protein goals on the Food tab. Activity level is automatically derived from your training schedule.</Why>
           </StepWrap>
         )}
 
