@@ -116,14 +116,15 @@ function determineUserLevel(acts: any[], sport: SportType): UserLevel {
 
 function detectTrainingType(title: string, acts: any[], sport?: SportType): TrainingType {
   const t = title.toLowerCase()
-  if (['interval', 'fartlek', 'herhaling', 'snelheid', 'vo2'].some(k => t.includes(k))) return 'interval'
+  // High-intensity keywords apply to all sports
+  if (['interval', 'fartlek', 'herhaling', 'snelheid', 'vo2', 'sprint', 'all-out', 'all out', 'race effort', 'race pace', 'max effort'].some(k => t.includes(k))) return 'interval'
   if (['tempo', 'drempel', 'threshold', 'lactaat'].some(k => t.includes(k))) return 'tempo'
-  // Cycling only has zone2 or interval — no herstel/lang
-  if (sport === 'cycling') return 'zone2'
-  if (['herstel', 'recovery', 'easy', 'rustig', 'actief herstel'].some(k => t.includes(k))) return 'herstel'
-  if (['lange duur', 'long run', 'lsd', '2u', '90min', 'lange rit'].some(k => t.includes(k))) return 'lang'
-  // Context: trained yesterday → herstel
-  if (daysSinceLast(acts) < 1.5 && acts.length > 0) return 'herstel'
+  // Recovery keywords — not used for cycling (recovery ride → zone2 for color/duration)
+  if (sport !== 'cycling' && ['herstel', 'recovery', 'easy', 'rustig', 'actief herstel'].some(k => t.includes(k))) return 'herstel'
+  // Long run only for running
+  if (sport === 'running' && ['lange duur', 'long run', 'lsd', '2u', '90min', 'lange rit', 'long'].some(k => t.includes(k))) return 'lang'
+  // Context: trained yesterday → herstel (running/swimming only)
+  if (sport !== 'cycling' && daysSinceLast(acts) < 1.5 && acts.length > 0) return 'herstel'
   return 'zone2'
 }
 

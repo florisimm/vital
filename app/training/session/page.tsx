@@ -524,7 +524,7 @@ function SessionContent() {
 
           {/* Type + duration */}
           <div className="grid grid-cols-2 gap-3">
-            <TypeCard label={TYPE_LABEL[result.advice.trainingType]} color={TYPE_COLOR[result.advice.trainingType]} />
+            <TypeCard label={title} color={TYPE_COLOR[result.advice.trainingType]} />
             <MetricCard label="Duration" value={String(result.advice.durationMin)} unit="min" />
           </div>
 
