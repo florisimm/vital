@@ -37,8 +37,7 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
 
   const { data: trainingCache } = useSWR('training', null, { revalidateOnMount: false, revalidateOnFocus: false })
   const { data: healthCache } = useSWR<any[]>('health-gezondheid', null, { revalidateOnMount: false, revalidateOnFocus: false })
-  const [intlResults, setIntlResults] = useState<Product[]>([])
-  const [dutchResults, setDutchResults] = useState<Product[]>([])
+  const [searchResults, setSearchResults] = useState<Product[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -53,16 +52,12 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current)
     const q = search.trim()
-    if (q.length < 2 || view !== 'search') { setIntlResults([]); setDutchResults([]); return }
+    if (q.length < 2 || view !== 'search') { setSearchResults([]); return }
     searchTimer.current = setTimeout(async () => {
       setSearchLoading(true)
       try {
         const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
-        if (res.ok) {
-          const { international, dutch } = await res.json()
-          setIntlResults(international ?? [])
-          setDutchResults(dutch ?? [])
-        }
+        if (res.ok) setSearchResults(await res.json())
       } catch { /* ignore */ } finally {
         setSearchLoading(false)
       }
@@ -304,56 +299,25 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
                       <div key={i} className="animate-pulse h-[58px] rounded-[14px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
                     ))}
                   </div>
+                ) : searchResults.length > 0 ? (
+                  <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    {searchResults.map((p, i) => (
+                      <button key={p.id} onClick={() => handleSelectRemote(p)}
+                        className="flex items-center justify-between px-4 py-3.5 text-left"
+                        style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
+                          {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
+                          <ChevronRight size={14} className="text-white/20" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 ) : (
-                  <>
-                    {dutchResults.length > 0 && (
-                      <>
-                        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Nederlandse producten</p>
-                        <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                          {dutchResults.map((p, i) => (
-                            <button key={p.id} onClick={() => handleSelectRemote(p)}
-                              className="flex items-center justify-between px-4 py-3.5 text-left"
-                              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
-                                {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0 ml-3">
-                                <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
-                                <ChevronRight size={14} className="text-white/20" />
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
-                    {intlResults.length > 0 && (
-                      <>
-                        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Internationale database</p>
-                        <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                          {intlResults.map((p, i) => (
-                            <button key={p.id} onClick={() => handleSelectRemote(p)}
-                              className="flex items-center justify-between px-4 py-3.5 text-left"
-                              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
-                                {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0 ml-3">
-                                <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
-                                <ChevronRight size={14} className="text-white/20" />
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
-                    {dutchResults.length === 0 && intlResults.length === 0 && (
-                      <p className="px-4 py-5 text-[14px] text-white/30 text-center">Geen resultaten voor "{search}"</p>
-                    )}
-                  </>
+                  <p className="px-4 py-5 text-[14px] text-white/30 text-center">Geen resultaten voor "{search}"</p>
                 )
               )}
 

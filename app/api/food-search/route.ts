@@ -93,10 +93,21 @@ async function searchDutch(q: string): Promise<Product[]> {
   }
 }
 
+function relevance(name: string, brand: string | null, q: string): number {
+  const n = name.toLowerCase()
+  const ql = q.toLowerCase()
+  if (n === ql) return 100
+  if (n.startsWith(ql)) return 80
+  if (n.split(/\s+/).some(w => w.startsWith(ql))) return 60
+  if (n.includes(ql)) return 40
+  if ((brand ?? '').toLowerCase().includes(ql)) return 20
+  return 0
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')?.trim()
-  if (!q || q.length < 2) return NextResponse.json({ international: [], dutch: [] })
+  if (!q || q.length < 2) return NextResponse.json([])
 
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -107,5 +118,15 @@ export async function GET(req: Request) {
 
   const [international, dutch] = await Promise.all([searchUsda(q, key), searchDutch(q)])
 
-  return NextResponse.json({ international, dutch })
+  // Merge and sort by name relevance; Dutch results get a small boost for local relevance
+  const merged = [
+    ...dutch.map(p => ({ ...p, _score: relevance(p.name, p.brand, q) + 5 })),
+    ...international.map(p => ({ ...p, _score: relevance(p.name, p.brand, q) })),
+  ]
+    .filter(p => p._score > 0 || p.name.length > 0)
+    .sort((a, b) => b._score - a._score || a.name.localeCompare(b.name, 'nl'))
+    .slice(0, 40)
+    .map(({ _score: _, ...p }) => p)
+
+  return NextResponse.json(merged)
 }
