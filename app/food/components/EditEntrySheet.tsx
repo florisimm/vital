@@ -38,6 +38,7 @@ export function EditEntrySheet({ entry, userId, today, totals, targets, training
 
   const amtG = Number(entry.amount_g) || 100
   const pseudoProduct: Product = {
+    id: '',
     name: entry.food_name,
     brand: null,
     kcal:    (Number(entry.kcal    ?? 0) / amtG) * 100,
