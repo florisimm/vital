@@ -19,22 +19,35 @@ const RouteMap = dynamic(() => import('./RouteMap').then(m => m.RouteMap), { ssr
 // ─── Wind helpers ─────────────────────────────────────────────────────────────
 
 type WindData = { speedKmh: number; directionDeg: number; compassLabel: string }
+type HourSlot = { hour: number; tempC: number; windKmh: number; windDir: string }
 
 function degToCompass(deg: number): string {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
   return dirs[Math.round(deg / 45) % 8]
 }
 
-async function fetchWind(lat: number, lon: number): Promise<WindData | null> {
+async function fetchWeather(lat: number, lon: number): Promise<{ wind: WindData | null; hourly: HourSlot[] }> {
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=windspeed_10m,winddirection_10m&wind_speed_unit=kmh&forecast_days=1`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=windspeed_10m,winddirection_10m,temperature_2m&hourly=temperature_2m,windspeed_10m,winddirection_10m&wind_speed_unit=kmh&forecast_days=1&timezone=auto`
     )
     const json = await res.json()
     const speed = Math.round(json?.current?.windspeed_10m ?? 0)
     const dir   = Math.round(json?.current?.winddirection_10m ?? 0)
-    return { speedKmh: speed, directionDeg: dir, compassLabel: degToCompass(dir) }
-  } catch { return null }
+    const wind: WindData = { speedKmh: speed, directionDeg: dir, compassLabel: degToCompass(dir) }
+
+    const times: string[]  = json?.hourly?.time             ?? []
+    const temps: number[]  = json?.hourly?.temperature_2m   ?? []
+    const winds: number[]  = json?.hourly?.windspeed_10m    ?? []
+    const dirs2: number[]  = json?.hourly?.winddirection_10m ?? []
+    const nowH = new Date().getHours()
+    const hourly: HourSlot[] = times
+      .map((t, i) => ({ hour: new Date(t).getHours(), tempC: Math.round(temps[i] ?? 0), windKmh: Math.round(winds[i] ?? 0), windDir: degToCompass(Math.round(dirs2[i] ?? 0)) }))
+      .filter((s, i) => { const h = new Date(times[i]).getHours(); return h >= nowH && h < nowH + 6 })
+      .slice(0, 6)
+
+    return { wind, hourly }
+  } catch { return { wind: null, hourly: [] } }
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -158,32 +171,25 @@ async function nominatim(query: string): Promise<[number, number]> {
 // ─── Route map card ───────────────────────────────────────────────────────────
 
 function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string; sport: SportType }) {
-  const [distanceInput, setDistanceInput] = useState(String(advice.targetKm))
   const [heuvels, setHeuvels] = useState(true)
   const [groteWeg, setGroteWeg] = useState(false)
   const [mtb, setMtb] = useState(false)
   const [locMode, setLocMode] = useState<'gps' | 'manual'>('gps')
   const [fromQuery, setFromQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
-  const [actualKm, setActualKm] = useState<number | null>(null)
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [windData, setWindData] = useState<WindData | null>(null)
+  const [hourly, setHourly] = useState<HourSlot[]>([])
   const seedRef = useRef(Math.floor(Math.random() * 10000))
-  const kmRef = useRef(advice.targetKm)
   const startCoordRef = useRef<[number, number] | null>(null)
   const heuvelsRef = useRef(true)
   const groteWegRef = useRef(false)
   const mtbRef = useRef(false)
 
-  // Keep refs in sync with latest state on every render
-  kmRef.current = Math.max(1, parseFloat(distanceInput) || advice.targetKm)
   heuvelsRef.current = heuvels
   groteWegRef.current = groteWeg
   mtbRef.current = mtb
-
-  function parsedKm() { return kmRef.current }
 
   // Ref to latest generateLoop so GPS callbacks never use a stale version
   const generateLoopRef = useRef<((lat: number, lon: number) => void) | null>(null)
@@ -191,10 +197,10 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     startCoordRef.current = [lat, lon]
     setStartCoord([lat, lon])
     setLoading(true); setError(null)
-    fetchWind(lat, lon).then(w => { if (w) setWindData(w) })
+    fetchWeather(lat, lon).then(({ hourly: h }) => setHourly(h))
     try {
-      const result = await orsRoundTrip(lat, lon, kmRef.current, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
-      setRouteCoords(result.coords); setActualKm(result.actualKm)
+      const result = await orsRoundTrip(lat, lon, advice.targetKm, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
+      setRouteCoords(result.coords)
     } catch (e: any) { setError(e?.message ? `Route error: ${e.message}` : 'Could not load route') }
     finally { setLoading(false) }
   }
@@ -269,17 +275,6 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
           </div>
         )}
 
-        {/* Distance */}
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] text-white/50 shrink-0">Distance</span>
-          <input type="number" value={distanceInput} onChange={e => setDistanceInput(e.target.value)}
-            min={1} max={300} step={0.5}
-            className="w-[64px] h-[32px] px-2 rounded-[10px] text-white text-[15px] font-semibold text-center outline-none border border-white/[0.09]"
-            style={{ background: 'rgba(255,255,255,0.08)' }} />
-          <span className="text-[13px] text-white/50">km</span>
-          <span className="text-[12px] text-white/25 ml-1">(recommended: {advice.targetKm} km)</span>
-        </div>
-
         {/* Route option toggles */}
         <div className="flex flex-wrap gap-2">
           <RouteToggle active={heuvels} onToggle={() => setHeuvels(v => !v)} label="⛰️ Hills" />
@@ -306,24 +301,22 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
         </div>
       ) : null}
 
-      {/* Actual route distance + wind */}
-      {routeCoords && actualKm !== null && (
-        <div className="px-4 pb-2 flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-white/40">Route distance:</span>
-            <span className="text-[15px] font-semibold text-white">{actualKm} km</span>
-            <span className="text-[13px] text-white/30">· target {parsedKm()} km</span>
-          </div>
-          {windData && (
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] text-white/40">Wind</span>
-              <span className="text-[15px] font-semibold text-white">{windData.speedKmh} km/h</span>
-              <span className="text-[13px] text-white/50">from {windData.compassLabel}</span>
-              <div style={{ transform: `rotate(${(windData.directionDeg + 180) % 360}deg)` }} className="inline-flex text-white/35">
-                <ArrowUp size={13} />
+      {/* Hourly weather strip */}
+      {hourly.length > 0 && (
+        <div className="px-4 pb-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {hourly.map((s, i) => (
+            <div key={i} className="flex flex-col items-center gap-1 shrink-0 px-3 py-2 rounded-[12px]"
+              style={{ background: 'rgba(255,255,255,0.06)', minWidth: 56 }}>
+              <span className="text-[11px] text-white/40">{s.hour}:00</span>
+              <span className="text-[15px] font-bold text-white">{s.tempC}°</span>
+              <div className="flex items-center gap-0.5">
+                <div style={{ transform: `rotate(${(s.windDir === 'N' ? 0 : s.windDir === 'NE' ? 45 : s.windDir === 'E' ? 90 : s.windDir === 'SE' ? 135 : s.windDir === 'S' ? 180 : s.windDir === 'SW' ? 225 : s.windDir === 'W' ? 270 : 315) + 180}deg)` }} className="inline-flex text-white/30">
+                  <ArrowUp size={10} />
+                </div>
+                <span className="text-[10px] text-white/40">{s.windKmh}</span>
               </div>
             </div>
-          )}
+          ))}
         </div>
       )}
 
@@ -493,36 +486,14 @@ function SessionContent() {
             </div>
           )}
 
-          {/* Row 1: training type + duration */}
+          {/* Type + duration */}
           <div className="grid grid-cols-2 gap-3">
             <MetricCard label="Type" value={TYPE_LABEL[result.advice.trainingType]} unit="" color={TYPE_COLOR[result.advice.trainingType]} />
             <MetricCard label="Duration" value={String(result.advice.durationMin)} unit="min" />
           </div>
 
-          {/* Row 2: distance + pace/speed */}
-          <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Distance" value={String(result.advice.targetKm)} unit="km" />
-            {result.advice.targetPace !== null && (
-              <MetricCard label="Pace" value={result.advice.targetPace} unit="/km" />
-            )}
-            {result.advice.targetSpeed !== null && (
-              <MetricCard label="Speed" value={String(result.advice.targetSpeed)} unit="km/h" />
-            )}
-          </div>
-
-          {/* Zone */}
-          <Card>
-            <div className="flex items-center justify-between">
-              <span className="text-[17px] font-semibold text-white">Heart rate zone</span>
-              <span className="text-[17px] font-semibold text-teal-400">{result.advice.zone}</span>
-            </div>
-          </Card>
-
-          {/* Route map */}
+          {/* Route map + hourly weather */}
           <RouteMapCard advice={result.advice} title={title} sport={sport} />
-
-          {/* Basis */}
-          <p className="text-[13px] text-white/30 text-center">{result.advice.basis}</p>
         </div>
       )}
     </div>
