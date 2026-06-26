@@ -126,28 +126,27 @@ function getWeekBounds(weekOffset = 0): { start: Date; end: Date } {
 }
 
 function classifyCycling(a: any, maxHR: number, durationMin: number): 'z2' | 'quality' {
-  // Power variability index: NP/AP > 1.08 signals structured intervals (power spikes)
-  if (a.weighted_average_watts && a.average_watts && a.average_watts > 50) {
-    const vi = (a.weighted_average_watts as number) / (a.average_watts as number)
-    if (vi > 1.08) return 'quality'
-  }
-
-  // Long rides (>90 min) are almost never interval sessions
-  if (durationMin > 90) {
-    if (a.average_heartrate && (a.average_heartrate as number) / maxHR > 0.88) return 'quality'
-    return 'z2'
-  }
-
-  // HR-based: cycling HR runs ~5 bpm lower than running at same effort → 78% ceiling for Z2
+  // 1. HR when available — most reliable per-activity signal
+  //    Cycling HR runs ~5 bpm lower than running → 78% Z2 ceiling (vs 80% for running)
   if (a.average_heartrate) {
     const pct = (a.average_heartrate as number) / maxHR
     if (pct <= 0.78) return 'z2'
     if (pct > 0.86) return 'quality'
-    // Grey zone 78–86%: long session → Z2 (sweetspot/tempo), short → quality
+    // Grey zone 78–86%: longer session → Z2 (sweetspot), short → quality
     return durationMin >= 60 ? 'z2' : 'quality'
   }
 
-  // Speed signal: avg > 34 km/h on a short ride suggests a hard/race effort
+  // 2. No HR → power variability: NP/AP > 1.08 signals structured intervals
+  if (a.weighted_average_watts && a.average_watts && (a.average_watts as number) > 50) {
+    const vi = (a.weighted_average_watts as number) / (a.average_watts as number)
+    if (vi > 1.08) return 'quality'
+    if (vi <= 1.03) return 'z2' // very steady output = steady-state aerobic
+  }
+
+  // 3. Duration: long rides (>90 min) are almost never interval sessions
+  if (durationMin > 90) return 'z2'
+
+  // 4. Speed: >34 km/h on a short ride suggests a race or hard group effort
   if (a.average_speed && (a.average_speed as number) * 3.6 > 34 && durationMin < 75) return 'quality'
 
   return durationMin > 60 ? 'z2' : 'quality'
@@ -156,28 +155,24 @@ function classifyCycling(a: any, maxHR: number, durationMin: number): 'z2' | 'qu
 function classifyRunning(a: any, maxHR: number, durationMin: number, distM: number, zones?: Zones): 'z2' | 'quality' {
   const distKm = distM / 1000
 
-  // Long run: >75 min or >12 km is almost always Z2
-  // Exception: HR consistently high across the whole effort (e.g. a race)
-  if (durationMin > 75 || distKm > 12) {
-    if (a.average_heartrate && (a.average_heartrate as number) / maxHR > 0.88) return 'quality'
-    return 'z2'
-  }
-
-  // HR-based: running HR — 80% ceiling for Z2, >87% clearly quality
+  // 1. HR when available — most reliable per-activity signal
   if (a.average_heartrate) {
     const pct = (a.average_heartrate as number) / maxHR
     if (pct <= 0.80) return 'z2'
     if (pct > 0.87) return 'quality'
-    // Tempo zone (80–87%): medium session → Z2, short → quality
+    // Tempo zone (80–87%): longer session → Z2, short → quality
     return durationMin >= 50 ? 'z2' : 'quality'
   }
 
-  // Pace-based fallback against calibrated Z2 speed
+  // 2. No HR → pace against calibrated Z2 speed
   if (zones?.z2Speed && a.average_speed) {
     return (a.average_speed as number) <= zones.z2Speed * 1.05 ? 'z2' : 'quality'
   }
 
-  // Default: short run without HR = likely quality (intervals, parkrun)
+  // 3. Duration/distance: long runs (>75 min or >12 km) are almost never interval sessions
+  if (durationMin > 75 || distKm > 12) return 'z2'
+
+  // 4. Default: short run without any data → quality (intervals, parkrun)
   return durationMin >= 45 ? 'z2' : 'quality'
 }
 
