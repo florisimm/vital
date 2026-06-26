@@ -263,7 +263,7 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
             <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px]"
               style={{ background: 'rgba(255,255,255,0.08)' }}>
               <Search size={16} className="text-white/40 shrink-0" />
-              <input autoFocus type="text" placeholder="Search foods…" value={search}
+              <input type="text" placeholder="Search foods…" value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[16px] outline-none" />
             </div>
