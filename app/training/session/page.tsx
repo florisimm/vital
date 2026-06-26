@@ -182,7 +182,7 @@ async function nominatim(query: string): Promise<[number, number]> {
 
 // ─── Route map card ───────────────────────────────────────────────────────────
 
-function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string; sport: SportType }) {
+function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; title: string; sport: SportType; onHourly: (slots: HourSlot[]) => void }) {
   const [heuvels, setHeuvels] = useState(true)
   const [groteWeg, setGroteWeg] = useState(false)
   const [mtb, setMtb] = useState(false)
@@ -192,7 +192,6 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hourly, setHourly] = useState<HourSlot[]>([])
   const seedRef = useRef(Math.floor(Math.random() * 10000))
   const startCoordRef = useRef<[number, number] | null>(null)
   const heuvelsRef = useRef(true)
@@ -209,7 +208,7 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
     startCoordRef.current = [lat, lon]
     setStartCoord([lat, lon])
     setLoading(true); setError(null)
-    fetchWeather(lat, lon).then(({ hourly: h }) => setHourly(h))
+    fetchWeather(lat, lon).then(({ hourly: h }) => onHourly(h))
     try {
       const result = await orsRoundTrip(lat, lon, advice.targetKm, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
       setRouteCoords(result.coords)
@@ -313,25 +312,6 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
         </div>
       ) : null}
 
-      {/* Hourly weather strip */}
-      {hourly.length > 0 && (
-        <div className="px-4 pb-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          {hourly.map((s, i) => (
-            <div key={i} className="flex flex-col items-center gap-1 shrink-0 px-3 py-2 rounded-[12px]"
-              style={{ background: 'rgba(255,255,255,0.06)', minWidth: 56 }}>
-              <span className="text-[11px] text-white/40">{s.hour}:00</span>
-              <span className="text-[15px] font-bold text-white">{s.tempC}°</span>
-              <div className="flex items-center gap-0.5">
-                <div style={{ transform: `rotate(${(s.windDir === 'N' ? 0 : s.windDir === 'NE' ? 45 : s.windDir === 'E' ? 90 : s.windDir === 'SE' ? 135 : s.windDir === 'S' ? 180 : s.windDir === 'SW' ? 225 : s.windDir === 'W' ? 270 : 315) + 180}deg)` }} className="inline-flex text-white/30">
-                  <ArrowUp size={10} />
-                </div>
-                <span className="text-[10px] text-white/40">{s.windKmh}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Buttons */}
       {routeCoords && (
         <div className="px-4 pb-4 flex gap-2">
@@ -347,6 +327,36 @@ function RouteMapCard({ advice, title, sport }: { advice: Advice; title: string;
         </div>
       )}
     </div>
+  )
+}
+
+function WeatherCard({ hourly }: { hourly: HourSlot[] }) {
+  if (!hourly.length) return null
+  function windDeg(dir: string) {
+    const map: Record<string, number> = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 }
+    return (map[dir] ?? 0) + 180
+  }
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <span className="text-[13px] font-semibold text-white/40 uppercase tracking-wider">Weather</span>
+        <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {hourly.map((s, i) => (
+            <div key={i} className="flex flex-col items-center gap-1 shrink-0 px-3 py-2 rounded-[12px]"
+              style={{ background: 'rgba(255,255,255,0.06)', minWidth: 56 }}>
+              <span className="text-[11px] text-white/40">{s.hour}:00</span>
+              <span className="text-[15px] font-bold text-white">{s.tempC}°</span>
+              <div className="flex items-center gap-0.5">
+                <div style={{ transform: `rotate(${windDeg(s.windDir)}deg)` }} className="inline-flex text-white/30">
+                  <ArrowUp size={10} />
+                </div>
+                <span className="text-[10px] text-white/40">{s.windKmh}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
   )
 }
 
@@ -377,6 +387,7 @@ function SessionContent() {
     : detectSport(title)
   const [result, setResult] = useState<ComputeAdviceResult | null>(null)
   const [recoveryPct, setRecoveryPct] = useState<number | null>(null)
+  const [hourly, setHourly] = useState<HourSlot[]>([])
 
   const timeLabel = time ? formatClockTime(new Date(time)) : null
 
@@ -516,8 +527,11 @@ function SessionContent() {
             <MetricCard label="Duration" value={String(result.advice.durationMin)} unit="min" />
           </div>
 
-          {/* Route map + hourly weather */}
-          <RouteMapCard advice={result.advice} title={title} sport={sport} />
+          {/* Route map */}
+          <RouteMapCard advice={result.advice} title={title} sport={sport} onHourly={setHourly} />
+
+          {/* Hourly weather — separate card */}
+          <WeatherCard hourly={hourly} />
         </div>
       )}
     </div>
