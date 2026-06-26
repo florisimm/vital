@@ -1449,6 +1449,10 @@ async function saveTraining() {
                               hint: "No HR monitor? Name your activity 'interval' or 'tempo'",
                               done: progress?.qualityMinutes ?? 0, target: targets.qualityMinutes })}
                           </div>
+                          <div className="flex items-center justify-between px-4 py-3.5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                            <span className="text-[12px] text-white/35">Weekly target</span>
+                            <span className="text-[13px] font-semibold text-white/70">{fmt(targets.z2Minutes + targets.qualityMinutes)}</span>
+                          </div>
                         </div>
                       ) : (
                         <div className="rounded-[18px] px-4 py-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
