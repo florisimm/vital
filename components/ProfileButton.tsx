@@ -693,18 +693,20 @@ async function saveTraining() {
     return mins > 0 ? `${whole}h${mins}m` : `${whole}h`
   }
 
-  // Adjust a zone target by ±delta minutes for the given sport, stamping the current ISO week
+  // Adjust a zone target by ±delta minutes for the given sport, stamping the current ISO week.
+  // Values snap to 15-min multiples and the sport's total frequency updates to match.
   function adjustZone(sport: string, zone: 'z2' | 'quality', delta: number, current: ZoneTargets) {
     const now = new Date()
+    const snap = (v: number) => Math.round(v / 15) * 15
+    const newZ2      = zone === 'z2'      ? Math.max(15, snap(current.z2Minutes      + delta)) : current.z2Minutes
+    const newQuality = zone === 'quality' ? Math.max(0,  snap(current.qualityMinutes + delta)) : current.qualityMinutes
     setZoneTargets(prev => ({
       ...prev,
-      [sport]: {
-        z2Minutes:      zone === 'z2'      ? Math.max(15, current.z2Minutes + delta)      : current.z2Minutes,
-        qualityMinutes: zone === 'quality' ? Math.max(0,  current.qualityMinutes + delta) : current.qualityMinutes,
-        updatedWeek: getISOWeek(now),
-        updatedYear: now.getFullYear(),
-      },
+      [sport]: { z2Minutes: newZ2, qualityMinutes: newQuality, updatedWeek: getISOWeek(now), updatedYear: now.getFullYear() },
     }))
+    // Keep total frequency in sync with zone sum
+    const totalHours = (newZ2 + newQuality) / 60
+    setTrainingFrequencies(prev => ({ ...prev, [sport]: Math.round(totalHours * 2) / 2 }))
   }
 
   // When a sport is opened, fetch its 60-day Strava history so the zone-hours
@@ -1429,7 +1431,7 @@ async function saveTraining() {
                     </div>
                     <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-5" style={{ scrollbarWidth: 'none' }}>
                       <div className="px-1">
-                        <p className="text-[13px] text-white/35">{fmt(freq * 60)} per week · weekly targets</p>
+                        <p className="text-[13px] text-white/35">{isEndurance ? `${fmt(freq * 60)} per week` : `${freq}× per week`} · weekly targets</p>
                         <p className="text-[11px] text-white/25 mt-1 leading-snug">
                           Polarized model — most time easy in Zone 2, a smaller share at quality intensity. Adjust the hours to fit your week.
                         </p>
@@ -1465,7 +1467,7 @@ async function saveTraining() {
                         </>
                       ) : (
                         <div className="rounded-[18px] px-4 py-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                          <p className="text-[14px] text-white/70 font-semibold">{fmt(freq * 60)} strength per week</p>
+                          <p className="text-[14px] text-white/70 font-semibold">{freq}× strength sessions per week</p>
                           <p className="text-[12px] text-white/35 mt-1 leading-snug">Strength volume is tracked per session rather than by zone hours.</p>
                         </div>
                       )}
@@ -1515,14 +1517,16 @@ async function saveTraining() {
                                   <p className="text-[16px] font-semibold text-white">{meta.label}</p>
                                   {isInjured
                                     ? <p className="text-[11px] text-orange-400/80 mt-0.5">Injured — coach still available</p>
-                                    : val > 0 && <p className="text-[11px] text-white/25 mt-0.5">Tap Zones to set weekly targets</p>}
+                                    : val > 0 && <p className="text-[11px] text-white/25 mt-0.5">{key === 'gym' ? 'Sessions per week' : 'Tap Zones to set weekly targets'}</p>}
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
-                                  <button onClick={() => setFreq(key, -0.5)} disabled={val === 0}
+                                  <button onClick={() => setFreq(key, key === 'gym' ? -1 : -0.5)} disabled={val === 0}
                                     className="w-8 h-8 rounded-full flex items-center justify-center text-[17px] text-white disabled:opacity-20 active:opacity-60"
                                     style={{ background: 'rgba(255,255,255,0.09)' }}>−</button>
-                                  <span className="text-[16px] font-bold text-white w-11 text-center tabular-nums">{fmtFreq(val)}</span>
-                                  <button onClick={() => setFreq(key, +0.5)} disabled={val >= 20}
+                                  <span className="text-[16px] font-bold text-white w-11 text-center tabular-nums">
+                                    {key === 'gym' ? (val === 0 ? '–' : `${val}x`) : fmtFreq(val)}
+                                  </span>
+                                  <button onClick={() => setFreq(key, key === 'gym' ? 1 : 0.5)} disabled={val >= 20}
                                     className="w-8 h-8 rounded-full flex items-center justify-center text-[17px] text-white disabled:opacity-20 active:opacity-60"
                                     style={{ background: 'rgba(255,255,255,0.09)' }}>+</button>
                                 </div>
