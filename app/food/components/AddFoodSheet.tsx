@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate as globalMutate } from 'swr'
 import { Plus, ChevronRight, Search, Utensils, ScanLine } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { BarcodeScanner } from '@/components/BarcodeScanner'
