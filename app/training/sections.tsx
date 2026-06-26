@@ -2,7 +2,6 @@
 
 import dynamic from 'next/dynamic'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import dynamic from 'next/dynamic'
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
