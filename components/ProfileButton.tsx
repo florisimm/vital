@@ -90,6 +90,7 @@ export function ProfileButton() {
   const [savedMacroCarbs, setSavedMacroCarbs] = useState(0)
   const [savedMacroFat, setSavedMacroFat] = useState(0)
   const [estimatedMaint, setEstimatedMaint] = useState<{ kcal: number; protein: number; carbs: number; fat: number; sessionsPerWeek: number } | null>(null)
+  const [calcActivityMult, setCalcActivityMult] = useState<number | null>(null)
   const [editingDevices, setEditingDevices] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [emailActionSheet, setEmailActionSheet] = useState(false)
@@ -517,10 +518,15 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     setCalcAge(savedCalcAge)
     setCalcHeight(savedCalcHeight)
     setCalcWeight(weight)
-    setCalcGoal(null)       // user fills each time
-    setCalcTargetKg('')     // user fills each time
-    setCalcTargetWeeks('')  // user fills each time
+    setCalcGoal(null)
+    setCalcTargetKg('')
+    setCalcTargetWeeks('')
     setCalcSaved(false)
+    // Pre-fill activity from detected sessions; user can adjust on the training step
+    const detectedMult = estimatedMaint
+      ? multFromSessions(Math.round(estimatedMaint.sessionsPerWeek))
+      : activityFromFreq(trainingFrequencies)
+    setCalcActivityMult(detectedMult)
 
     const hasBodyStats = !!savedCalcGender && !!savedCalcAge && !!savedCalcHeight
     setCalcStep(hasBodyStats && weight ? 4 : hasBodyStats ? 3 : 0)
@@ -543,13 +549,18 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     return total === 0 ? 1.2 : total <= 3 ? 1.375 : total <= 6 ? 1.55 : total <= 10 ? 1.725 : 1.9
   }
 
+  function multFromSessions(n: number): number {
+    return n === 0 ? 1.2 : n <= 3 ? 1.375 : n <= 6 ? 1.55 : n <= 10 ? 1.725 : 1.9
+  }
+
   function computeMacros(rate = 0) {
     const w = Number(calcWeight), h = Number(calcHeight), a = Number(calcAge)
+    const mult = calcActivityMult ?? activityFromFreq(trainingFrequencies)
     if (!w || !h || !a || !calcGender || !calcGoal) return null
     const bmr = calcGender === 'male'
       ? 10 * w + 6.25 * h - 5 * a + 5
       : 10 * w + 6.25 * h - 5 * a - 161
-    const tdee = Math.round(bmr * activityFromFreq(trainingFrequencies))
+    const tdee = Math.round(bmr * mult)
     const deficit = Math.round(rate * 7700 / 7)
     const kcal = Math.round(
       calcGoal === 'lose'     ? tdee - deficit :
@@ -1766,8 +1777,8 @@ async function saveTraining() {
 
           {/* Macro calculator overlay */}
           {editingMacroCalc && (() => {
-            // Steps: 0=gender 1=age 2=height 3=weight 4=goal
-            //        5=target-weight+weeks-slider(lose/gain only) 6=results
+            // Steps: 0=gender 1=age 2=height 3=weight 4=goal 5=training
+            //        6=target-weight+weeks-slider(lose/gain only) 7=results
             const deltaKg = calcTargetKg && Number(calcTargetKg) > 0
               ? Math.abs(Number(calcWeight) - Number(calcTargetKg))
               : 0
@@ -1779,7 +1790,15 @@ async function saveTraining() {
             const sliderPct = (sliderRateX10 - 1) / (20 - 1) * 100
 
             const derivedRate = calcGoal !== 'maintain' && deltaKg > 0 ? sliderRate : 0
-            const macros = calcStep === 6 ? computeMacros(derivedRate) : null
+            const macros = calcStep === 7 ? computeMacros(derivedRate) : null
+
+            const ACTS = [
+              { label: 'Sedentary',         desc: 'Desk job, no exercise',          v: 1.2   },
+              { label: 'Lightly active',    desc: '1–3 workouts per week',           v: 1.375 },
+              { label: 'Moderately active', desc: '4–6 workouts per week',           v: 1.55  },
+              { label: 'Very active',       desc: '7–10 workouts per week',          v: 1.725 },
+              { label: 'Extra active',      desc: 'Athlete or physical job',         v: 1.9   },
+            ]
 
             const canNextMap: Record<number, boolean> = {
               0: !!calcGender,
@@ -1787,17 +1806,18 @@ async function saveTraining() {
               2: !!calcHeight && Number(calcHeight) > 0,
               3: !!calcWeight && Number(calcWeight) > 0,
               4: !!calcGoal,
-              5: deltaKg > 0,
+              5: calcActivityMult !== null,
+              6: deltaKg > 0,
             }
             const canNext = canNextMap[calcStep] ?? false
 
-            const questionSteps = calcGoal === 'maintain' ? [0,1,2,3,4] : [0,1,2,3,4,5]
+            const questionSteps = calcGoal === 'maintain' ? [0,1,2,3,4,5] : [0,1,2,3,4,5,6]
             const dotIdx = questionSteps.indexOf(calcStep)
-            const totalDots = calcGoal === 'maintain' ? 5 : 6
+            const totalDots = calcGoal === 'maintain' ? 6 : 7
 
             function goBack() {
               if (calcStep === 0) { setEditingMacroCalc(false); return }
-              if (calcStep === 6) { setCalcSaved(false); setCalcStep(calcGoal === 'maintain' ? 4 : 5); return }
+              if (calcStep === 7) { setCalcSaved(false); setCalcStep(calcGoal === 'maintain' ? 5 : 6); return }
               setCalcStep(s => s - 1)
             }
 
@@ -1818,7 +1838,7 @@ async function saveTraining() {
                     style={{ background: 'rgba(255,255,255,0.10)' }}>
                     {calcStep === 0 ? 'Back' : '‹ Back'}
                   </button>
-                  {calcStep < 6 ? (
+                  {calcStep < 7 ? (
                     <div className="flex gap-1.5 items-center">
                       {Array.from({ length: totalDots }).map((_, i) => (
                         <div key={i} className="rounded-full transition-all duration-300"
@@ -1869,14 +1889,34 @@ async function saveTraining() {
                           { v: 'gain'     as const, e: '💪', t: 'Build muscle',    d: 'Calorie surplus based on your target' },
                         ] as const).map(({ v, e, t, d }) => (
                           <CalcCard key={v} emoji={e} title={t} desc={d} selected={calcGoal === v}
-                            onSelect={() => { setCalcGoal(v); setCalcStep(v === 'maintain' ? 6 : 5) }} />
+                            onSelect={() => { setCalcGoal(v); setCalcStep(5) }} />
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Step 5: target weight + dynamic weeks slider */}
+                  {/* Step 5: training load */}
                   {calcStep === 5 && (
+                    <div className="flex flex-col gap-6 pt-3">
+                      <div>
+                        <p className="text-[30px] font-bold text-white leading-tight">Your training</p>
+                        <p className="text-[15px] text-white/40 mt-1.5">
+                          {estimatedMaint
+                            ? `We counted ~${estimatedMaint.sessionsPerWeek} sessions/week over the last 4 weeks.`
+                            : 'How many workouts do you do per week on average?'}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        {ACTS.map(({ label, desc, v }) => (
+                          <CalcCard key={v} title={label} desc={desc} selected={calcActivityMult === v}
+                            onSelect={() => { setCalcActivityMult(v); setCalcStep(calcGoal === 'maintain' ? 7 : 6) }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 6: target weight + dynamic weeks slider */}
+                  {calcStep === 6 && (
                     <div className="flex flex-col gap-8 pt-3">
                       <p className="text-[30px] font-bold text-white leading-tight">What do you want to weigh?</p>
 
@@ -1963,8 +2003,8 @@ async function saveTraining() {
                     </div>
                   )}
 
-                  {/* Step 6: results */}
-                  {calcStep === 6 && macros && (
+                  {/* Step 7: results */}
+                  {calcStep === 7 && macros && (
                     <div className="flex flex-col gap-5 pt-3">
                       <div>
                         <p className="text-[13px] font-semibold text-teal-400 uppercase tracking-[0.12em] mb-2">
@@ -2031,12 +2071,12 @@ async function saveTraining() {
                   )}
                 </div>
 
-                {(calcStep >= 1 && calcStep <= 3 || calcStep === 5) && (
+                {(calcStep >= 1 && calcStep <= 3 || calcStep === 6) && (
                   <div className="shrink-0 px-5 pb-8 pt-2">
                     <button onClick={() => setCalcStep(s => s + 1)} disabled={!canNext}
                       className="w-full h-[52px] rounded-[16px] font-bold text-[16px] text-white transition-all disabled:opacity-30"
                       style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                      {calcStep === 5 ? 'Calculate my macros →' : 'Next →'}
+                      {calcStep === 6 ? 'Calculate my macros →' : 'Next →'}
                     </button>
                   </div>
                 )}
