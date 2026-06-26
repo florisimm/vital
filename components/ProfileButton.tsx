@@ -493,7 +493,6 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     setCalcHeight(savedCalcHeight)
     setCalcWeight(weight)
     setCalcGoal(null)       // user fills each time
-    setCalcActivity(null)   // user fills each time
     setCalcTargetKg('')     // user fills each time
     setCalcTargetWeeks('')  // user fills each time
     setCalcSaved(false)
