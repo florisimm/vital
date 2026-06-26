@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { cap } from '@/app/food/meal-config'
 import { ProductDetailView } from './ProductDetailView'
+import { createClient } from '@/lib/supabase'
 import type { FoodLogEntry, Product } from '@/lib/types'
 import type { Targets } from '@/app/food/fetchers'
 
@@ -19,6 +20,21 @@ export function EditEntrySheet({ entry, userId, today, totals, targets, training
   onClose: () => void
 }) {
   const [meal, setMeal] = useState(entry.meal_category)
+  const [servings, setServings] = useState<{ label: string; amount_g: number }[] | undefined>(undefined)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('products')
+      .select('servings')
+      .eq('user_id', userId)
+      .eq('name', entry.food_name)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.servings) setServings(data.servings)
+        setReady(true)
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const amtG = Number(entry.amount_g) || 100
   const pseudoProduct: Product = {
@@ -28,7 +44,7 @@ export function EditEntrySheet({ entry, userId, today, totals, targets, training
     protein: (Number(entry.protein ?? 0) / amtG) * 100,
     carbs:   (Number(entry.carbs   ?? 0) / amtG) * 100,
     fat:     (Number(entry.fat     ?? 0) / amtG) * 100,
-    servings: null,
+    servings: servings ?? null,
     image_url: null,
     barcode: null,
   }
@@ -53,20 +69,22 @@ export function EditEntrySheet({ entry, userId, today, totals, targets, training
         </button>
       </div>
 
-      <ProductDetailView
-        selected={pseudoProduct}
-        meal={meal}
-        setMeal={setMeal}
-        userId={userId}
-        today={today}
-        totals={baseTotals}
-        targets={targets}
-        trainingCache={trainingCache}
-        healthCache={healthCache}
-        editEntry={entry}
-        onSaved={onSaved}
-        onAdded={() => {}}
-      />
+      {ready && (
+        <ProductDetailView
+          selected={pseudoProduct}
+          meal={meal}
+          setMeal={setMeal}
+          userId={userId}
+          today={today}
+          totals={baseTotals}
+          targets={targets}
+          trainingCache={trainingCache}
+          healthCache={healthCache}
+          editEntry={entry}
+          onSaved={onSaved}
+          onAdded={() => {}}
+        />
+      )}
     </div>
   )
 }
