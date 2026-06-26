@@ -89,7 +89,7 @@ export function ProfileButton() {
   const [savedMacroProtein, setSavedMacroProtein] = useState(0)
   const [savedMacroCarbs, setSavedMacroCarbs] = useState(0)
   const [savedMacroFat, setSavedMacroFat] = useState(0)
-  const [estimatedMaint, setEstimatedMaint] = useState<{ kcal: number; protein: number; carbs: number; fat: number; sessionsPerWeek: number } | null>(null)
+  const [estimatedMaint, setEstimatedMaint] = useState<{ kcal: number; protein: number; carbs: number; fat: number; hoursPerWeek: number } | null>(null)
   const [calcActivityMult, setCalcActivityMult] = useState<number | null>(null)
   const [calcSkipTraining, setCalcSkipTraining] = useState(false)
   const [editingDevices, setEditingDevices] = useState(false)
@@ -189,20 +189,25 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
           if (hCm && ageVal && (genderVal === 'male' || genderVal === 'female')) {
             const since28 = new Date(Date.now() - 28 * 86400000).toISOString()
             Promise.all([
-              supabase.from('strava_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).gte('start_date', since28),
-              supabase.from('hevy_workouts').select('id', { count: 'exact', head: true }).eq('user_id', uid).gte('start_time', since28),
+              supabase.from('strava_activities').select('moving_time').eq('user_id', uid).gte('start_date', since28),
+              supabase.from('hevy_workouts').select('start_time,end_time').eq('user_id', uid).gte('start_time', since28),
               supabase.from('gezondheid').select('gewicht').eq('user_id', uid).not('gewicht', 'is', null).order('datum', { ascending: false }).limit(1).maybeSingle(),
             ]).then(([strava, hevy, weightRow]) => {
               const wKg = Number((weightRow as any)?.data?.gewicht) || 0
               if (!wKg) return
-              const sessionsPerWeek = ((strava.count ?? 0) + (hevy.count ?? 0)) / 4
-              const mult = sessionsPerWeek === 0 ? 1.2 : sessionsPerWeek <= 3 ? 1.375 : sessionsPerWeek <= 6 ? 1.55 : sessionsPerWeek <= 10 ? 1.725 : 1.9
+              const stravaHours = ((strava.data ?? []) as any[]).reduce((s, r) => s + (Number(r.moving_time) || 0), 0) / 3600
+              const hevyHours = ((hevy.data ?? []) as any[]).reduce((s, r) => {
+                if (r.start_time && r.end_time) return s + (new Date(r.end_time).getTime() - new Date(r.start_time).getTime()) / 3600000
+                return s + 1
+              }, 0)
+              const hoursPerWeek = (stravaHours + hevyHours) / 4
+              const mult = hoursPerWeek === 0 ? 1.2 : hoursPerWeek <= 2 ? 1.375 : hoursPerWeek <= 4.5 ? 1.55 : hoursPerWeek <= 7.5 ? 1.725 : 1.9
               const bmr = 10 * wKg + 6.25 * hCm - 5 * ageVal + (genderVal === 'male' ? 5 : -161)
               const kcal = Math.round(bmr * mult / 10) * 10
               const protein = Math.round(wKg * 1.8)
               const fat = Math.round(kcal * 0.25 / 9)
               const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4))
-              setEstimatedMaint({ kcal, protein, carbs, fat, sessionsPerWeek: Math.round(sessionsPerWeek * 10) / 10 })
+              setEstimatedMaint({ kcal, protein, carbs, fat, hoursPerWeek: Math.round(hoursPerWeek * 10) / 10 })
             })
           }
         })
@@ -525,7 +530,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     setCalcSaved(false)
     // Pre-fill activity from detected sessions; user can adjust on the training step
     const detectedMult = estimatedMaint
-      ? multFromSessions(Math.round(estimatedMaint.sessionsPerWeek))
+      ? multFromHours(estimatedMaint.hoursPerWeek)
       : activityFromFreq(trainingFrequencies)
     setCalcActivityMult(detectedMult)
     setCalcSkipTraining(fromEstimate)
@@ -551,8 +556,8 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     return total === 0 ? 1.2 : total <= 3 ? 1.375 : total <= 6 ? 1.55 : total <= 10 ? 1.725 : 1.9
   }
 
-  function multFromSessions(n: number): number {
-    return n === 0 ? 1.2 : n <= 3 ? 1.375 : n <= 6 ? 1.55 : n <= 10 ? 1.725 : 1.9
+  function multFromHours(h: number): number {
+    return h === 0 ? 1.2 : h <= 2 ? 1.375 : h <= 4.5 ? 1.55 : h <= 7.5 ? 1.725 : 1.9
   }
 
   function computeMacros(rate = 0) {
@@ -1037,109 +1042,83 @@ async function saveTraining() {
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
                   Back
                 </button>
-                <span className="text-[17px] font-semibold text-white">Devices & Apps</span>
+                <span className="text-[17px] font-semibold text-white">Connected Services</span>
                 <div className="w-16" />
               </div>
-              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
-                <ProfileSection title="Connected">
-                  <ProfileRow separator>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
-                        style={{ background: 'rgba(252,82,0,0.15)' }}>🏃</div>
-                      <div className="flex-1">
-                        <p className="text-[15px] font-medium text-white">Strava</p>
-                        <p className="text-[12px] text-white/40">Running & Cycling</p>
+
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-7" style={{ scrollbarWidth: 'none' }}>
+
+                {/* Training */}
+                <div>
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Training</p>
+                  <div className="grid grid-cols-2 gap-3">
+
+                    {/* Strava */}
+                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-start justify-between">
+                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
+                          style={{ background: 'rgba(252,82,0,0.15)' }}>🏃</div>
+                        {services?.strava === true
+                          ? <button onClick={() => setConfirmDisconnect('strava')}
+                              className="text-[12px] font-semibold text-green-400 active:opacity-60">✓ On</button>
+                          : services?.strava === false
+                            ? <button onClick={connectStrava}
+                                className="text-[12px] font-semibold text-teal-400 active:opacity-60">Connect</button>
+                            : <span className="text-[12px] text-white/25">…</span>}
                       </div>
-                      {services?.strava === true
-                        ? <button onClick={() => setConfirmDisconnect('strava')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
-                        : services?.strava === false
-                          ? <button onClick={connectStrava} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
-                          : <span className="text-[14px] text-white/30">…</span>}
-                    </div>
-                  </ProfileRow>
-                  <ProfileRow separator>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
-                        style={{ background: 'rgba(0,178,202,0.15)' }}>⌚</div>
-                      <div className="flex-1">
-                        <p className="text-[15px] font-medium text-white">Google Health</p>
-                        {services?.fitbit && services.fitbitNeedsReconnect
-                          ? <p className="text-[12px] text-orange-300">Connection expired — reconnect to resume sleep & HRV</p>
-                          : <p className="text-[12px] text-white/40">Sleep, HRV & Activity</p>}
+                      <div>
+                        <p className="text-[15px] font-semibold text-white">Strava</p>
+                        <p className="text-[12px] text-white/40 mt-0.5">Running & cycling</p>
                       </div>
-                      {services?.fitbit === true ? (
-                        services.fitbitNeedsReconnect ? (
-                          <button onClick={connectFitbit} className="text-[14px] font-semibold text-orange-400 active:opacity-60">Reconnect</button>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <button onClick={syncFitbit} disabled={fitbitSyncing}
-                              className="text-[14px] font-semibold text-teal-400 disabled:opacity-50 active:opacity-60">
-                              {fitbitSyncing ? 'Syncing…' : 'Sync'}
-                            </button>
-                            <button onClick={() => setConfirmDisconnect('fitbit')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
-                          </div>
-                        )
-                      ) : services?.fitbit === false
-                        ? <button onClick={connectFitbit} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
-                        : <span className="text-[14px] text-white/30">…</span>}
                     </div>
-                  </ProfileRow>
-                  {fitbitSyncMessage && (
-                    <div className="px-4 pb-2">
-                      <p className={`text-[12px] ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
-                        {fitbitSyncMessage.text}
-                      </p>
-                    </div>
-                  )}
-                  <ProfileRow separator>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
-                        style={{ background: 'rgba(255,255,255,0.08)' }}>🏋️</div>
-                      <div className="flex-1">
-                        <p className="text-[15px] font-medium text-white">Hevy</p>
-                        <p className="text-[12px] text-white/40">Strength Training</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {services?.hevy && (
-                          <button
-                            onClick={async () => {
+
+                    {/* Hevy */}
+                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-start justify-between">
+                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
+                          style={{ background: 'rgba(255,200,100,0.10)' }}>🏋️</div>
+                        <div className="flex items-center gap-2">
+                          {services?.hevy && (
+                            <button onClick={async () => {
                               setHevySyncing(true)
                               const supabase = createClient()
                               const { data: { session } } = await supabase.auth.getSession()
-                              await fetch(
-                                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`,
+                              await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`,
                                 { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: '{}' }
                               ).catch(() => {})
-                              setHevySyncing(false)
-                              mutate('health-gezondheid')
-                              mutate('today')
-                            }}
-                            className="text-[13px] text-teal-400"
-                          >
-                            {hevySyncing ? 'Syncing…' : 'Sync'}
-                          </button>
-                        )}
-                        {services?.hevy
-                          ? <span className="text-[14px] font-semibold text-green-400">Connected</span>
-                          : services?.hevy === false
-                            ? <button onClick={() => setShowHevyInput(v => !v)} className="text-[14px] font-semibold text-teal-400 active:opacity-60">{showHevyInput ? 'Cancel' : 'Connect'}</button>
-                            : <span className="text-[14px] text-white/30">…</span>}
+                              setHevySyncing(false); mutate('health-gezondheid'); mutate('today')
+                            }} className="text-[12px] text-teal-400">
+                              {hevySyncing ? '…' : 'Sync'}
+                            </button>
+                          )}
+                          {services?.hevy
+                            ? <span className="text-[12px] font-semibold text-green-400">✓ On</span>
+                            : services?.hevy === false
+                              ? <button onClick={() => setShowHevyInput(v => !v)}
+                                  className="text-[12px] font-semibold text-teal-400 active:opacity-60">
+                                  {showHevyInput ? 'Cancel' : 'Connect'}
+                                </button>
+                              : <span className="text-[12px] text-white/25">…</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[15px] font-semibold text-white">Hevy</p>
+                        <p className="text-[12px] text-white/40 mt-0.5">Strength training</p>
                       </div>
                     </div>
-                  </ProfileRow>
+                  </div>
+
+                  {/* Hevy API key — full-width below grid */}
                   {showHevyInput && !services?.hevy && (
-                    <div className="px-4 pb-3 flex flex-col gap-2">
-                      <input
-                        type="text"
-                        inputMode="text"
-                        autoCapitalize="none"
-                        autoCorrect="off"
+                    <div className="mt-3 rounded-[16px] p-4 flex flex-col gap-3"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <input type="text" inputMode="text" autoCapitalize="none" autoCorrect="off"
                         placeholder="Paste your Hevy API key"
-                        value={hevyKeyInput}
-                        onChange={e => setHevyKeyInput(e.target.value)}
+                        value={hevyKeyInput} onChange={e => setHevyKeyInput(e.target.value)}
                         className="h-[44px] px-3.5 rounded-[12px] text-white placeholder:text-white/30 text-[14px] outline-none"
-                        style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
-                      />
+                        style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }} />
                       <div className="flex items-center justify-between gap-3">
                         <a href="https://hevy.com/settings?developer" target="_blank" rel="noopener noreferrer"
                           className="text-[12px] text-teal-400/80 active:opacity-60">Where do I find this?</a>
@@ -1150,45 +1129,98 @@ async function saveTraining() {
                       </div>
                     </div>
                   )}
-                  <ProfileRow>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
-                        style={{ background: 'rgba(66,133,244,0.15)' }}>📅</div>
-                      <div className="flex-1">
-                        <p className="text-[15px] font-medium text-white">Google Calendar</p>
-                        <p className="text-[12px] text-white/40">Training Schedule</p>
+                </div>
+
+                {/* Health & Schedule */}
+                <div>
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Health & Schedule</p>
+                  <div className="grid grid-cols-2 gap-3">
+
+                    {/* Google Health */}
+                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-start justify-between">
+                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
+                          style={{ background: 'rgba(0,178,202,0.15)' }}>⌚</div>
+                        {services?.fitbit === true ? (
+                          services.fitbitNeedsReconnect
+                            ? <button onClick={connectFitbit} className="text-[12px] font-semibold text-orange-400 active:opacity-60">Reconnect</button>
+                            : <div className="flex items-center gap-1.5">
+                                <button onClick={syncFitbit} disabled={fitbitSyncing}
+                                  className="text-[12px] text-teal-400 disabled:opacity-50 active:opacity-60">
+                                  {fitbitSyncing ? '…' : 'Sync'}
+                                </button>
+                                <button onClick={() => setConfirmDisconnect('fitbit')}
+                                  className="text-[12px] font-semibold text-green-400 active:opacity-60">✓ On</button>
+                              </div>
+                        ) : services?.fitbit === false
+                          ? <button onClick={connectFitbit} className="text-[12px] font-semibold text-teal-400 active:opacity-60">Connect</button>
+                          : <span className="text-[12px] text-white/25">…</span>}
                       </div>
-                      {services?.google === true
-                        ? <button onClick={() => setConfirmDisconnect('google')} className="text-[14px] font-semibold text-green-400 active:opacity-60">Connected</button>
-                        : services?.google === false
-                          ? <button onClick={connectGoogleCalendar} className="text-[14px] font-semibold text-teal-400 active:opacity-60">Connect</button>
-                          : <span className="text-[14px] text-white/30">…</span>}
+                      <div>
+                        <p className="text-[15px] font-semibold text-white">Google Health</p>
+                        <p className={`text-[12px] mt-0.5 ${services?.fitbit && services.fitbitNeedsReconnect ? 'text-orange-300' : 'text-white/40'}`}>
+                          {services?.fitbit && services.fitbitNeedsReconnect ? 'Reconnect needed' : 'Sleep, HRV & steps'}
+                        </p>
+                      </div>
                     </div>
-                  </ProfileRow>
-                </ProfileSection>
-                <ProfileSection title="Coming Soon">
-                  {([
-                    { icon: '🍎', name: 'Apple Health', desc: 'Steps, sleep & workouts', bg: 'rgba(255,59,48,0.12)' },
-                    { icon: '⌚', name: 'Garmin',        desc: 'GPS watches & cycling',  bg: 'rgba(0,126,197,0.12)' },
-                    { icon: '🔴', name: 'Whoop',         desc: 'Recovery & strain',       bg: 'rgba(220,38,38,0.10)' },
-                    { icon: '🫀', name: 'Polar',         desc: 'HR & training load',      bg: 'rgba(235,87,87,0.10)' },
-                  ] as const).map((item, i, arr) => (
-                    <ProfileRow key={item.name} separator={i < arr.length - 1}>
-                      <div className="flex items-center gap-3 opacity-40">
-                        <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 text-[18px]"
-                          style={{ background: item.bg }}>{item.icon}</div>
-                        <div className="flex-1">
-                          <p className="text-[15px] font-medium text-white">{item.name}</p>
-                          <p className="text-[12px] text-white/40">{item.desc}</p>
-                        </div>
-                        <span className="text-[11px] font-semibold text-white/30 px-2.5 py-1 rounded-full"
-                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                          Soon
-                        </span>
+
+                    {/* Google Calendar */}
+                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-start justify-between">
+                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
+                          style={{ background: 'rgba(66,133,244,0.15)' }}>📅</div>
+                        {services?.google === true
+                          ? <button onClick={() => setConfirmDisconnect('google')}
+                              className="text-[12px] font-semibold text-green-400 active:opacity-60">✓ On</button>
+                          : services?.google === false
+                            ? <button onClick={connectGoogleCalendar}
+                                className="text-[12px] font-semibold text-teal-400 active:opacity-60">Connect</button>
+                            : <span className="text-[12px] text-white/25">…</span>}
                       </div>
-                    </ProfileRow>
-                  ))}
-                </ProfileSection>
+                      <div>
+                        <p className="text-[15px] font-semibold text-white">Google Calendar</p>
+                        <p className="text-[12px] text-white/40 mt-0.5">Training schedule</p>
+                      </div>
+                    </div>
+                  </div>
+                  {fitbitSyncMessage && (
+                    <p className={`text-[12px] mt-2 px-1 ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
+                      {fitbitSyncMessage.text}
+                    </p>
+                  )}
+                </div>
+
+                {/* Coming soon */}
+                <div>
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Coming soon</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {([
+                      { icon: '🍎', name: 'Apple Health', desc: 'Steps, sleep & workouts', bg: 'rgba(255,59,48,0.12)'  },
+                      { icon: '⌚', name: 'Garmin',        desc: 'GPS watches & cycling',  bg: 'rgba(0,126,197,0.12)'  },
+                      { icon: '🔴', name: 'Whoop',         desc: 'Recovery & strain',      bg: 'rgba(220,38,38,0.10)'  },
+                      { icon: '🫀', name: 'Polar',         desc: 'HR & training load',     bg: 'rgba(235,87,87,0.10)'  },
+                      { icon: '💍', name: 'Oura',          desc: 'Sleep & readiness',      bg: 'rgba(255,200,0,0.08)'  },
+                      { icon: '🟣', name: 'Wahoo',         desc: 'Cycling & power',        bg: 'rgba(167,139,250,0.10)'},
+                    ] as const).map(item => (
+                      <div key={item.name} className="rounded-[18px] p-4 flex flex-col gap-3"
+                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', opacity: 0.45 }}>
+                        <div className="flex items-start justify-between">
+                          <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
+                            style={{ background: item.bg }}>{item.icon}</div>
+                          <span className="text-[10px] font-semibold text-white/35 px-2 py-1 rounded-full"
+                            style={{ background: 'rgba(255,255,255,0.07)' }}>Soon</span>
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-semibold text-white">{item.name}</p>
+                          <p className="text-[11px] text-white/40 mt-0.5">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}
@@ -1679,7 +1711,7 @@ async function saveTraining() {
                           <span className="text-[44px] font-bold text-white leading-none">{estimatedMaint.kcal}</span>
                           <span className="text-[16px] text-white/35 font-medium">kcal / day</span>
                         </div>
-                        <span className="text-[12px] text-teal-400/60 font-semibold pb-1">~{estimatedMaint.sessionsPerWeek} sessions/wk</span>
+                        <span className="text-[12px] text-teal-400/60 font-semibold pb-1">~{estimatedMaint.hoursPerWeek}h / week</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 mb-4">
                         {([
@@ -1910,7 +1942,7 @@ async function saveTraining() {
                         <p className="text-[30px] font-bold text-white leading-tight">Your training</p>
                         <p className="text-[15px] text-white/40 mt-1.5">
                           {estimatedMaint
-                            ? `We counted ~${estimatedMaint.sessionsPerWeek} sessions/week over the last 4 weeks.`
+                            ? `We measured ~${estimatedMaint.hoursPerWeek}h of training per week over the last 4 weeks.`
                             : 'How many workouts do you do per week on average?'}
                         </p>
                       </div>
