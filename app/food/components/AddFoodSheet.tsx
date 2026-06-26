@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
-import useSWR, { mutate as globalMutate } from 'swr'
+import { useState, useEffect, useRef } from 'react'
+import useSWR from 'swr'
 import { Plus, ChevronRight, Search, Utensils, ScanLine } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { BarcodeScanner } from '@/components/BarcodeScanner'
 import type { FoodLogEntry, Product } from '@/lib/types'
 import {
-  fetchFoodFrequency, fetchMealTemplates,
+  fetchMealTemplates,
   type Targets, type MealTemplate, type TemplateFoodItem,
 } from '@/app/food/fetchers'
 import { cap } from '@/app/food/meal-config'
@@ -20,8 +20,8 @@ import { MealsListView } from './MealsListView'
 
 type SheetView = 'options' | 'search' | 'detail' | 'scan' | 'meals' | 'create-meal' | 'meal-confirm' | 'custom-food'
 
-export function AddFoodSheet({ products, productsLoading, preselectedMeal, userId, today, totals, targets, onAdded, onClose }: {
-  products: Product[]; productsLoading?: boolean; preselectedMeal: string; userId: string; today: string
+export function AddFoodSheet({ preselectedMeal, userId, today, totals, targets, onAdded, onClose }: {
+  preselectedMeal: string; userId: string; today: string
   totals: { kcal: number; protein: number; carbs: number; fat: number }
   targets: Targets
   onAdded: (entry: FoodLogEntry) => void; onClose: () => void
@@ -35,24 +35,11 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
   const [barcodeLoading, setBarcodeLoading] = useState(false)
   const [barcodeError, setBarcodeError] = useState<'not_found' | 'invalid' | 'unreachable' | null>(null)
 
-  const { data: serverFreq = {} } = useSWR('food-frequency', fetchFoodFrequency, { revalidateOnFocus: false, dedupingInterval: 300_000 })
   const { data: trainingCache } = useSWR('training', null, { revalidateOnMount: false, revalidateOnFocus: false })
   const { data: healthCache } = useSWR<any[]>('health-gezondheid', null, { revalidateOnMount: false, revalidateOnFocus: false })
-  const [localFreq, setLocalFreq] = useState<Record<string, number>>({})
   const [usdaResults, setUsdaResults] = useState<Product[]>([])
   const [usdaLoading, setUsdaLoading] = useState(false)
   const usdaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function incrementFrequency(name: string) {
-    const key = name.toLowerCase()
-    setLocalFreq(prev => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }))
-  }
-
-  const freqMap = useMemo(() => {
-    const merged: Record<string, number> = { ...serverFreq }
-    for (const [k, v] of Object.entries(localFreq)) merged[k] = (merged[k] ?? 0) + v
-    return merged
-  }, [serverFreq, localFreq])
 
   const { data: templates = [], mutate: mutateTemplates } = useSWR('meal-templates', fetchMealTemplates, { revalidateOnFocus: false })
   const [newMealName, setNewMealName] = useState('')
@@ -78,31 +65,10 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
     return () => { if (usdaTimer.current) clearTimeout(usdaTimer.current) }
   }, [search, view])
 
-  async function handleSelectUsda(product: Product) {
-    const supabase = createClient()
-    const { data: saved } = await supabase.from('products').insert({
-      user_id: userId, name: product.name, brand: product.brand,
-      kcal: product.kcal, protein: product.protein, carbs: product.carbs, fat: product.fat,
-      servings: product.servings,
-    }).select('id, name, brand, kcal, protein, carbs, fat, servings, barcode, image_url').single()
-    const final = (saved as Product | null) ?? product
-    globalMutate<Product[]>('products', (cur = []) =>
-      cur.find(p => p.id === final.id) ? cur : [...cur, final], { revalidate: false }
-    )
-    setSelected(final)
+  function handleSelectUsda(product: Product) {
+    setSelected(product)
     navigate('detail')
   }
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
-    return [...list]
-      .sort((a, b) => {
-        const diff = (freqMap[b.name.toLowerCase()] ?? 0) - (freqMap[a.name.toLowerCase()] ?? 0)
-        return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
-      })
-      .slice(0, 40)
-  }, [search, products, freqMap])
 
   function navigate(next: SheetView) {
     setViewHistory(h => [...h, view])
@@ -136,10 +102,6 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
       if (!res.ok)            { setBarcodeError('unreachable'); return }
       const product = await res.json() as Product
       setSelected(product)
-      globalMutate<Product[]>('products', (cur = []) =>
-        cur.find(p => p.id === product.id) ? cur : [...cur, product],
-        { revalidate: true }
-      )
       setView('detail')
     } finally {
       setBarcodeLoading(false)
@@ -281,8 +243,6 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
             setNewMealName={setNewMealName}
             templateItems={templateItems}
             setTemplateItems={setTemplateItems}
-            products={products}
-            freqMap={freqMap}
             savingTemplate={savingTemplate}
             onSave={saveTemplate}
           />
@@ -301,76 +261,39 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[16px] outline-none" />
             </div>
-            {productsLoading && products.length === 0 ? (
-              <div className="flex flex-col gap-2">
-                {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="animate-pulse h-[58px] rounded-[14px]"
-                    style={{ background: 'rgba(255,255,255,0.06)' }} />
-                ))}
-              </div>
-            ) : (
-              <div className="overflow-y-auto flex flex-col gap-2">
-                {filtered.length > 0 && (
-                  <div className="flex flex-col rounded-[16px] overflow-hidden"
-                    style={{ background: 'rgba(255,255,255,0.06)' }}>
-                    {filtered.map((p, i) => (
-                      <button key={p.id}
-                        onClick={() => { setSelected(p); navigate('detail') }}
-                        className="flex items-center justify-between px-4 py-3.5 text-left"
-                        style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                        <div>
-                          <p className="text-[16px] font-semibold text-white">{cap(p.name)}</p>
-                          {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0 ml-3">
-                          <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
-                          <ChevronRight size={14} className="text-white/20" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {search.trim().length >= 2 && (usdaLoading || usdaResults.length > 0) && (
-                  <>
-                    <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">
-                      {usdaLoading ? 'Searching database…' : 'USDA Food Database'}
-                    </p>
-                    {usdaLoading ? (
-                      <div className="flex flex-col gap-2">
-                        {[1, 2, 3].map(i => (
-                          <div key={i} className="animate-pulse h-[58px] rounded-[14px]"
-                            style={{ background: 'rgba(255,255,255,0.06)' }} />
-                        ))}
+            <div className="overflow-y-auto flex flex-col gap-2">
+              {usdaLoading ? (
+                <div className="flex flex-col gap-2">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="animate-pulse h-[58px] rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  ))}
+                </div>
+              ) : usdaResults.length > 0 ? (
+                <div className="flex flex-col rounded-[16px] overflow-hidden"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  {usdaResults.map((p, i) => (
+                    <button key={p.id}
+                      onClick={() => handleSelectUsda(p)}
+                      className="flex items-center justify-between px-4 py-3.5 text-left"
+                      style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
+                        {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
                       </div>
-                    ) : (
-                      <div className="flex flex-col rounded-[16px] overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        {usdaResults.map((p, i) => (
-                          <button key={p.id}
-                            onClick={() => handleSelectUsda(p)}
-                            className="flex items-center justify-between px-4 py-3.5 text-left"
-                            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
-                              {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0 ml-3">
-                              <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
-                              <ChevronRight size={14} className="text-white/20" />
-                            </div>
-                          </button>
-                        ))}
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
+                        <ChevronRight size={14} className="text-white/20" />
                       </div>
-                    )}
-                  </>
-                )}
-
-                {filtered.length === 0 && !usdaLoading && usdaResults.length === 0 && search.trim() && (
-                  <p className="px-4 py-5 text-[14px] text-white/30 text-center">No results for "{search}"</p>
-                )}
-              </div>
-            )}
+                    </button>
+                  ))}
+                </div>
+              ) : search.trim().length >= 2 ? (
+                <p className="px-4 py-5 text-[14px] text-white/30 text-center">No results for "{search}"</p>
+              ) : (
+                <p className="px-4 py-5 text-[14px] text-white/30 text-center">Type to search the food database…</p>
+              )}
+            </div>
           </div>
         )}
 
@@ -386,7 +309,7 @@ export function AddFoodSheet({ products, productsLoading, preselectedMeal, userI
             targets={targets}
             trainingCache={trainingCache}
             healthCache={healthCache ?? []}
-            onAdded={(entry) => { incrementFrequency(selected.name); onAdded(entry) }}
+            onAdded={onAdded}
           />
         )}
 

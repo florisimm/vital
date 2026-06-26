@@ -1,18 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Search, Plus, X } from 'lucide-react'
 import { cap } from '@/app/food/meal-config'
 import type { Product } from '@/lib/types'
 import type { TemplateFoodItem } from '@/app/food/fetchers'
 
-export function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, products, freqMap, savingTemplate, onSave }: {
+export function CreateMealView({ newMealName, setNewMealName, templateItems, setTemplateItems, savingTemplate, onSave }: {
   newMealName: string
   setNewMealName: (v: string) => void
   templateItems: TemplateFoodItem[]
   setTemplateItems: React.Dispatch<React.SetStateAction<TemplateFoodItem[]>>
-  products: Product[]
-  freqMap: Record<string, number>
   savingTemplate: boolean
   onSave: () => void
 }) {
@@ -21,17 +19,25 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null)
   const [pickerGrams, setPickerGrams] = useState('100')
   const [editIndex, setEditIndex] = useState<number | null>(null)
+  const [usdaResults, setUsdaResults] = useState<Product[]>([])
+  const [usdaLoading, setUsdaLoading] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const filtered = useMemo(() => {
-    const query = pickerSearch.trim().toLowerCase()
-    const list = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products
-    return [...list]
-      .sort((a, b) => {
-        const diff = (freqMap[b.name.toLowerCase()] ?? 0) - (freqMap[a.name.toLowerCase()] ?? 0)
-        return diff !== 0 ? diff : a.name.localeCompare(b.name, 'nl')
-      })
-      .slice(0, 40)
-  }, [pickerSearch, products, freqMap])
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current)
+    const q = pickerSearch.trim()
+    if (q.length < 2) { setUsdaResults([]); return }
+    timer.current = setTimeout(async () => {
+      setUsdaLoading(true)
+      try {
+        const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
+        if (res.ok) setUsdaResults(await res.json())
+      } catch { /* ignore */ } finally {
+        setUsdaLoading(false)
+      }
+    }, 400)
+    return () => { if (timer.current) clearTimeout(timer.current) }
+  }, [pickerSearch])
 
   function addToMeal() {
     if (!pickerProduct) return
@@ -54,6 +60,7 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
     setPickerProduct(null)
     setPickerGrams('100')
     setPickerSearch('')
+    setUsdaResults([])
     setShowPicker(false)
   }
 
@@ -62,10 +69,10 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
       {showPicker && (
         <div className="absolute inset-0 flex flex-col z-10" style={{ background: 'rgb(10,12,14)' }}>
           <div className="flex items-center justify-between px-5 pb-3 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}>
-            <button onClick={() => { setShowPicker(false); setPickerProduct(null); setPickerSearch('') }}
+            <button onClick={() => { setShowPicker(false); setPickerProduct(null); setPickerSearch(''); setUsdaResults([]) }}
               className="text-[16px] font-medium text-white/60">‹ Back</button>
             <span className="text-[16px] font-bold text-white">
-              {pickerProduct ? pickerProduct.name : 'Pick product'}
+              {pickerProduct ? pickerProduct.name : 'Pick food'}
             </span>
             <div className="w-14" />
           </div>
@@ -126,26 +133,39 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
               <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px] shrink-0"
                 style={{ background: 'rgba(255,255,255,0.08)' }}>
                 <Search size={15} className="text-white/40 shrink-0" />
-                <input autoFocus type="text" placeholder="Search product…" value={pickerSearch}
+                <input autoFocus type="text" placeholder="Search food…" value={pickerSearch}
                   onChange={e => setPickerSearch(e.target.value)}
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[15px] outline-none" />
               </div>
-              <div className="overflow-y-auto flex flex-col rounded-[14px] overflow-hidden"
-                style={{ background: 'rgba(255,255,255,0.06)' }}>
-                {filtered.map((p, i) => (
-                  <button key={p.id} onClick={() => { setPickerProduct(p); setPickerGrams('100') }}
-                    className="flex items-center justify-between px-4 py-3.5 text-left"
-                    style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                    <div>
-                      <p className="text-[15px] font-semibold text-white">{cap(p.name)}</p>
-                      {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                    </div>
-                    <span className="text-[13px] font-semibold text-orange-400 shrink-0 ml-3">
-                      {Math.round(Number(p.kcal ?? 0))} kcal
-                    </span>
-                  </button>
-                ))}
-              </div>
+              {usdaLoading ? (
+                <div className="flex flex-col gap-2">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="animate-pulse h-[54px] rounded-[14px]"
+                      style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  ))}
+                </div>
+              ) : usdaResults.length > 0 ? (
+                <div className="overflow-y-auto flex flex-col rounded-[14px] overflow-hidden"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  {usdaResults.map((p, i) => (
+                    <button key={p.id} onClick={() => { setPickerProduct(p); setPickerGrams('100') }}
+                      className="flex items-center justify-between px-4 py-3.5 text-left"
+                      style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[15px] font-semibold text-white truncate">{cap(p.name)}</p>
+                        {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                      </div>
+                      <span className="text-[13px] font-semibold text-orange-400 shrink-0 ml-3">
+                        {Math.round(Number(p.kcal ?? 0))} kcal
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : pickerSearch.trim().length >= 2 ? (
+                <p className="text-[14px] text-white/30 text-center py-5">No results for "{pickerSearch}"</p>
+              ) : (
+                <p className="text-[14px] text-white/30 text-center py-5">Type to search…</p>
+              )}
             </div>
           )}
         </div>
@@ -190,7 +210,7 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
           className="flex items-center gap-3 w-full px-4 py-3.5 rounded-[14px] border border-white/10 shrink-0"
           style={{ background: 'rgba(255,255,255,0.06)' }}>
           <Plus size={18} className="text-white/60" />
-          <span className="text-[15px] font-semibold text-white/60">Add product</span>
+          <span className="text-[15px] font-semibold text-white/60">Add food</span>
         </button>
 
         <button onClick={onSave}

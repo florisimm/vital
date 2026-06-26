@@ -20,19 +20,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // 1. Check local products cache (user's own + shared user_id=null)
-  const { data: cached } = await supabase
-    .from('products')
-    .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine')
-    .eq('barcode', barcode)
-    .or(`user_id.eq.${user.id},user_id.is.null`)
-    .maybeSingle()
-
-  if (cached) {
-    return NextResponse.json(cached as Product)
-  }
-
-  // 2. Fetch from Open Food Facts
+  // Fetch from Open Food Facts
   let ofnData: Record<string, unknown>
   try {
     const controller = new AbortController()
@@ -55,7 +43,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Product not found' }, { status: 404 })
   }
 
-  // 3. Parse the OFN response
+  // Parse the OFN response
   const p = ofnData.product as Record<string, unknown>
   const n = (p.nutriments ?? {}) as Record<string, unknown>
 
@@ -77,32 +65,6 @@ export async function GET(req: Request) {
   const servings: Product['servings'] =
     servingQ && servingLabel ? [{ label: servingLabel, amount_g: servingQ }] : null
 
-  // 4. Cache in Supabase under the user's account for future scans
-  const { data: existing } = await supabase
-    .from('products')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('barcode', barcode)
-    .maybeSingle()
-
-  let saved: Product | null = null
-  if (existing?.id) {
-    const { data } = await supabase
-      .from('products')
-      .update({ name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine })
-      .eq('id', existing.id)
-      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine')
-      .single()
-    saved = data as Product | null
-  } else {
-    const { data } = await supabase
-      .from('products')
-      .insert({ user_id: user.id, name, brand, kcal, protein, carbs, fat, servings, image_url, barcode, caffeine })
-      .select('id, name, brand, kcal, protein, carbs, fat, servings, image_url, caffeine')
-      .single()
-    saved = data as Product | null
-  }
-
-  const product: Product = saved ?? { id: `ofn-${barcode}`, name, brand, kcal, protein, carbs, fat, servings, image_url }
+  const product: Product = { id: `ofn-${barcode}`, name, brand, kcal, protein, carbs, fat, servings, image_url }
   return NextResponse.json(product)
 }

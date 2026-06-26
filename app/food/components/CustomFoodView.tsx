@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { mutate as globalMutate } from 'swr'
 import { createClient } from '@/lib/supabase'
-import type { FoodLogEntry, Product } from '@/lib/types'
+import type { FoodLogEntry } from '@/lib/types'
 
 export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
   userId: string; today: string; meal: string
@@ -32,32 +31,13 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
     setSaving(true)
     try {
       const supabase = createClient()
-      const portionGN = Number(portionG)
-      const servings = portionGN > 0
-        ? [{ label: portionLabel.trim() || `${portionGN}g`, amount_g: portionGN }]
-        : null
-      const { data: savedProduct } = await supabase.from('products').insert({
-        user_id: userId, name: form.name.trim(), brand: form.brand || '',
-        kcal: Number(form.kcal), protein: Number(form.protein), carbs: Number(form.carbs),
-        sugars: Number(form.sugars), fat: Number(form.fat),
-        caffeine: form.caffeine ? Number(form.caffeine) : null,
-        alcohol: form.alcohol ? Number(form.alcohol) : null,
-        servings,
-      }).select('id, name, brand, kcal, protein, carbs, fat, servings, barcode, image_url').single()
       const { data, error } = await supabase.from('food_log').insert({
         user_id: userId, date: today, meal_category: meal,
         food_name: form.name.trim(), amount_g: g,
         kcal: preview.kcal, protein: preview.protein, carbs: preview.carbs, fat: preview.fat,
         sugars: 0, brand: form.brand || '',
       }).select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at').single()
-      if (!error && data) {
-        if (savedProduct) {
-          globalMutate<Product[]>('products', (cur = []) => [...cur, savedProduct as Product], { revalidate: true })
-        } else {
-          globalMutate('products')
-        }
-        onAdded(data as FoodLogEntry)
-      }
+      if (!error && data) onAdded(data as FoodLogEntry)
     } finally {
       setSaving(false)
     }
