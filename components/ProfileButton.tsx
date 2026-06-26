@@ -91,6 +91,7 @@ export function ProfileButton() {
   const [savedMacroFat, setSavedMacroFat] = useState(0)
   const [estimatedMaint, setEstimatedMaint] = useState<{ kcal: number; protein: number; carbs: number; fat: number; sessionsPerWeek: number } | null>(null)
   const [calcActivityMult, setCalcActivityMult] = useState<number | null>(null)
+  const [calcSkipTraining, setCalcSkipTraining] = useState(false)
   const [editingDevices, setEditingDevices] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [emailActionSheet, setEmailActionSheet] = useState(false)
@@ -505,7 +506,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     setEditingMacroMode(true)
   }
 
-  function openMacroCalc() {
+  function openMacroCalc(fromEstimate = false) {
     const latestWeightRow = healthRows.find((r: any) => r.gewicht != null)
     const weightIsRecent = latestWeightRow?.datum
       ? Date.now() - new Date(latestWeightRow.datum).getTime() <= 14 * 24 * 60 * 60 * 1000
@@ -527,6 +528,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
       ? multFromSessions(Math.round(estimatedMaint.sessionsPerWeek))
       : activityFromFreq(trainingFrequencies)
     setCalcActivityMult(detectedMult)
+    setCalcSkipTraining(fromEstimate)
 
     const hasBodyStats = !!savedCalcGender && !!savedCalcAge && !!savedCalcHeight
     setCalcStep(hasBodyStats && weight ? 4 : hasBodyStats ? 3 : 0)
@@ -1670,7 +1672,7 @@ async function saveTraining() {
                 {estimatedMaint && (
                   <div>
                     <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Estimated maintenance</p>
-                    <button onClick={openMacroCalc} className="w-full text-left rounded-[18px] px-5 py-5 active:opacity-70 transition-opacity"
+                    <button onClick={() => openMacroCalc(true)} className="w-full text-left rounded-[18px] px-5 py-5 active:opacity-70 transition-opacity"
                       style={{ background: 'rgba(45,212,191,0.05)', border: '1px solid rgba(45,212,191,0.14)' }}>
                       <div className="flex items-end justify-between mb-4">
                         <div className="flex items-baseline gap-1.5">
@@ -1823,7 +1825,7 @@ async function saveTraining() {
 
             function goBack() {
               if (calcStep === 0) { setEditingMacroCalc(false); return }
-              if (calcStep === 7) { setCalcSaved(false); setCalcStep(calcGoal === 'maintain' ? 5 : 6); return }
+              if (calcStep === 7) { setCalcSaved(false); setCalcStep(calcGoal === 'maintain' ? (calcSkipTraining ? 4 : 5) : 6); return }
               setCalcStep(s => s - 1)
             }
 
@@ -1895,7 +1897,7 @@ async function saveTraining() {
                           { v: 'gain'     as const, e: '💪', t: 'Build muscle',    d: 'Calorie surplus based on your target' },
                         ] as const).map(({ v, e, t, d }) => (
                           <CalcCard key={v} emoji={e} title={t} desc={d} selected={calcGoal === v}
-                            onSelect={() => { setCalcGoal(v); setCalcStep(5) }} />
+                            onSelect={() => { setCalcGoal(v); setCalcStep(calcSkipTraining ? (v === 'maintain' ? 7 : 6) : 5) }} />
                         ))}
                       </div>
                     </div>
