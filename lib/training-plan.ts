@@ -24,21 +24,27 @@ const SPORT_TYPES: Record<string, string[]> = {
   gym:      ['weighttraining', 'workout', 'crossfit', 'elliptical', 'stairstepper', 'yoga', 'pilates', 'rowing', 'highintensityintervaltraining', 'coreandflexibility', 'hiit'],
 }
 
-// Dutch + English keywords for aerobic/Zone 2 effort (positive signal)
+// Shared Zone 2 keywords (all sports)
 const Z2_KEYWORDS = [
   'easy', 'zone 2', 'zone2', 'z2', 'endurance', 'aerobic', 'base', 'recovery',
   'duurloop', 'rustig', 'rustige', 'lsd', 'lange duur', 'duur', 'herstel',
   'aerobe', 'basisuithouding', 'ontspannen', 'long run', 'long ride', 'lange rit',
-  'slow', 'conversational', 'foundation',
+  'slow', 'conversational', 'foundation', 'technique', 'techniek', 'drill',
 ]
 
-// Dutch + English keywords for quality/high-intensity effort
+// Shared quality/high-intensity keywords (all sports)
 const QUALITY_KEYWORDS = [
   'interval', 'intervals', 'tempo', 'ftp', 'speed', 'vo2', 'threshold', 'drempel',
   'race', 'wedstrijd', 'koers', 'tijdrit', 'time trial',
   'repeat', 'repeats', 'sprint', 'strides', 'surge', 'progressie', 'progression',
   'lactate', 'lactaat', 'anaerob', 'sweetspot', 'sweet spot', 'above threshold',
-  '4x', '5x', '6x', '8x', '10x', '12x', 'wvo2', 'watt', 'tt ',
+  '4x', '5x', '6x', '8x', '10x', '12x', 'vo2max', 'tt ',
+  // Cycling-specific
+  'sst', 'criterium', 'crit', 'ramp test', 'ftp test', '20min',
+  // Running-specific
+  'fartlek', 'parkrun', 'drempeltraining', 'snelheidswerk',
+  // Swimming-specific
+  'sprint set', 'race pace', 'maximal',
 ]
 
 function normalizeSport(s: string): string {
@@ -119,24 +125,99 @@ function getWeekBounds(weekOffset = 0): { start: Date; end: Date } {
   return { start, end }
 }
 
-function classifyActivity(a: any, estimatedMaxHR: number, zones?: Zones): 'z2' | 'quality' {
+function classifyCycling(a: any, maxHR: number, durationMin: number): 'z2' | 'quality' {
+  // Power variability index: NP/AP > 1.08 signals structured intervals (power spikes)
+  if (a.weighted_average_watts && a.average_watts && a.average_watts > 50) {
+    const vi = (a.weighted_average_watts as number) / (a.average_watts as number)
+    if (vi > 1.08) return 'quality'
+  }
+
+  // Long rides (>90 min) are almost never interval sessions
+  if (durationMin > 90) {
+    if (a.average_heartrate && (a.average_heartrate as number) / maxHR > 0.88) return 'quality'
+    return 'z2'
+  }
+
+  // HR-based: cycling HR runs ~5 bpm lower than running at same effort → 78% ceiling for Z2
+  if (a.average_heartrate) {
+    const pct = (a.average_heartrate as number) / maxHR
+    if (pct <= 0.78) return 'z2'
+    if (pct > 0.86) return 'quality'
+    // Grey zone 78–86%: long session → Z2 (sweetspot/tempo), short → quality
+    return durationMin >= 60 ? 'z2' : 'quality'
+  }
+
+  // Speed signal: avg > 34 km/h on a short ride suggests a hard/race effort
+  if (a.average_speed && (a.average_speed as number) * 3.6 > 34 && durationMin < 75) return 'quality'
+
+  return durationMin > 60 ? 'z2' : 'quality'
+}
+
+function classifyRunning(a: any, maxHR: number, durationMin: number, distM: number, zones?: Zones): 'z2' | 'quality' {
+  const distKm = distM / 1000
+
+  // Long run: >75 min or >12 km is almost always Z2
+  // Exception: HR consistently high across the whole effort (e.g. a race)
+  if (durationMin > 75 || distKm > 12) {
+    if (a.average_heartrate && (a.average_heartrate as number) / maxHR > 0.88) return 'quality'
+    return 'z2'
+  }
+
+  // HR-based: running HR — 80% ceiling for Z2, >87% clearly quality
+  if (a.average_heartrate) {
+    const pct = (a.average_heartrate as number) / maxHR
+    if (pct <= 0.80) return 'z2'
+    if (pct > 0.87) return 'quality'
+    // Tempo zone (80–87%): medium session → Z2, short → quality
+    return durationMin >= 50 ? 'z2' : 'quality'
+  }
+
+  // Pace-based fallback against calibrated Z2 speed
+  if (zones?.z2Speed && a.average_speed) {
+    return (a.average_speed as number) <= zones.z2Speed * 1.05 ? 'z2' : 'quality'
+  }
+
+  // Default: short run without HR = likely quality (intervals, parkrun)
+  return durationMin >= 45 ? 'z2' : 'quality'
+}
+
+function classifySwimming(a: any, durationMin: number, distM: number): 'z2' | 'quality' {
+  // HR is rarely recorded for swimming — lean on distance and duration
+  // Long swim (>2500 m or >45 min) = endurance/technique
+  if (distM > 2500 || durationMin > 45) return 'z2'
+  // Short fast swim = sprint/interval sets
+  if (distM > 0 && distM < 1500 && durationMin < 30) return 'quality'
+  // Pace signal: < 1.5 m/s (= ~1:07/100m) is fast and signals quality
+  if (a.average_speed && (a.average_speed as number) > 1.5 && durationMin < 35) return 'quality'
+  return 'z2'
+}
+
+function classifyActivity(a: any, estimatedMaxHR: number, zones?: Zones, sport?: string): 'z2' | 'quality' {
   const name = (a.name ?? '').toLowerCase()
 
-  // 1. Keyword override — highest confidence
+  // 1. Keyword override — highest confidence regardless of sport
   if (Z2_KEYWORDS.some(kw => name.includes(kw))) return 'z2'
   if (QUALITY_KEYWORDS.some(kw => name.includes(kw))) return 'quality'
 
-  // 2. HR-based: anything ≤82% maxHR counts as Zone 2 (zone 3 is polarized "no man's land")
+  const durationMin = (a.moving_time ?? 0) / 60
+  const distM       = a.distance ?? 0
+  const sportStr    = sport ?? ''
+
+  // 2. Sport-specific classifiers
+  if (sportStr === 'cycling' || matchesSport(a.sport_type ?? '', 'cycling'))
+    return classifyCycling(a, estimatedMaxHR, durationMin)
+  if (sportStr === 'running' || matchesSport(a.sport_type ?? '', 'running'))
+    return classifyRunning(a, estimatedMaxHR, durationMin, distM, zones)
+  if (sportStr === 'swimming' || matchesSport(a.sport_type ?? '', 'swimming'))
+    return classifySwimming(a, durationMin, distM)
+
+  // 3. Generic fallback
   if (a.average_heartrate) {
     return (a.average_heartrate as number) / estimatedMaxHR <= 0.82 ? 'z2' : 'quality'
   }
-
-  // 3. Speed-based fallback (if zone calibration available)
   if (zones?.z2Speed && a.average_speed) {
-    return (a.average_speed as number) <= (zones.z2Speed * 1.08) ? 'z2' : 'quality'
+    return (a.average_speed as number) <= zones.z2Speed * 1.08 ? 'z2' : 'quality'
   }
-
-  // 4. Default to Zone 2
   return 'z2'
 }
 
@@ -165,7 +246,7 @@ export function computeWeekProgress(
     const durationMin = Math.round((a.moving_time ?? 0) / 60)
     if (durationMin < 5) continue
 
-    const zone = classifyActivity(a, estimated, zones)
+    const zone = classifyActivity(a, estimated, zones, sport)
     if (zone === 'z2') z2Minutes += durationMin
     else qualityMinutes += durationMin
   }
