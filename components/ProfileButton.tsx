@@ -1670,7 +1670,7 @@ async function saveTraining() {
                 {estimatedMaint && (
                   <div>
                     <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Estimated maintenance</p>
-                    <div className="rounded-[18px] px-5 py-5"
+                    <button onClick={openMacroCalc} className="w-full text-left rounded-[18px] px-5 py-5 active:opacity-70 transition-opacity"
                       style={{ background: 'rgba(45,212,191,0.05)', border: '1px solid rgba(45,212,191,0.14)' }}>
                       <div className="flex items-end justify-between mb-4">
                         <div className="flex items-baseline gap-1.5">
@@ -1679,7 +1679,7 @@ async function saveTraining() {
                         </div>
                         <span className="text-[12px] text-teal-400/60 font-semibold pb-1">~{estimatedMaint.sessionsPerWeek} sessions/wk</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-3 gap-2 mb-4">
                         {([
                           { label: 'Protein', value: estimatedMaint.protein },
                           { label: 'Carbs',   value: estimatedMaint.carbs },
@@ -1694,8 +1694,14 @@ async function saveTraining() {
                           </div>
                         ))}
                       </div>
-                      <p className="text-[11px] text-white/20 mt-3">Mifflin–St Jeor · based on your workouts the last 4 weeks</p>
-                    </div>
+                      <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid rgba(45,212,191,0.12)' }}>
+                        <span className="text-[13px] text-teal-400/70 font-semibold">Set a goal with this</span>
+                        <svg width="7" height="12" viewBox="0 0 7 12" fill="none" className="text-teal-400/50">
+                          <path d="M1 1l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                    </button>
+                    <p className="text-[11px] text-white/20 mt-2 px-1">Mifflin–St Jeor · based on your workouts the last 4 weeks</p>
                   </div>
                 )}
 
