@@ -1438,33 +1438,18 @@ async function saveTraining() {
                       </div>
 
                       {isEndurance && targets ? (
-                        <>
-                          <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                            <ZoneRow zone="z2" emoji="🟢" label="Zone 2"
-                                hint="No HR monitor? Name your activity 'easy run', 'zone 2' or 'endurance'"
-                                done={progress?.z2Minutes ?? 0} target={targets.z2Minutes} />
-                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                              <ZoneRow zone="quality" emoji="⚡"
-                                label={activeSport === 'running' ? 'Intervals & tempo' : 'Intervals'}
-                                sublabel={activeSport === 'running' ? 'tempo, drempeltraining, VO2max' : 'FTP-blokken, drempelritten, VO2max'}
-                                hint="No HR monitor? Name your activity 'interval' or 'tempo'"
-                                done={progress?.qualityMinutes ?? 0} target={targets.qualityMinutes} />
-                            </div>
+                        <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                          {ZoneRow({ zone: 'z2', emoji: '🟢', label: 'Zone 2',
+                            hint: "No HR monitor? Name your activity 'easy run', 'zone 2' or 'endurance'",
+                            done: progress?.z2Minutes ?? 0, target: targets.z2Minutes })}
+                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                            {ZoneRow({ zone: 'quality', emoji: '⚡',
+                              label: activeSport === 'running' ? 'Intervals & tempo' : 'Intervals',
+                              sublabel: activeSport === 'running' ? 'tempo, drempeltraining, VO2max' : 'FTP-blokken, drempelritten, VO2max',
+                              hint: "No HR monitor? Name your activity 'interval' or 'tempo'",
+                              done: progress?.qualityMinutes ?? 0, target: targets.qualityMinutes })}
                           </div>
-                          <div className="rounded-[18px] px-4 py-3.5 flex flex-col gap-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[12px] text-white/35">Weekly target</span>
-                              <span className="text-[13px] font-semibold text-white/60">{fmt(freq * 60)}</span>
-                            </div>
-                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="pt-2.5 flex items-center justify-between">
-                              <span className="text-[12px] text-white/35">This week done</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] text-white/25">🟢 {fmt(progress?.z2Minutes ?? 0)} · ⚡ {fmt(progress?.qualityMinutes ?? 0)}</span>
-                                <span className="text-[13px] font-semibold text-white/60">{fmt((progress?.z2Minutes ?? 0) + (progress?.qualityMinutes ?? 0))}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </>
+                        </div>
                       ) : (
                         <div className="rounded-[18px] px-4 py-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
                           <p className="text-[14px] text-white/70 font-semibold">{freq}× strength sessions per week</p>
