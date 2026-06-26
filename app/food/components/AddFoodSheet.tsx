@@ -37,9 +37,10 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
 
   const { data: trainingCache } = useSWR('training', null, { revalidateOnMount: false, revalidateOnFocus: false })
   const { data: healthCache } = useSWR<any[]>('health-gezondheid', null, { revalidateOnMount: false, revalidateOnFocus: false })
-  const [usdaResults, setUsdaResults] = useState<Product[]>([])
-  const [usdaLoading, setUsdaLoading] = useState(false)
-  const usdaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [intlResults, setIntlResults] = useState<Product[]>([])
+  const [dutchResults, setDutchResults] = useState<Product[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: templates = [], mutate: mutateTemplates } = useSWR('meal-templates', fetchMealTemplates, { revalidateOnFocus: false })
   const [newMealName, setNewMealName] = useState('')
@@ -50,22 +51,26 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (usdaTimer.current) clearTimeout(usdaTimer.current)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
     const q = search.trim()
-    if (q.length < 2 || view !== 'search') { setUsdaResults([]); return }
-    usdaTimer.current = setTimeout(async () => {
-      setUsdaLoading(true)
+    if (q.length < 2 || view !== 'search') { setIntlResults([]); setDutchResults([]); return }
+    searchTimer.current = setTimeout(async () => {
+      setSearchLoading(true)
       try {
         const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
-        if (res.ok) setUsdaResults(await res.json())
+        if (res.ok) {
+          const { international, dutch } = await res.json()
+          setIntlResults(international ?? [])
+          setDutchResults(dutch ?? [])
+        }
       } catch { /* ignore */ } finally {
-        setUsdaLoading(false)
+        setSearchLoading(false)
       }
     }, 400)
-    return () => { if (usdaTimer.current) clearTimeout(usdaTimer.current) }
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
   }, [search, view])
 
-  function handleSelectUsda(product: Product) {
+  function handleSelectRemote(product: Product) {
     setSelected(product)
     navigate('detail')
   }
@@ -271,12 +276,10 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
                 if (matches.length === 0) return null
                 return (
                   <>
-                    <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">My foods</p>
-                    <div className="flex flex-col rounded-[16px] overflow-hidden"
-                      style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Mijn voedsel</p>
+                    <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
                       {matches.map((p, i) => (
-                        <button key={p.id}
-                          onClick={() => { setSelected(p); navigate('detail') }}
+                        <button key={p.id} onClick={() => { setSelected(p); navigate('detail') }}
                           className="flex items-center justify-between px-4 py-3.5 text-left"
                           style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
                           <div className="flex-1 min-w-0">
@@ -294,46 +297,68 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
                 )
               })()}
 
-              {/* USDA results */}
               {search.trim().length >= 2 && (
-                <>
-                  {usdaLoading ? (
-                    <div className="flex flex-col gap-2">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className="animate-pulse h-[58px] rounded-[14px]"
-                          style={{ background: 'rgba(255,255,255,0.06)' }} />
-                      ))}
-                    </div>
-                  ) : usdaResults.length > 0 ? (
-                    <>
-                      <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Food database</p>
-                      <div className="flex flex-col rounded-[16px] overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        {usdaResults.map((p, i) => (
-                          <button key={p.id}
-                            onClick={() => handleSelectUsda(p)}
-                            className="flex items-center justify-between px-4 py-3.5 text-left"
-                            style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
-                              {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0 ml-3">
-                              <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
-                              <ChevronRight size={14} className="text-white/20" />
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="px-4 py-5 text-[14px] text-white/30 text-center">No results for "{search}"</p>
-                  )}
-                </>
+                searchLoading ? (
+                  <div className="flex flex-col gap-2">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="animate-pulse h-[58px] rounded-[14px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    {dutchResults.length > 0 && (
+                      <>
+                        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Nederlandse producten</p>
+                        <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                          {dutchResults.map((p, i) => (
+                            <button key={p.id} onClick={() => handleSelectRemote(p)}
+                              className="flex items-center justify-between px-4 py-3.5 text-left"
+                              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
+                                {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
+                                <ChevronRight size={14} className="text-white/20" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {intlResults.length > 0 && (
+                      <>
+                        <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Internationale database</p>
+                        <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                          {intlResults.map((p, i) => (
+                            <button key={p.id} onClick={() => handleSelectRemote(p)}
+                              className="flex items-center justify-between px-4 py-3.5 text-left"
+                              style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[16px] font-semibold text-white truncate">{cap(p.name)}</p>
+                                {p.brand && <p className="text-[12px] text-white/40">{p.brand}</p>}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                <span className="text-[14px] font-semibold text-orange-400">{Math.round(Number(p.kcal ?? 0))} kcal</span>
+                                <ChevronRight size={14} className="text-white/20" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {dutchResults.length === 0 && intlResults.length === 0 && (
+                      <p className="px-4 py-5 text-[14px] text-white/30 text-center">Geen resultaten voor "{search}"</p>
+                    )}
+                  </>
+                )
               )}
 
               {search.trim().length < 2 && customFoods.length === 0 && (
-                <p className="px-4 py-5 text-[14px] text-white/30 text-center">Type to search the food database…</p>
+                <p className="px-4 py-5 text-[14px] text-white/30 text-center">Typ om te zoeken…</p>
               )}
             </div>
           </div>
