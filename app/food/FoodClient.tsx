@@ -15,7 +15,7 @@ import {
 } from './meal-config'
 import { AddFoodSheet }    from './components/AddFoodSheet'
 import { MacroDrillSheet } from './components/MacroDrillSheet'
-import { EditFoodSheet }   from './components/EditFoodSheet'
+import { EditEntrySheet }  from './components/EditEntrySheet'
 import { MealSection }     from './components/MealSection'
 import { trainingFetcher } from '@/app/training/fetcher'
 import { healthFetcher } from '@/app/health/fetcher'
@@ -492,9 +492,14 @@ export function FoodClient() {
       )}
 
       {editEntry && (
-        <EditFoodSheet
+        <EditEntrySheet
           entry={editEntry}
           userId={userId}
+          today={selectedDate}
+          totals={totals}
+          targets={targets}
+          trainingCache={trainingData}
+          healthCache={healthRows ?? []}
           onSaved={onEdited}
           onClose={() => setEditEntry(null)}
         />

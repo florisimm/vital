@@ -216,7 +216,7 @@ function AddServingSheet({ onSave, onClose }: {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export function ProductDetailView({ selected, meal, setMeal, userId, today, totals, targets, trainingCache, healthCache, onAdded }: {
+export function ProductDetailView({ selected, meal, setMeal, userId, today, totals, targets, trainingCache, healthCache, onAdded, editEntry, onSaved }: {
   selected: Product
   meal: string
   setMeal: (m: string) => void
@@ -227,12 +227,17 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
   trainingCache: any
   healthCache: any[]
   onAdded: (e: FoodLogEntry) => void
+  editEntry?: FoodLogEntry
+  onSaved?: (e: FoodLogEntry) => void
 }) {
   const GRAM_SERVING = { label: 'gram / ml', amount_g: 1 }
   const [allServings, setAllServings] = useState<{ label: string; amount_g: number }[]>(selected.servings ?? [])
   const servingPills = [...allServings, GRAM_SERVING]
 
-  const [grams, setGrams] = useState(() => allServings[0] ? String(allServings[0].amount_g) : '100')
+  const [grams, setGrams] = useState(() => {
+    if (editEntry) return String(Math.round(Number(editEntry.amount_g) || 100))
+    return allServings[0] ? String(allServings[0].amount_g) : '100'
+  })
   const [selectedServing, setSelectedServing] = useState<{ label: string; amount_g: number } | null>(() => allServings[0] ?? null)
   const [showServings, setShowServings] = useState(false)
   const [showMeals, setShowMeals] = useState(false)
@@ -316,6 +321,24 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
     if (!preview) return
     setSaving(true)
     const supabase = createClient()
+
+    if (editEntry) {
+      const { data, error } = await supabase.from('food_log')
+        .update({
+          meal_category: meal,
+          amount_g: Number(grams),
+          kcal:    Math.round(preview.kcal),
+          protein: Math.round(preview.protein * 10) / 10,
+          carbs:   Math.round(preview.carbs   * 10) / 10,
+          fat:     Math.round(preview.fat     * 10) / 10,
+        })
+        .eq('id', editEntry.id)
+        .select('id,meal_category,food_name,amount_g,kcal,protein,carbs,fat,logged_at')
+        .single()
+      setSaving(false)
+      if (!error && data) onSaved?.(data as FoodLogEntry)
+      return
+    }
 
     const [{ data, error }] = await Promise.all([
       supabase.from('food_log').insert({
@@ -544,7 +567,12 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
                 color: preview ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.22)',
               }}>
               {saving ? (
-                <span className="opacity-70">Saving…</span>
+                <span className="opacity-70">{editEntry ? 'Opslaan…' : 'Saving…'}</span>
+              ) : editEntry ? (
+                <>
+                  <span>Opslaan</span>
+                  {preview && <span className="font-normal text-[12px]" style={{ opacity: 0.55 }}>· {Math.round(preview.kcal)} kcal</span>}
+                </>
               ) : (
                 <>
                   <span>{MEAL_ICONS[meal]}</span>
