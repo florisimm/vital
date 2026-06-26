@@ -1484,53 +1484,68 @@ async function saveTraining() {
                 <div className="w-16" />
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-7" style={{ scrollbarWidth: 'none' }}>
 
-                {/* Weekly frequency */}
-                <div className="flex flex-col gap-2">
-                  <div className="px-1">
-                    <span className="text-[13px] font-medium text-white/40">Weekly hours</span>
-                    <p className="text-[11px] text-white/25 mt-0.5">Tap a sport to see zone targets</p>
-                  </div>
+                {/* Sports */}
+                <div className="flex flex-col gap-3">
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold px-1">Sports</p>
                   {(() => {
-                    const SPORT_META: Record<string, { label: string; icon: string }> = {
-                      running:  { label: 'Running',        icon: '🏃' },
-                      cycling:  { label: 'Cycling',        icon: '🚴' },
-                      swimming: { label: 'Swimming',       icon: '🏊' },
-                      gym:      { label: 'Gym / Strength', icon: '🏋️' },
+                    const SPORT_META: Record<string, { label: string; icon: string; tint: string; iconBg: string }> = {
+                      running:  { label: 'Running',  icon: '🏃', tint: 'rgba(251,113,133,1)',  iconBg: 'rgba(251,113,133,0.14)' },
+                      cycling:  { label: 'Cycling',  icon: '🚴', tint: 'rgba(45,212,191,1)',   iconBg: 'rgba(45,212,191,0.13)' },
+                      swimming: { label: 'Swimming', icon: '🏊', tint: 'rgba(96,165,250,1)',   iconBg: 'rgba(96,165,250,0.14)' },
+                      gym:      { label: 'Strength', icon: '🏋️', tint: 'rgba(167,139,250,1)',  iconBg: 'rgba(167,139,250,0.14)' },
                     }
                     return (
-                      <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                        {sportOrder.map((key, i) => {
+                      <div className="flex flex-col gap-2.5">
+                        {sportOrder.map(key => {
                           const meta = SPORT_META[key]; if (!meta) return null
                           const val = trainingFrequencies[key] ?? 0
+                          const isSelf = !!selfPlanned[key]
+                          const isInjured = !!injuries[key]
                           return (
-                            <div
-                              key={key}
-                              style={{ borderBottom: i < sportOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
-                            >
-                              <div className="flex items-center gap-3 px-4 py-3.5">
-                                <button
-                                  onClick={() => val > 0 && setActiveSport(key)}
-                                  className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-60"
-                                >
-                                  <span className="text-[16px] shrink-0">{injuries[key] ? '🤕' : meta.icon}</span>
-                                  <div className="flex-1 flex flex-col gap-0">
-                                    <span className="text-[15px] text-white">{meta.label}</span>
-                                    {injuries[key] && <span className="text-[11px] text-orange-400/80">Injured — plan still available</span>}
-                                  </div>
-                                  {val > 0 && <ChevronRight size={14} className="text-white/25 shrink-0" />}
-                                </button>
-                                <div className="flex items-center gap-2 shrink-0">
+                            <div key={key} className="rounded-[20px] overflow-hidden"
+                              style={{ background: 'rgba(255,255,255,0.055)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                              <div className="flex items-center gap-3.5 px-4 py-4">
+                                <div className="w-11 h-11 rounded-[13px] flex items-center justify-center text-[20px] shrink-0"
+                                  style={{ background: isInjured ? 'rgba(251,146,60,0.15)' : meta.iconBg }}>
+                                  {isInjured ? '🤕' : meta.icon}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[16px] font-semibold text-white">{meta.label}</p>
+                                  {isInjured
+                                    ? <p className="text-[11px] text-orange-400/80 mt-0.5">Injured — coach still available</p>
+                                    : val > 0 && <p className="text-[11px] text-white/25 mt-0.5">Tap Zones to set weekly targets</p>}
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
                                   <button onClick={() => setFreq(key, -0.5)} disabled={val === 0}
-                                    className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                                    style={{ background: 'rgba(255,255,255,0.10)' }}>−</button>
-                                  <span className="text-[15px] font-semibold text-white w-10 text-center tabular-nums">{fmtFreq(val)}</span>
+                                    className="w-8 h-8 rounded-full flex items-center justify-center text-[17px] text-white disabled:opacity-20 active:opacity-60"
+                                    style={{ background: 'rgba(255,255,255,0.09)' }}>−</button>
+                                  <span className="text-[16px] font-bold text-white w-11 text-center tabular-nums">{fmtFreq(val)}</span>
                                   <button onClick={() => setFreq(key, +0.5)} disabled={val >= 20}
-                                    className="w-[28px] h-[28px] rounded-full text-[18px] text-white flex items-center justify-center disabled:opacity-25 active:opacity-60"
-                                    style={{ background: 'rgba(255,255,255,0.10)' }}>+</button>
+                                    className="w-8 h-8 rounded-full flex items-center justify-center text-[17px] text-white disabled:opacity-20 active:opacity-60"
+                                    style={{ background: 'rgba(255,255,255,0.09)' }}>+</button>
                                 </div>
                               </div>
+                              {val > 0 && (
+                                <div className="flex items-center gap-3 px-4 pb-3.5 pt-0"
+                                  style={{ borderTop: '1px solid rgba(255,255,255,0.055)' }}>
+                                  <button onClick={() => setSelfPlanned(p => ({ ...p, [key]: !p[key] }))}
+                                    className="flex items-center gap-2 pt-3 flex-1 active:opacity-60">
+                                    <div className="w-[18px] h-[18px] rounded-[5px] flex items-center justify-center shrink-0"
+                                      style={{ background: isSelf ? 'rgba(45,212,191,0.18)' : 'rgba(255,255,255,0.07)', border: `1px solid ${isSelf ? 'rgba(45,212,191,0.45)' : 'rgba(255,255,255,0.13)'}` }}>
+                                      {isSelf && <span className="text-[10px] text-teal-400">✓</span>}
+                                    </div>
+                                    <span className="text-[13px]" style={{ color: isSelf ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.38)' }}>Self-planned</span>
+                                  </button>
+                                  <button onClick={() => setActiveSport(key)}
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-full active:opacity-60 mt-3"
+                                    style={{ background: meta.iconBg }}>
+                                    <span className="text-[12px] font-semibold" style={{ color: meta.tint }}>Zones</span>
+                                    <ChevronRight size={11} style={{ color: meta.tint }} className="opacity-70" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -1539,112 +1554,86 @@ async function saveTraining() {
                   })()}
                 </div>
 
-                {/* Self-planned sports */}
-                {sportOrder.some(key => (trainingFrequencies[key] ?? 0) > 0) && (() => {
-                  const SPORT_META: Record<string, { label: string; icon: string }> = {
-                    running:  { label: 'Running',        icon: '🏃' },
-                    cycling:  { label: 'Cycling',        icon: '🚴' },
-                    swimming: { label: 'Swimming',       icon: '🏊' },
-                    gym:      { label: 'Gym / Strength', icon: '🏋️' },
-                  }
-                  const activeSports = sportOrder.filter(key => (trainingFrequencies[key] ?? 0) > 0)
-                  return (
-                    <div className="flex flex-col gap-2">
-                      <div className="px-1">
-                        <span className="text-[13px] font-medium text-white/40">Plan yourself</span>
-                        <p className="text-[11px] text-white/25 mt-0.5">No coach advice for sports you schedule yourself</p>
-                      </div>
-                      <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                        {activeSports.map((key, i) => {
-                          const meta = SPORT_META[key]; if (!meta) return null
-                          const active = !!selfPlanned[key]
-                          return (
-                            <button
-                              key={key}
-                              onClick={() => setSelfPlanned(p => ({ ...p, [key]: !p[key] }))}
-                              className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-60"
-                              style={{ borderBottom: i < activeSports.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
-                            >
-                              <div className="w-[20px] h-[20px] rounded-[6px] flex items-center justify-center shrink-0"
-                                style={{ background: active ? 'rgba(45,212,191,0.20)' : 'rgba(255,255,255,0.08)', border: `1px solid ${active ? 'rgba(45,212,191,0.45)' : 'rgba(255,255,255,0.14)'}` }}>
-                                {active && <span className="text-[12px] text-teal-400">✓</span>}
-                              </div>
-                              <span className="text-[15px]" style={{ color: active ? 'rgb(45,212,191)' : 'white' }}>
-                                {meta.icon} {meta.label}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* Intensity preference */}
+                {/* Intensity */}
                 <div className="flex flex-col gap-3">
                   <div className="px-1">
-                    <span className="text-[13px] font-medium text-white/40">Intensity preference</span>
-                    <p className="text-[12px] text-white/25 mt-0.5">Higher = harder sessions recommended more easily</p>
+                    <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold">Coach style</p>
+                    <p className="text-[12px] text-white/25 mt-1">How hard the coach pushes you</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {([
-                      { id: 'easy',     label: 'Easy',     desc: 'Zone 2 & recovery focus' },
-                      { id: 'moderate', label: 'Moderate', desc: 'Balanced, default' },
-                      { id: 'hard',     label: 'Hard',     desc: 'Push when body allows' },
-                      { id: 'all_out',  label: 'All Out',  desc: 'Max effort, high threshold' },
-                    ]).map(({ id, label, desc }) => {
+                      { id: 'easy',     label: 'Easy',     emoji: '🌿', desc: 'Zone 2 & recovery focus' },
+                      { id: 'moderate', label: 'Moderate', emoji: '⚡', desc: 'Balanced, default' },
+                      { id: 'hard',     label: 'Hard',     emoji: '🔥', desc: 'Push when body allows' },
+                      { id: 'all_out',  label: 'All Out',  emoji: '💥', desc: 'Max effort, high threshold' },
+                    ]).map(({ id, label, emoji, desc }) => {
                       const selected = trainingIntensity === id
                       return (
                         <button key={id} onClick={() => setTrainingIntensity(id)}
-                          className="flex flex-col gap-0.5 px-4 py-3 rounded-[16px] text-left active:opacity-70 transition-opacity"
-                          style={{ background: selected ? 'rgba(45,212,191,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${selected ? 'rgba(45,212,191,0.4)' : 'rgba(255,255,255,0.07)'}` }}>
-                          <span className="text-[15px] font-semibold" style={{ color: selected ? 'rgb(45,212,191)' : 'white' }}>{label}</span>
-                          <span className="text-[11px] text-white/35">{desc}</span>
+                          className="flex flex-col gap-1.5 px-4 py-3.5 rounded-[18px] text-left active:opacity-70 transition-all"
+                          style={{
+                            background: selected ? 'rgba(45,212,191,0.13)' : 'rgba(255,255,255,0.05)',
+                            border: `1px solid ${selected ? 'rgba(45,212,191,0.38)' : 'rgba(255,255,255,0.07)'}`,
+                          }}>
+                          <span className="text-[22px] leading-none">{emoji}</span>
+                          <span className="text-[15px] font-semibold leading-tight" style={{ color: selected ? 'rgb(45,212,191)' : 'white' }}>{label}</span>
+                          <span className="text-[11px] text-white/30 leading-snug">{desc}</span>
                         </button>
                       )
                     })}
                   </div>
                 </div>
 
-                {/* Goal priority — drag to reorder, top = highest priority */}
-                <div className="flex flex-col gap-2">
+                {/* Goals */}
+                <div className="flex flex-col gap-3">
                   <div className="px-1">
-                    <span className="text-[13px] font-medium text-white/40">Goals</span>
-                    <p className="text-[11px] text-white/25 mt-0.5">Sleep om volgorde te bepalen — bovenaan = hoogste prioriteit</p>
+                    <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold">Goals</p>
+                    <p className="text-[11px] text-white/25 mt-1">Drag to reorder · top = highest priority</p>
                   </div>
                   {(() => {
                     const GOAL_META: Record<string, { emoji: string; title: string; desc: string }> = {
                       lose_weight:  { emoji: '🔥', title: 'Lose weight',   desc: 'Calorie deficit, preserve muscle' },
-                      build_muscle: { emoji: '💪', title: 'Build muscle',  desc: 'Progressive overload, calorie surplus' },
-                      get_fitter:   { emoji: '🏃', title: 'Get fitter',    desc: 'Improve endurance and cardiovascular fitness' },
-                      maintain:     { emoji: '⚖️', title: 'Maintain',      desc: 'Keep current weight and performance' },
+                      build_muscle: { emoji: '💪', title: 'Build muscle',  desc: 'Progressive overload & surplus' },
+                      get_fitter:   { emoji: '🏃', title: 'Get fitter',    desc: 'Endurance & cardiovascular' },
+                      maintain:     { emoji: '⚖️', title: 'Maintain',      desc: 'Keep current weight & performance' },
                       performance:  { emoji: '🏆', title: 'Performance',   desc: 'Train for a race or competition' },
                     }
                     return (
-                      <div ref={dragGoalContainerRef} className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', touchAction: 'none' }}>
+                      <div ref={dragGoalContainerRef} className="rounded-[20px] overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', touchAction: 'none' }}>
                         {goalOrder.map((key, i) => {
                           const m = GOAL_META[key]; if (!m) return null
                           const isDragging = draggingGoalKey === key
+                          const isTop = i === 0
                           return (
                             <div
                               key={key}
                               data-goal-key={key}
                               className="flex items-center gap-3 px-4 py-3.5 cursor-grab active:cursor-grabbing select-none"
-                              style={{ opacity: isDragging ? 0.4 : 1, borderBottom: i < goalOrder.length - 1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
+                              style={{
+                                opacity: isDragging ? 0.3 : 1,
+                                borderBottom: i < goalOrder.length - 1 ? '1px solid rgba(255,255,255,0.055)' : undefined,
+                                background: isTop ? 'rgba(45,212,191,0.05)' : undefined,
+                              }}
                               onMouseDown={e => startGoalDrag(key, e)}
                               onTouchStart={e => startGoalDrag(key, e)}
                             >
-                              <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor" className="shrink-0 text-white/30">
-                                <circle cx="3" cy="3" r="2"/><circle cx="9" cy="3" r="2"/>
-                                <circle cx="3" cy="10" r="2"/><circle cx="9" cy="10" r="2"/>
-                                <circle cx="3" cy="17" r="2"/><circle cx="9" cy="17" r="2"/>
+                              <svg width="10" height="16" viewBox="0 0 10 20" fill="currentColor" className="shrink-0 text-white/20">
+                                <circle cx="2.5" cy="3" r="1.8"/><circle cx="7.5" cy="3" r="1.8"/>
+                                <circle cx="2.5" cy="10" r="1.8"/><circle cx="7.5" cy="10" r="1.8"/>
+                                <circle cx="2.5" cy="17" r="1.8"/><circle cx="7.5" cy="17" r="1.8"/>
                               </svg>
-                              <span className="text-[13px] text-teal-400/60 font-bold w-4 shrink-0">{i + 1}</span>
-                              <span className="text-[18px] shrink-0">{m.emoji}</span>
-                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                                <span className="text-[15px] font-semibold text-white">{m.title}</span>
-                                <span className="text-[11px] text-white/35">{m.desc}</span>
+                              <span className="text-[20px] shrink-0">{m.emoji}</span>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="text-[15px] font-semibold leading-tight" style={{ color: isTop ? 'rgb(45,212,191)' : 'white' }}>{m.title}</span>
+                                <span className="text-[11px] text-white/30 mt-0.5 leading-snug">{m.desc}</span>
                               </div>
+                              {isTop && (
+                                <span className="text-[11px] font-bold text-teal-400 shrink-0 px-2.5 py-1 rounded-full"
+                                  style={{ background: 'rgba(45,212,191,0.14)' }}>
+                                  #1
+                                </span>
+                              )}
                             </div>
                           )
                         })}
