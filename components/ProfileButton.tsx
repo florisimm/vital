@@ -89,6 +89,7 @@ export function ProfileButton() {
   const [savedMacroProtein, setSavedMacroProtein] = useState(0)
   const [savedMacroCarbs, setSavedMacroCarbs] = useState(0)
   const [savedMacroFat, setSavedMacroFat] = useState(0)
+  const [estimatedMaint, setEstimatedMaint] = useState<{ kcal: number; protein: number; carbs: number; fat: number; sessionsPerWeek: number } | null>(null)
   const [editingDevices, setEditingDevices] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [emailActionSheet, setEmailActionSheet] = useState(false)
@@ -178,6 +179,30 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
             setSelfPlanned(data.training_self_planned)
           if (data?.training_zone_targets && typeof data.training_zone_targets === 'object')
             setZoneTargets(data.training_zone_targets)
+
+          // Estimated maintenance from actual recent training
+          const hCm = Number(data?.height_cm) || 0
+          const ageVal = Number(data?.age) || 0
+          const genderVal = data?.gender
+          if (hCm && ageVal && (genderVal === 'male' || genderVal === 'female')) {
+            const since28 = new Date(Date.now() - 28 * 86400000).toISOString()
+            Promise.all([
+              supabase.from('strava_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).gte('start_date', since28),
+              supabase.from('hevy_workouts').select('id', { count: 'exact', head: true }).eq('user_id', uid).gte('start_time', since28),
+              supabase.from('gezondheid').select('gewicht').eq('user_id', uid).not('gewicht', 'is', null).order('datum', { ascending: false }).limit(1).maybeSingle(),
+            ]).then(([strava, hevy, weightRow]) => {
+              const wKg = Number((weightRow as any)?.data?.gewicht) || 0
+              if (!wKg) return
+              const sessionsPerWeek = ((strava.count ?? 0) + (hevy.count ?? 0)) / 4
+              const mult = sessionsPerWeek === 0 ? 1.2 : sessionsPerWeek <= 3 ? 1.375 : sessionsPerWeek <= 6 ? 1.55 : sessionsPerWeek <= 10 ? 1.725 : 1.9
+              const bmr = 10 * wKg + 6.25 * hCm - 5 * ageVal + (genderVal === 'male' ? 5 : -161)
+              const kcal = Math.round(bmr * mult / 10) * 10
+              const protein = Math.round(wKg * 1.8)
+              const fat = Math.round(kcal * 0.25 / 9)
+              const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4))
+              setEstimatedMaint({ kcal, protein, carbs, fat, sessionsPerWeek: Math.round(sessionsPerWeek * 10) / 10 })
+            })
+          }
         })
 
       // Auto-detect injuries from calendar events and recent Strava activities
@@ -1620,6 +1645,27 @@ async function saveTraining() {
                     <p className="text-[15px] text-white/70">
                       {savedMacroKcal} kcal · {savedMacroProtein}g protein · {savedMacroCarbs}g carbs · {savedMacroFat}g fat
                     </p>
+                  </div>
+                )}
+
+                {estimatedMaint && (
+                  <div className="rounded-[14px] px-4 py-4"
+                    style={{ background: 'rgba(45,212,191,0.05)', border: '1px solid rgba(45,212,191,0.18)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[12px] text-teal-400/80 uppercase tracking-[0.08em] font-semibold">Estimated maintenance</p>
+                      <p className="text-[11px] text-white/30">~{estimatedMaint.sessionsPerWeek} sessions/wk</p>
+                    </div>
+                    <p className="text-[26px] font-bold text-white leading-none mb-2.5">
+                      {estimatedMaint.kcal} <span className="text-[14px] font-normal text-white/40">kcal</span>
+                    </p>
+                    <div className="flex gap-3">
+                      <span className="text-[13px] text-white/55">{estimatedMaint.protein}g protein</span>
+                      <span className="text-[13px] text-white/25">·</span>
+                      <span className="text-[13px] text-white/55">{estimatedMaint.carbs}g carbs</span>
+                      <span className="text-[13px] text-white/25">·</span>
+                      <span className="text-[13px] text-white/55">{estimatedMaint.fat}g fat</span>
+                    </div>
+                    <p className="text-[11px] text-white/25 mt-2.5">Based on your workouts · last 4 weeks · Mifflin–St Jeor</p>
                   </div>
                 )}
               </div>
