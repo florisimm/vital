@@ -1519,6 +1519,132 @@ function ExerciseProgressScreen({ exerciseTitle, allWorkouts, onBack }: {
   )
 }
 
+// Map a workout's exercises (or its title as fallback) to trained muscle regions
+// + friendly group labels, used by the anatomy figure below.
+const BODY_REGION_DEFS: { label: string; regions: string[]; kw: string[] }[] = [
+  { label: 'Chest',     regions: ['chest'],                                  kw: ['bench', 'chest', 'fly', 'pec', 'push-up', 'push up', 'dip'] },
+  { label: 'Shoulders', regions: ['delts'],                                  kw: ['shoulder', 'overhead press', 'ohp', 'military', 'lateral raise', 'front raise', 'arnold', 'upright row', 'delt'] },
+  { label: 'Biceps',    regions: ['biceps', 'forearms'],                     kw: ['curl', 'bicep', 'preacher', 'hammer', 'chin-up', 'chin up'] },
+  { label: 'Triceps',   regions: ['triceps'],                                kw: ['tricep', 'pushdown', 'skull', 'close grip', 'kickback', 'overhead extension', 'french press', 'dip'] },
+  { label: 'Back',      regions: ['lats', 'traps'],                          kw: ['row', 'pull-up', 'pullup', 'pull up', 'pulldown', 'pull-down', 'lat ', 'shrug', 'deadlift'] },
+  { label: 'Legs',      regions: ['quads', 'hamstrings', 'glutes', 'calves'], kw: ['squat', 'leg press', 'lunge', 'leg extension', 'leg curl', 'rdl', 'romanian', 'hip thrust', 'deadlift', 'calf', 'glute', 'hamstring', 'quad', 'split squat', 'step up'] },
+  { label: 'Core',      regions: ['abs'],                                    kw: ['crunch', 'plank', 'sit-up', 'sit up', 'ab wheel', 'rollout', 'leg raise', 'hanging', 'core', 'russian twist'] },
+]
+
+function deriveTrainedMuscles(w: HevyWorkout): { regions: Set<string>; labels: string[] } {
+  const titles = (w.exercises?.length ? w.exercises.map(e => e.title ?? '') : [w.title ?? '']).map(t => t.toLowerCase())
+  const regions = new Set<string>()
+  const labels: string[] = []
+  for (const def of BODY_REGION_DEFS) {
+    if (titles.some(t => def.kw.some(k => t.includes(k)))) {
+      labels.push(def.label)
+      def.regions.forEach(r => regions.add(r))
+    }
+  }
+  return { regions, labels }
+}
+
+function WorkoutBodyMap({ workout }: { workout: HevyWorkout }) {
+  const { regions, labels } = deriveTrainedMuscles(workout)
+  const on = '#2dd4bf'
+  const onStroke = 'rgba(45,212,191,0.9)'
+  const base = 'rgba(255,255,255,0.06)'
+  const baseStroke = 'rgba(255,255,255,0.13)'
+  const f = (r: string) => (regions.has(r) ? on : base)
+  const s = (r: string) => (regions.has(r) ? onStroke : baseStroke)
+  const flt = (r: string) => (regions.has(r) ? 'url(#bm-glow)' : undefined)
+
+  const defs = (
+    <defs>
+      <filter id="bm-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="1.6" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </defs>
+  )
+
+  return (
+    <div className="rounded-[20px] p-4 flex flex-col gap-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}>
+      <span className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.08em]">Getrainde spieren</span>
+
+      <div className="flex justify-center gap-6">
+        {/* FRONT */}
+        <div className="flex flex-col items-center gap-1.5">
+          <svg viewBox="0 0 120 240" className="h-[180px]" style={{ overflow: 'visible' }}>
+            {defs}
+            {/* structural */}
+            <circle cx="60" cy="20" r="12" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <rect x="54" y="30" width="12" height="9" rx="3" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            {/* hands + lower legs (structural) */}
+            <circle cx="21" cy="126" r="5" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <circle cx="99" cy="126" r="5" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <rect x="47" y="158" width="11" height="48" rx="5" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <rect x="62" y="158" width="11" height="48" rx="5" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <ellipse cx="52" cy="210" rx="6" ry="4" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <ellipse cx="68" cy="210" rx="6" ry="4" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            {/* muscles */}
+            <ellipse cx="37" cy="50" rx="12" ry="10" fill={f('delts')} stroke={s('delts')} strokeWidth="0.8" filter={flt('delts')} />
+            <ellipse cx="83" cy="50" rx="12" ry="10" fill={f('delts')} stroke={s('delts')} strokeWidth="0.8" filter={flt('delts')} />
+            <path d="M46 44 Q59 44 59 56 Q59 67 47 65 Q41 60 41 52 Q41 45 46 44 Z" fill={f('chest')} stroke={s('chest')} strokeWidth="0.8" filter={flt('chest')} />
+            <path d="M74 44 Q61 44 61 56 Q61 67 73 65 Q79 60 79 52 Q79 45 74 44 Z" fill={f('chest')} stroke={s('chest')} strokeWidth="0.8" filter={flt('chest')} />
+            <rect x="51" y="68" width="18" height="40" rx="6" fill={f('abs')} stroke={s('abs')} strokeWidth="0.8" filter={flt('abs')} />
+            <ellipse cx="29" cy="74" rx="7" ry="15" fill={f('biceps')} stroke={s('biceps')} strokeWidth="0.8" filter={flt('biceps')} />
+            <ellipse cx="91" cy="74" rx="7" ry="15" fill={f('biceps')} stroke={s('biceps')} strokeWidth="0.8" filter={flt('biceps')} />
+            <ellipse cx="23" cy="104" rx="6" ry="15" fill={f('forearms')} stroke={s('forearms')} strokeWidth="0.8" filter={flt('forearms')} />
+            <ellipse cx="97" cy="104" rx="6" ry="15" fill={f('forearms')} stroke={s('forearms')} strokeWidth="0.8" filter={flt('forearms')} />
+            <rect x="46" y="112" width="13" height="46" rx="6" fill={f('quads')} stroke={s('quads')} strokeWidth="0.8" filter={flt('quads')} />
+            <rect x="61" y="112" width="13" height="46" rx="6" fill={f('quads')} stroke={s('quads')} strokeWidth="0.8" filter={flt('quads')} />
+          </svg>
+          <span className="text-[10px] text-white/30">Voorkant</span>
+        </div>
+
+        {/* BACK */}
+        <div className="flex flex-col items-center gap-1.5">
+          <svg viewBox="0 0 120 240" className="h-[180px]" style={{ overflow: 'visible' }}>
+            {defs}
+            {/* structural */}
+            <circle cx="60" cy="20" r="12" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <rect x="54" y="30" width="12" height="9" rx="3" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <circle cx="21" cy="126" r="5" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <circle cx="99" cy="126" r="5" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <ellipse cx="52" cy="210" rx="6" ry="4" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            <ellipse cx="68" cy="210" rx="6" ry="4" fill={base} stroke={baseStroke} strokeWidth="0.8" />
+            {/* muscles */}
+            <ellipse cx="37" cy="50" rx="12" ry="10" fill={f('delts')} stroke={s('delts')} strokeWidth="0.8" filter={flt('delts')} />
+            <ellipse cx="83" cy="50" rx="12" ry="10" fill={f('delts')} stroke={s('delts')} strokeWidth="0.8" filter={flt('delts')} />
+            <path d="M48 40 L72 40 L79 53 L41 53 Z" fill={f('traps')} stroke={s('traps')} strokeWidth="0.8" filter={flt('traps')} />
+            <path d="M44 56 Q41 80 58 88 L58 58 Q51 56 44 56 Z" fill={f('lats')} stroke={s('lats')} strokeWidth="0.8" filter={flt('lats')} />
+            <path d="M76 56 Q79 80 62 88 L62 58 Q69 56 76 56 Z" fill={f('lats')} stroke={s('lats')} strokeWidth="0.8" filter={flt('lats')} />
+            <ellipse cx="29" cy="74" rx="7" ry="15" fill={f('triceps')} stroke={s('triceps')} strokeWidth="0.8" filter={flt('triceps')} />
+            <ellipse cx="91" cy="74" rx="7" ry="15" fill={f('triceps')} stroke={s('triceps')} strokeWidth="0.8" filter={flt('triceps')} />
+            <ellipse cx="23" cy="104" rx="6" ry="15" fill={f('forearms')} stroke={s('forearms')} strokeWidth="0.8" filter={flt('forearms')} />
+            <ellipse cx="97" cy="104" rx="6" ry="15" fill={f('forearms')} stroke={s('forearms')} strokeWidth="0.8" filter={flt('forearms')} />
+            <ellipse cx="53" cy="116" rx="10" ry="11" fill={f('glutes')} stroke={s('glutes')} strokeWidth="0.8" filter={flt('glutes')} />
+            <ellipse cx="67" cy="116" rx="10" ry="11" fill={f('glutes')} stroke={s('glutes')} strokeWidth="0.8" filter={flt('glutes')} />
+            <rect x="46" y="130" width="13" height="40" rx="6" fill={f('hamstrings')} stroke={s('hamstrings')} strokeWidth="0.8" filter={flt('hamstrings')} />
+            <rect x="61" y="130" width="13" height="40" rx="6" fill={f('hamstrings')} stroke={s('hamstrings')} strokeWidth="0.8" filter={flt('hamstrings')} />
+            <ellipse cx="52" cy="186" rx="7" ry="16" fill={f('calves')} stroke={s('calves')} strokeWidth="0.8" filter={flt('calves')} />
+            <ellipse cx="68" cy="186" rx="7" ry="16" fill={f('calves')} stroke={s('calves')} strokeWidth="0.8" filter={flt('calves')} />
+          </svg>
+          <span className="text-[10px] text-white/30">Achterkant</span>
+        </div>
+      </div>
+
+      {/* Trained group chips */}
+      {labels.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 justify-center pt-1">
+          {labels.map(l => (
+            <span key={l} className="text-[12px] font-semibold px-2.5 py-1 rounded-full text-teal-300"
+              style={{ background: 'rgba(45,212,191,0.14)', border: '1px solid rgba(45,212,191,0.28)' }}>
+              {l}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StrengthDetailScreen({ workout: w, allWorkouts, onBack }: { workout: HevyWorkout; allWorkouts: HevyWorkout[]; onBack: () => void }) {
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
   const exList = w.exercises ?? []
@@ -1541,11 +1667,16 @@ function StrengthDetailScreen({ workout: w, allWorkouts, onBack }: { workout: He
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-6" style={{ scrollbarWidth: 'none', paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 3rem)' }}>
+          {/* Trained muscles — anatomy figure */}
+          <WorkoutBodyMap workout={w} />
+
           {/* Title + date */}
-          <div>
-            <h1 className="text-[26px] font-bold text-white leading-tight">{w.title}</h1>
-            <p className="text-[13px] text-white/40 mt-1">{formatDate(w.start_time)}</p>
-          </div>
+          {(w.title || w.start_time) && (
+            <div>
+              {w.title && <h1 className="text-[26px] font-bold text-white leading-tight">{w.title}</h1>}
+              <p className="text-[13px] text-white/40 mt-1">{formatDate(w.start_time)}</p>
+            </div>
+          )}
 
           {/* Session totals */}
           <div className="grid grid-cols-3 gap-3">
