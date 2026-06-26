@@ -114,11 +114,13 @@ function determineUserLevel(acts: any[], sport: SportType): UserLevel {
   return 'beginner'
 }
 
-function detectTrainingType(title: string, acts: any[]): TrainingType {
+function detectTrainingType(title: string, acts: any[], sport?: SportType): TrainingType {
   const t = title.toLowerCase()
-  if (['herstel', 'recovery', 'easy', 'rustig', 'actief herstel'].some(k => t.includes(k))) return 'herstel'
   if (['interval', 'fartlek', 'herhaling', 'snelheid', 'vo2'].some(k => t.includes(k))) return 'interval'
   if (['tempo', 'drempel', 'threshold', 'lactaat'].some(k => t.includes(k))) return 'tempo'
+  // Cycling only has zone2 or interval — no herstel/lang
+  if (sport === 'cycling') return 'zone2'
+  if (['herstel', 'recovery', 'easy', 'rustig', 'actief herstel'].some(k => t.includes(k))) return 'herstel'
   if (['lange duur', 'long run', 'lsd', '2u', '90min', 'lange rit'].some(k => t.includes(k))) return 'lang'
   // Context: trained yesterday → herstel
   if (daysSinceLast(acts) < 1.5 && acts.length > 0) return 'herstel'
@@ -214,7 +216,7 @@ export function computeAdvice(sport: SportType, activities: any[], title: string
     ? activityCount >= 3
     : true
 
-  const trainingType = detectTrainingType(title, matching)
+  const trainingType = detectTrainingType(title, matching, sport)
   const userLevel = determineUserLevel(matching, sport)
   const wkly = weeklyAvgKm(matching)
 
