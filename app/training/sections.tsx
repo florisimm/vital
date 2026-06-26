@@ -4940,7 +4940,10 @@ function SwimmingReadinessCard({ readiness, activities, trainingIntensity = 'mod
   const targetM = avgDistM
     ? Math.max(200, Math.round(avgDistM * distFactor / 100) * 100)
     : (trainingIntensity === 'all_out' ? 4000 : trainingIntensity === 'hard' ? 3500 : trainingIntensity === 'easy' ? 1500 : readiness.pct >= 85 ? 3000 : readiness.pct >= 70 ? 2000 : 1500)
-  const targetStr = targetM >= 1000 ? `${(targetM / 1000).toFixed(1)} km` : `${targetM} m`
+  const avgSpeedMs = recentSwims.length > 0
+    ? recentSwims.reduce((s, r) => s + (r.average_speed ?? 0), 0) / recentSwims.length
+    : 0.42 // ~1.5 km/h default
+  const durationMin = Math.max(15, Math.round(targetM / Math.max(avgSpeedMs, 0.2) / 60))
 
   return (
     <Card>
@@ -4957,7 +4960,7 @@ function SwimmingReadinessCard({ readiness, activities, trainingIntensity = 'mod
           <div className="flex flex-col items-end gap-0.5 pb-1">
             <span className="text-[12px] text-white/40">Today</span>
             <span className="text-[15px] font-semibold text-blue-400">{readiness.suggestion}</span>
-            <span className="text-[13px] font-semibold text-white/60">{targetStr}{avgDistM ? ` · avg ${(avgDistM / 1000).toFixed(1)} km` : ''}</span>
+            <span className="text-[13px] font-semibold text-white/60">{durationMin} min</span>
           </div>
         </div>
         <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
