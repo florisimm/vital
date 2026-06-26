@@ -13,6 +13,7 @@ import {
   type SportType, type Advice, type ComputeAdviceResult,
 } from '@/lib/training-algorithm'
 import { computeRecoveryDetail } from '../sections'
+import { computePhysiologyReadiness, type HealthRow } from '@/lib/readiness'
 
 const RouteMap = dynamic(() => import('./RouteMap').then(m => m.RouteMap), { ssr: false })
 
@@ -67,6 +68,17 @@ function MetricCard({ label, value, unit, color }: { label: string; value: strin
           <span className={`text-[38px] font-bold leading-none ${color ?? 'text-white'}`}>{value}</span>
           <span className="text-[15px] text-white/50">{unit}</span>
         </div>
+      </div>
+    </Card>
+  )
+}
+
+function TypeCard({ label, color }: { label: string; color?: string }) {
+  return (
+    <Card>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-semibold text-white/40 uppercase tracking-wider">Type</span>
+        <span className={`text-[22px] font-bold leading-snug ${color ?? 'text-white'}`}>{label}</span>
       </div>
     </Card>
   )
@@ -377,7 +389,9 @@ function SessionContent() {
       const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
       const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
 
-      const [{ data: activities }, { data: settings }, { data: hevy }] = await Promise.all([
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+
+      const [{ data: activities }, { data: settings }, { data: hevy }, { data: gezondheid }] = await Promise.all([
         supabase
           .from('strava_activities')
           .select('sport_type,distance,moving_time,average_speed,average_heartrate,start_date')
@@ -394,13 +408,23 @@ function SessionContent() {
           .select('id,title,start_time,end_time,duration,volume_kg,sets')
           .eq('user_id', user.id)
           .gte('start_time', sevenDaysAgo),
+        supabase
+          .from('gezondheid')
+          .select('datum,hartslag_rust,hrv_rmssd,slaap_score,slaap_minuten,slaap_diep,slaap_rem,slaap_licht,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie')
+          .eq('user_id', user.id)
+          .gte('datum', thirtyDaysAgo)
+          .order('datum', { ascending: false }),
       ])
 
       const intensity = settings?.training_intensity ?? 'moderate'
       const maxHr = settings?.max_hr ?? (settings?.age ? Math.round(208 - 0.7 * settings.age) : null)
       const recovery = computeRecoveryDetail((activities ?? []) as any[], (hevy ?? []) as any[], maxHr)
-      setRecoveryPct(recovery.pct)
-      setResult(computeAdvice(sport, activities ?? [], title, intensity, recovery.pct))
+      const physiology = computePhysiologyReadiness((gezondheid ?? []) as HealthRow[])
+      const blended = physiology.score !== null
+        ? Math.round(physiology.score * 0.70 + recovery.pct * 0.30)
+        : recovery.pct
+      setRecoveryPct(blended)
+      setResult(computeAdvice(sport, activities ?? [], title, intensity, blended))
     }
     load()
   }, [sport, title])
@@ -488,7 +512,7 @@ function SessionContent() {
 
           {/* Type + duration */}
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Type" value={TYPE_LABEL[result.advice.trainingType]} unit="" color={TYPE_COLOR[result.advice.trainingType]} />
+            <TypeCard label={TYPE_LABEL[result.advice.trainingType]} color={TYPE_COLOR[result.advice.trainingType]} />
             <MetricCard label="Duration" value={String(result.advice.durationMin)} unit="min" />
           </div>
 
