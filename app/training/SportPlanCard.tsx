@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowRight } from 'lucide-react'
+
 import {
   computeZones,
   computeWeekProgress,
@@ -244,64 +244,7 @@ export function SportPlanCard({
         </div>
       )}
 
-      <div className="mt-3 flex gap-2">
-        {SESSION_LINKS[sport]?.map(({ label, href }) => (
-          <a
-            key={href}
-            href={href}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-[14px] active:opacity-60 transition-opacity"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-          >
-            <span className="text-[13px] text-white/40 font-medium">{label}</span>
-            <ArrowRight size={13} className="text-white/25" />
-          </a>
-        ))}
-      </div>
       </>}
-
-      {/* Weekly summary card */}
-      <div
-        className="mt-3 rounded-[18px] px-4 py-3.5 flex flex-col gap-2.5"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.1em]">This week</span>
-          {freq > 0
-            ? <span className="text-[12px] font-semibold text-white/40">{formatMinutes(freq * 60)} / week</span>
-            : <span className="text-[11px] text-white/25">Set hours in Profile → Training</span>
-          }
-        </div>
-        {freq > 0 && (
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="pt-2.5 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-white/50">🟢 Zone 2</span>
-              <div className="text-right">
-                <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.z2Minutes)}</span>
-                <span className="text-[12px] text-white/30"> / {formatMinutes(targets.z2Minutes)}</span>
-                {z2Remaining > 0 && (
-                  <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(z2Remaining)} left</span>
-                )}
-                {z2Remaining === 0 && (
-                  <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-white/50">⚡ {QUALITY_LABEL[sport]}</span>
-              <div className="text-right">
-                <span className="text-[13px] font-semibold text-white/70">{formatMinutes(progress.qualityMinutes)}</span>
-                <span className="text-[12px] text-white/30"> / {formatMinutes(targets.qualityMinutes)}</span>
-                {qualityRemaining > 0 && (
-                  <span className="text-[11px] text-white/25 ml-1">· {formatMinutes(qualityRemaining)} left</span>
-                )}
-                {qualityRemaining === 0 && (
-                  <span className="text-[11px] text-green-400/60 ml-1">· done ✓</span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -316,9 +259,4 @@ const QUALITY_DESC: Record<string, string> = {
   running:  'tempo runs, drempeltraining, VO2max',
   cycling:  'FTP-blokken, drempelritten, VO2max',
   swimming: 'snelheidssessies, intervallen',
-}
-
-const SESSION_LINKS: Record<string, Array<{ label: string; href: string }>> = {
-  running:  [{ label: 'Session advice', href: '/training/session?sport=running&title=Zone+2+Run' }],
-  cycling:  [{ label: 'Session advice', href: '/training/session?sport=cycling&title=Endurance+Ride' }],
 }
