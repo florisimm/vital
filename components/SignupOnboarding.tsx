@@ -92,6 +92,21 @@ export function SignupOnboarding({
   const [err, setErr] = useState<string | null>(null)
   const [sessionCreated, setSessionCreated] = useState(false)
 
+  // In onboarding mode the account already exists (created on /login). Pull the
+  // birthdate captured there from auth metadata so we can pre-fill age and the
+  // user doesn't have to enter it twice.
+  useEffect(() => {
+    if (mode !== 'onboarding') return
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const bd = user?.user_metadata?.birthdate
+      if (typeof bd === 'string' && bd) {
+        const a = ageFromBirthdate(bd)
+        if (a) setAge(prev => prev || String(a))
+      }
+    })
+  }, [mode])
+
   // Collected answers
   const [units, setUnits] = useState<Units>('metric')
   const [sex, setSex] = useState<Sex>(null)
@@ -523,6 +538,17 @@ export function SignupOnboarding({
       </div>
     </div>
   )
+}
+
+// Whole years between a birthdate (ISO yyyy-mm-dd) and today.
+function ageFromBirthdate(iso: string): number | null {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const now = new Date()
+  let a = now.getFullYear() - d.getFullYear()
+  const m = now.getMonth() - d.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) a--
+  return a > 0 && a < 120 ? a : null
 }
 
 // ── Small building blocks ───────────────────────────────────────

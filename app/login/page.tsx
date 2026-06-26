@@ -2,33 +2,41 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, Activity, ArrowRight } from 'lucide-react'
+import { Mail, Lock, User, Calendar, Activity, ArrowRight, ArrowLeft, MailCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 type Tab = 'signin' | 'signup'
+type View = 'auth' | 'basic' | 'verify'
 
 export default function LoginPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('signin')
+  const [view, setView] = useState<View>('auth')
 
   // Shared fields
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
 
+  // Sign-up basic info
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName]   = useState('')
+  const [confirm, setConfirm]     = useState('')
+  const [birthdate, setBirthdate] = useState('')
+
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [notice, setNotice]     = useState<string | null>(null)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('error') === 'email_exists') {
-      setTab('signin')
+      setTab('signin'); setView('auth')
       setError('Er bestaat al een account met dit e-mailadres. Log in met je wachtwoord hieronder.')
     } else if (params.get('error') === 'auth') {
       setError('Inloggen mislukt. Probeer het opnieuw.')
     }
   }, [])
-  const [googleLoading, setGoogleLoading] = useState(false)
 
   async function handleGoogleAuth() {
     setGoogleLoading(true); setError(null)
@@ -42,6 +50,7 @@ export default function LoginPage() {
 
   function switchTab(t: Tab) {
     setTab(t)
+    setView('auth')
     setError(null)
     setNotice(null)
   }
@@ -55,18 +64,33 @@ export default function LoginPage() {
     router.refresh()
   }
 
-  async function handleSignUp(e: React.FormEvent) {
+  async function handleBasicSignUp(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setError(null); setNotice(null)
-    const { data, error } = await createClient().auth.signUp({ email, password })
+    setError(null)
+    if (!firstName.trim() || !lastName.trim()) { setError('Vul je voor- en achternaam in'); return }
+    if (password.length < 6) { setError('Wachtwoord moet minimaal 6 tekens zijn'); return }
+    if (password !== confirm) { setError('De wachtwoorden komen niet overeen'); return }
+    if (!birthdate) { setError('Vul je geboortedatum in'); return }
+
+    setLoading(true)
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+    const { data, error } = await createClient().auth.signUp({
+      email, password,
+      options: {
+        emailRedirectTo: `${siteUrl}/auth/callback`,
+        data: {
+          full_name: `${firstName.trim()} ${lastName.trim()}`,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          birthdate,
+        },
+      },
+    })
     if (error) { setError(error.message); setLoading(false); return }
-    if (data.session) {
-      router.push('/')
-      router.refresh()
-    } else {
-      setLoading(false)
-      setNotice('Check your email and click the confirmation link to activate your account.')
-    }
+    // Email confirmation disabled → straight into the wizard via app/page.tsx
+    if (data.session) { router.push('/'); router.refresh(); return }
+    setLoading(false)
+    setView('verify')
   }
 
   async function handleForgotPassword() {
@@ -79,6 +103,15 @@ export default function LoginPage() {
     setLoading(false)
     setNotice('Reset link sent — check your email')
   }
+
+  const heading = view === 'basic' ? 'Maak je account'
+    : view === 'verify' ? 'Bevestig je e-mail'
+    : tab === 'signin' ? 'Welcome back'
+    : 'Get started'
+  const subheading = view === 'basic' ? 'Een paar basisgegevens om te starten.'
+    : view === 'verify' ? 'Nog één stap voordat we beginnen.'
+    : tab === 'signin' ? 'Sign in to your Kern account'
+    : 'Create your Kern account'
 
   return (
     <div
@@ -93,8 +126,17 @@ export default function LoginPage() {
       }}
     >
       <div className="flex-1 flex flex-col justify-center">
-        {/* Logo */}
+        {/* Logo / header */}
         <div className="mb-9">
+          {(view === 'basic' || view === 'verify') && (
+            <button
+              type="button"
+              onClick={() => { setView(view === 'verify' ? 'basic' : 'auth'); setError(null) }}
+              className="flex items-center gap-1.5 text-white/45 active:text-white text-[15px] font-medium mb-6"
+            >
+              <ArrowLeft size={18} /> Terug
+            </button>
+          )}
           <div
             className="w-[68px] h-[68px] rounded-[20px] flex items-center justify-center mb-6"
             style={{
@@ -105,69 +147,58 @@ export default function LoginPage() {
           >
             <Activity size={32} className="text-teal-400" strokeWidth={2} />
           </div>
-          <h1 className="text-[40px] font-bold leading-none text-white tracking-tight">
-            {tab === 'signin' ? 'Welcome back' : 'Get started'}
-          </h1>
-          <p className="text-[16px] text-white/40 mt-2.5 font-medium">
-            {tab === 'signin' ? 'Sign in to your Kern account' : 'Create your Kern account'}
-          </p>
+          <h1 className="text-[40px] font-bold leading-none text-white tracking-tight">{heading}</h1>
+          <p className="text-[16px] text-white/40 mt-2.5 font-medium">{subheading}</p>
         </div>
 
-        {/* Tab switcher — sliding pill */}
-        <div
-          className="flex relative mb-7 p-1 rounded-[18px]"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          {/* Sliding background pill */}
+        {/* Tab switcher — only on the auth view */}
+        {view === 'auth' && (
           <div
-            className="absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-[14px] transition-transform duration-250 ease-in-out"
-            style={{
-              background: 'rgba(255,255,255,0.10)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              transform: tab === 'signup' ? 'translateX(calc(100% + 4px))' : 'translateX(0)',
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => switchTab('signin')}
-            className="relative flex-1 h-[42px] rounded-[14px] text-[15px] font-semibold transition-colors duration-200"
-            style={{ color: tab === 'signin' ? 'white' : 'rgba(255,255,255,0.35)' }}
+            className="flex relative mb-7 p-1 rounded-[18px]"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
           >
-            Sign in
-          </button>
-          <button
-            type="button"
-            onClick={() => switchTab('signup')}
-            className="relative flex-1 h-[42px] rounded-[14px] text-[15px] font-semibold transition-colors duration-200"
-            style={{ color: tab === 'signup' ? 'white' : 'rgba(255,255,255,0.35)' }}
-          >
-            Sign up
-          </button>
-        </div>
+            <div
+              className="absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-[14px] transition-transform duration-250 ease-in-out"
+              style={{
+                background: 'rgba(255,255,255,0.10)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                transform: tab === 'signup' ? 'translateX(calc(100% + 4px))' : 'translateX(0)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => switchTab('signin')}
+              className="relative flex-1 h-[42px] rounded-[14px] text-[15px] font-semibold transition-colors duration-200"
+              style={{ color: tab === 'signin' ? 'white' : 'rgba(255,255,255,0.35)' }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => switchTab('signup')}
+              className="relative flex-1 h-[42px] rounded-[14px] text-[15px] font-semibold transition-colors duration-200"
+              style={{ color: tab === 'signup' ? 'white' : 'rgba(255,255,255,0.35)' }}
+            >
+              Sign up
+            </button>
+          </div>
+        )}
 
         {/* Sign in form */}
-        {tab === 'signin' && (
+        {view === 'auth' && tab === 'signin' && (
           <form onSubmit={handleSignIn} className="flex flex-col gap-3">
             <div className="flex flex-col gap-2.5">
               <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
                 <input
-                  type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
+                  type="email" placeholder="Email address" value={email}
+                  onChange={e => setEmail(e.target.value)} required autoComplete="email"
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                 />
               </Field>
               <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
                 <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
+                  type="password" placeholder="Password" value={password}
+                  onChange={e => setPassword(e.target.value)} required autoComplete="current-password"
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                 />
               </Field>
@@ -177,17 +208,14 @@ export default function LoginPage() {
             {notice && <p className="text-teal-400 text-[14px] text-center px-2">{notice}</p>}
 
             <button
-              type="submit"
-              disabled={loading}
+              type="submit" disabled={loading}
               className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
               {loading ? 'Signing in…' : <>Sign in <ArrowRight size={18} strokeWidth={2.3} /></>}
             </button>
 
             <button
-              type="button"
-              onClick={handleForgotPassword}
-              disabled={loading}
+              type="button" onClick={handleForgotPassword} disabled={loading}
               className="text-[14px] text-white/35 text-center disabled:opacity-50 mt-0.5"
             >
               Forgot password?
@@ -198,46 +226,27 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* Sign up — simple email + password; wizard shows after email confirmation */}
-        {tab === 'signup' && (
-          <form onSubmit={handleSignUp} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2.5">
-              <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
-                <input
-                  type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
-                />
-              </Field>
-              <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
-                <input
-                  type="password"
-                  placeholder="Choose a password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
-                />
-              </Field>
+        {/* Sign up — intro + "Laten we beginnen" */}
+        {view === 'auth' && tab === 'signup' && (
+          <div className="flex flex-col gap-4">
+            <div
+              className="rounded-[18px] px-5 py-4"
+              style={{ background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.18)' }}
+            >
+              <p className="text-[15px] text-white/70 leading-relaxed">
+                We stellen je een paar korte vragen zodat Kern jouw coaching volledig op jou afstemt. Dit duurt ongeveer een minuut.
+              </p>
             </div>
 
-            {error  && <p className="text-red-400  text-[14px] text-center px-2">{error}</p>}
-            {notice && <p className="text-teal-400 text-[14px] text-center px-2">{notice}</p>}
+            {error && <p className="text-red-400 text-[14px] text-center px-2">{error}</p>}
 
-            {!notice && (
-              <button
-                type="submit"
-                disabled={loading}
-                className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
-              >
-                {loading ? 'Creating account…' : <>Create account <ArrowRight size={18} strokeWidth={2.3} /></>}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => { setError(null); setNotice(null); setView('basic') }}
+              className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              Laten we beginnen <ArrowRight size={18} strokeWidth={2.3} />
+            </button>
 
             <OrDivider />
             <GoogleButton loading={googleLoading} onClick={handleGoogleAuth} />
@@ -245,14 +254,105 @@ export default function LoginPage() {
             <p className="text-[12px] text-white/25 text-center mt-1 px-4">
               By signing up you agree to our terms of service.
             </p>
+          </div>
+        )}
+
+        {/* Basic info form */}
+        {view === 'basic' && (
+          <form onSubmit={handleBasicSignUp} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                <Field icon={<User size={18} className="text-white/30 shrink-0" />}>
+                  <input
+                    type="text" placeholder="Voornaam" value={firstName}
+                    onChange={e => setFirstName(e.target.value)} required autoComplete="given-name"
+                    className="flex-1 min-w-0 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                  />
+                </Field>
+                <Field icon={<User size={18} className="text-white/30 shrink-0" />}>
+                  <input
+                    type="text" placeholder="Achternaam" value={lastName}
+                    onChange={e => setLastName(e.target.value)} required autoComplete="family-name"
+                    className="flex-1 min-w-0 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                  />
+                </Field>
+              </div>
+              <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
+                <input
+                  type="email" placeholder="E-mailadres" value={email}
+                  onChange={e => setEmail(e.target.value)} required autoComplete="email"
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                />
+              </Field>
+              <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
+                <input
+                  type="password" placeholder="Wachtwoord (min. 6 tekens)" value={password}
+                  onChange={e => setPassword(e.target.value)} required autoComplete="new-password"
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                />
+              </Field>
+              <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
+                <input
+                  type="password" placeholder="Bevestig wachtwoord" value={confirm}
+                  onChange={e => setConfirm(e.target.value)} required autoComplete="new-password"
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
+                />
+              </Field>
+              <Field icon={<Calendar size={18} className="text-white/30 shrink-0" />}>
+                <input
+                  type="date" placeholder="Geboortedatum" value={birthdate}
+                  onChange={e => setBirthdate(e.target.value)} required
+                  max={new Date().toISOString().split('T')[0]}
+                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px] [color-scheme:dark]"
+                />
+              </Field>
+              <p className="text-[12px] text-white/30 px-1 -mt-0.5">Je geboortedatum bepaalt je hartslagzones en caloriebehoefte.</p>
+            </div>
+
+            {error && <p className="text-red-400 text-[14px] text-center px-2">{error}</p>}
+
+            <button
+              type="submit" disabled={loading}
+              className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              {loading ? 'Account aanmaken…' : <>Doorgaan <ArrowRight size={18} strokeWidth={2.3} /></>}
+            </button>
           </form>
+        )}
+
+        {/* Email verification notice */}
+        {view === 'verify' && (
+          <div className="flex flex-col items-center text-center gap-5">
+            <div
+              className="w-[76px] h-[76px] rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(45,212,191,0.15)', border: '1px solid rgba(45,212,191,0.35)' }}
+            >
+              <MailCheck size={34} className="text-teal-400" />
+            </div>
+            <div>
+              <p className="text-[17px] text-white/70 leading-relaxed">
+                We hebben een bevestigingslink gestuurd naar
+              </p>
+              <p className="text-[17px] font-semibold text-white mt-1 break-all">{email}</p>
+            </div>
+            <p className="text-[14px] text-white/40 leading-relaxed max-w-xs">
+              Klik op de link in je mail om je account te activeren. Daarna stellen we samen je coach in.
+            </p>
+            <button
+              type="button"
+              onClick={() => switchTab('signin')}
+              className="h-[52px] w-full rounded-[18px] font-semibold text-[16px] text-white active:scale-[0.98] transition-transform"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              Terug naar inloggen
+            </button>
+          </div>
         )}
       </div>
 
       <p className="text-[13px] text-white/20 text-center">
-        Kern — AI Fitness & Health Coaching
+        Kern — AI Fitness &amp; Health Coaching
       </p>
-
     </div>
   )
 }
