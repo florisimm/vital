@@ -8,7 +8,7 @@ import { BarcodeScanner } from '@/components/BarcodeScanner'
 import type { FoodLogEntry, Product } from '@/lib/types'
 import {
   fetchMealTemplates,
-  type Targets, type MealTemplate, type TemplateFoodItem,
+  type Targets, type MealTemplate, type TemplateFoodItem, type RecentFood,
 } from '@/app/food/fetchers'
 import { cap } from '@/app/food/meal-config'
 import { CustomFoodView } from './CustomFoodView'
@@ -20,8 +20,9 @@ import { MealsListView } from './MealsListView'
 
 type SheetView = 'options' | 'search' | 'detail' | 'scan' | 'meals' | 'create-meal' | 'meal-confirm' | 'custom-food'
 
-export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, totals, targets, onAdded, onClose }: {
-  customFoods: Product[]; preselectedMeal: string; userId: string; today: string
+export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId, today, totals, targets, onAdded, onClose }: {
+  customFoods: Product[]; recentFoods: RecentFood[]
+  preselectedMeal: string; userId: string; today: string
   totals: { kcal: number; protein: number; carbs: number; fat: number }
   targets: Targets
   onAdded: (entry: FoodLogEntry) => void; onClose: () => void
@@ -57,7 +58,20 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
       setSearchLoading(true)
       try {
         const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
-        if (res.ok) setSearchResults(await res.json())
+        if (res.ok) {
+          const results: Product[] = await res.json()
+          // Boost results the user has logged before to the top
+          const ql = q.toLowerCase()
+          const boosted = results
+            .map(p => {
+              const freq = recentFoods.find(r => r.name.toLowerCase() === p.name.toLowerCase())?.count ?? 0
+              const nameMatch = p.name.toLowerCase().startsWith(ql) ? 2 : p.name.toLowerCase().includes(ql) ? 1 : 0
+              return { p, score: freq * 10 + nameMatch }
+            })
+            .sort((a, b) => b.score - a.score)
+            .map(x => x.p)
+          setSearchResults(boosted)
+        }
       } catch { /* ignore */ } finally {
         setSearchLoading(false)
       }
@@ -253,15 +267,15 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
         )}
 
         {view === 'search' && (
-          <div className="flex flex-col min-h-0 px-5 pb-8 gap-3">
-            <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px]"
+          <div className="flex flex-col flex-1 min-h-0 px-5 pb-8 gap-3">
+            <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px] shrink-0"
               style={{ background: 'rgba(255,255,255,0.08)' }}>
               <Search size={16} className="text-white/40 shrink-0" />
-              <input type="text" placeholder="Search foods…" value={search}
+              <input type="text" placeholder="Zoek voedsel…" value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[16px] outline-none" />
             </div>
-            <div className="overflow-y-auto flex flex-col gap-3">
+            <div className="overflow-y-auto flex-1 min-h-0 flex flex-col gap-3">
               {/* Custom foods — instant, filtered by query */}
               {(() => {
                 const q = search.trim().toLowerCase()
@@ -321,7 +335,31 @@ export function AddFoodSheet({ customFoods, preselectedMeal, userId, today, tota
                 )
               )}
 
-              {search.trim().length < 2 && customFoods.length === 0 && (
+              {search.trim().length < 2 && recentFoods.length > 0 && (
+                <>
+                  <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1 shrink-0">Vaak gebruikt</p>
+                  <div className="flex flex-col rounded-[16px] overflow-hidden shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    {recentFoods.map((f, i) => {
+                      const p: Product = { id: `recent-${f.name}`, name: f.name, brand: f.brand, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat, servings: null, image_url: null, barcode: null }
+                      return (
+                        <button key={i} onClick={() => { setSelected(p); navigate('detail') }}
+                          className="flex items-center justify-between px-4 py-3.5 text-left"
+                          style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[16px] font-semibold text-white truncate">{cap(f.name)}</p>
+                            {f.brand && <p className="text-[12px] text-white/40">{f.brand}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-3">
+                            <span className="text-[14px] font-semibold text-orange-400">{f.kcal} kcal</span>
+                            <ChevronRight size={14} className="text-white/20" />
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+              {search.trim().length < 2 && recentFoods.length === 0 && customFoods.length === 0 && (
                 <p className="px-4 py-5 text-[14px] text-white/30 text-center">Typ om te zoeken…</p>
               )}
             </div>

@@ -68,6 +68,49 @@ export async function fetchWeeklyNutrition(): Promise<{ avgProtein: number; prot
 }
 
 
+export type RecentFood = {
+  name: string; brand: string | null
+  kcal: number; protein: number; carbs: number; fat: number
+  count: number
+}
+
+export async function fetchRecentFoods(): Promise<RecentFood[]> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  const since = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0]
+  const { data } = await supabase
+    .from('food_log')
+    .select('food_name, brand, amount_g, kcal, protein, carbs, fat')
+    .eq('user_id', user.id)
+    .gte('date', since)
+    .order('logged_at', { ascending: false })
+
+  const map: Record<string, { name: string; brand: string | null; kcals: number[]; proteins: number[]; carbs: number[]; fats: number[]; count: number }> = {}
+  for (const row of data ?? []) {
+    const key = (row.food_name ?? '').toLowerCase().trim()
+    if (!key) continue
+    const g = Math.max(Number(row.amount_g) || 100, 1)
+    if (!map[key]) map[key] = { name: row.food_name, brand: row.brand ?? null, kcals: [], proteins: [], carbs: [], fats: [], count: 0 }
+    map[key].kcals.push(Number(row.kcal ?? 0) / g * 100)
+    map[key].proteins.push(Number(row.protein ?? 0) / g * 100)
+    map[key].carbs.push(Number(row.carbs ?? 0) / g * 100)
+    map[key].fats.push(Number(row.fat ?? 0) / g * 100)
+    map[key].count++
+  }
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+  return Object.values(map)
+    .map(v => ({
+      name: v.name, brand: v.brand, count: v.count,
+      kcal: Math.round(avg(v.kcals)),
+      protein: Math.round(avg(v.proteins) * 10) / 10,
+      carbs: Math.round(avg(v.carbs) * 10) / 10,
+      fat: Math.round(avg(v.fats) * 10) / 10,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30)
+}
+
 export async function fetchCustomFoods(): Promise<Product[]> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
