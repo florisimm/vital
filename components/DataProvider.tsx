@@ -215,6 +215,66 @@ export function DataProvider() {
     return () => { cancelled = true; clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
+  // Poll every 5 min when today's weight is missing (e.g. waiting for Hevy sync on app open).
+  // Stops as soon as weight arrives or after 2 hours.
+  useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+    let pollId: ReturnType<typeof setInterval> | null = null
+    let stopId: ReturnType<typeof setTimeout> | null = null
+
+    async function refreshAndCheck(userId: string): Promise<boolean> {
+      const today = new Date().toISOString().split('T')[0]
+      const { data: rows } = await supabase
+        .from('gezondheid')
+        .select('datum,stappen,gewicht,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_licht,slaap_rem,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie,slaap_start_min,slaap_einde_min')
+        .eq('user_id', userId)
+        .order('datum', { ascending: false })
+        .limit(30)
+      if (cancelled) return false
+      mutate('health-gezondheid', rows ?? [], false)
+      mutate('today', (cur: any) => cur ? { ...cur, latestGezondheid: rows?.[0] ?? null } : cur, false)
+      const todayRow = (rows ?? []).find((r: any) => r.datum === today)
+      return todayRow?.gewicht != null
+    }
+
+    async function start() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+
+      const today = new Date().toISOString().split('T')[0]
+      const { data: todayRow } = await supabase
+        .from('gezondheid')
+        .select('gewicht')
+        .eq('user_id', user.id)
+        .eq('datum', today)
+        .maybeSingle()
+
+      if (cancelled || todayRow?.gewicht != null) return
+
+      const userId = user.id
+      pollId = setInterval(async () => {
+        const found = await refreshAndCheck(userId)
+        if (found && pollId) {
+          clearInterval(pollId); pollId = null
+          if (stopId) { clearTimeout(stopId); stopId = null }
+        }
+      }, 5 * 60 * 1000)
+
+      stopId = setTimeout(() => {
+        if (pollId) { clearInterval(pollId); pollId = null }
+      }, 2 * 60 * 60 * 1000)
+    }
+
+    start()
+
+    return () => {
+      cancelled = true
+      if (pollId) clearInterval(pollId)
+      if (stopId) clearTimeout(stopId)
+    }
+  }, [])
+
   return null
 }
 
