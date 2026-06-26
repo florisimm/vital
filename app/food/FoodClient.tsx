@@ -6,7 +6,7 @@ import { ChevronRight, ChevronLeft, Plus } from 'lucide-react'
 import { Card, SectionHeader, NutritionProgressBar } from '@/components/ui'
 import { createClient } from '@/lib/supabase'
 import type { FoodLogEntry } from '@/lib/types'
-import { fetchFoodData } from './fetchers'
+import { fetchFoodData, fetchCustomFoods } from './fetchers'
 import type { Targets } from './fetchers'
 import {
   getMealForHour, formatDayLabel,
@@ -91,7 +91,11 @@ export function FoodClient() {
     () => fetchFoodData(selectedDate),
     { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 5_000 }
   )
-const { data: weeklyKcal = {} } = useSWR('food-log-week', fetchWeeklyKcal, {
+  const { data: customFoods = [] } = useSWR('custom-foods', fetchCustomFoods, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  })
+  const { data: weeklyKcal = {} } = useSWR('food-log-week', fetchWeeklyKcal, {
     revalidateOnFocus: false,
     dedupingInterval: 300_000,
   })
@@ -471,6 +475,7 @@ const { data: weeklyKcal = {} } = useSWR('food-log-week', fetchWeeklyKcal, {
 
       {showAddSheet && (
         <AddFoodSheet
+          customFoods={customFoods}
           preselectedMeal={preselectedMeal}
           userId={userId}
           today={selectedDate}

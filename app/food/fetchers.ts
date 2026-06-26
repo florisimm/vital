@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase'
-import type { FoodLogEntry } from '@/lib/types'
+import type { FoodLogEntry, Product } from '@/lib/types'
 
 export type Targets = { kcal: number; protein: number; carbs: number; fat: number; goalType: 'cut' | 'maintain' | 'bulk' }
 
@@ -67,6 +67,18 @@ export async function fetchWeeklyNutrition(): Promise<{ avgProtein: number; prot
   return { avgProtein, proteinTarget: Number(settings?.macro_protein ?? 0) }
 }
 
+
+export async function fetchCustomFoods(): Promise<Product[]> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  const { data } = await supabase
+    .from('custom_foods')
+    .select('id, name, brand, kcal, protein, carbs, fat, servings')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+  return (data ?? []).map(r => ({ ...r, image_url: null, barcode: null })) as Product[]
+}
 
 export async function fetchMealTemplates(): Promise<MealTemplate[]> {
   const supabase = createClient()

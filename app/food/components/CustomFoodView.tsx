@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { mutate as globalMutate } from 'swr'
 import { createClient } from '@/lib/supabase'
-import type { FoodLogEntry } from '@/lib/types'
+import type { FoodLogEntry, Product } from '@/lib/types'
 
 export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose }: {
   userId: string; today: string; meal: string
@@ -31,6 +32,22 @@ export function CustomFoodView({ userId, today, meal, setMeal, onAdded, onClose 
     setSaving(true)
     try {
       const supabase = createClient()
+      const portionGN = Number(portionG)
+      const servings = portionGN > 0
+        ? [{ label: portionLabel.trim() || `${portionGN}g`, amount_g: portionGN }]
+        : null
+
+      // Save to custom_foods so it appears in future searches
+      const { data: saved } = await supabase.from('custom_foods').insert({
+        user_id: userId, name: form.name.trim(), brand: form.brand || null,
+        kcal: Number(form.kcal), protein: Number(form.protein),
+        carbs: Number(form.carbs), fat: Number(form.fat), servings,
+      }).select('id, name, brand, kcal, protein, carbs, fat, servings').single()
+
+      if (saved) {
+        globalMutate<Product[]>('custom-foods', (cur = []) => [{ ...saved, image_url: null, barcode: null } as Product, ...cur], { revalidate: false })
+      }
+
       const { data, error } = await supabase.from('food_log').insert({
         user_id: userId, date: today, meal_category: meal,
         food_name: form.name.trim(), amount_g: g,
