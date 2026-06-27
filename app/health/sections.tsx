@@ -1163,7 +1163,22 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
         { user_id: user.id, datum: editDate, gewicht: kg },
         { onConflict: 'user_id,datum' },
       )
-      await mutate('health-gezondheid')
+      // Patch the cache with the value we just wrote instead of refetching —
+      // an immediate refetch can read a stale replica and clobber the new
+      // value back to the old one until the screen is remounted.
+      await mutate(
+        'health-gezondheid',
+        (current: GezondheidsRow[] = []) => {
+          const idx = current.findIndex(r => r.datum === editDate)
+          if (idx >= 0) {
+            const copy = [...current]
+            copy[idx] = { ...copy[idx], gewicht: kg }
+            return copy
+          }
+          return [{ datum: editDate, gewicht: kg } as GezondheidsRow, ...current]
+        },
+        { revalidate: false },
+      )
     }
     setSaving(false)
     setEditDate(null)
@@ -1176,7 +1191,12 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
     if (user) {
       await supabase.from('gezondheid').update({ gewicht: null })
         .eq('user_id', user.id).eq('datum', deleteConfirm)
-      await mutate('health-gezondheid')
+      await mutate(
+        'health-gezondheid',
+        (current: GezondheidsRow[] = []) =>
+          current.map(r => r.datum === deleteConfirm ? { ...r, gewicht: null } : r),
+        { revalidate: false },
+      )
     }
     setDeleteConfirm(null)
   }
