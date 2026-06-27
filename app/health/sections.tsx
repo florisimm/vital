@@ -1055,8 +1055,8 @@ export function HeartSection() {
 
 // ─── Weight ───────────────────────────────────────────────────────────────────
 
-function WeightSwipeRow({ label, value, onEdit, onDelete }: {
-  label: string; value: number | null; onEdit: () => void; onDelete: () => void
+function WeightSwipeRow({ label, value, delta, divider, onEdit, onDelete }: {
+  label: string; value: number | null; delta?: number | null; divider?: boolean; onEdit: () => void; onDelete: () => void
 }) {
   const [dx, setDx] = useState(0)
   const startX = useRef(0)
@@ -1065,14 +1065,14 @@ function WeightSwipeRow({ label, value, onEdit, onDelete }: {
   const SNAP = 72
 
   return (
-    <div className="relative overflow-hidden border-b border-white/[0.07]">
+    <div className="relative overflow-hidden">
       <div className="absolute right-0 inset-y-0 flex items-center justify-center"
         style={{ width: SNAP, background: '#ef4444' }}>
         <Trash2 size={17} className="text-white" />
       </div>
       <div
-        className="relative flex items-center justify-between py-4"
-        style={{ transform: `translateX(${Math.min(0, dx)}px)`, transition: dx === 0 ? 'transform 0.22s ease' : 'none', background: 'rgb(5,6,8)' }}
+        className={`relative flex items-center justify-between px-4 py-3.5 ${divider ? 'border-b border-white/[0.06]' : ''}`}
+        style={{ transform: `translateX(${Math.min(0, dx)}px)`, transition: dx === 0 ? 'transform 0.22s ease' : 'none', background: 'rgb(13,14,17)' }}
         onTouchStart={e => {
           startX.current = e.touches[0].clientX
           startY.current = e.touches[0].clientY
@@ -1096,9 +1096,19 @@ function WeightSwipeRow({ label, value, onEdit, onDelete }: {
         }}
       >
         <span className="text-[15px] font-medium text-white">{label}</span>
-        <button onClick={onEdit} className="flex items-center gap-2">
-          <span className="text-[15px] font-semibold text-white">{value?.toFixed(1)} kg</span>
-          <span className="text-[12px] text-white/30">edit</span>
+        <button onClick={onEdit} className="flex items-center gap-2.5">
+          {delta != null && delta !== 0 && (
+            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md tabular-nums"
+              style={{
+                color: delta < 0 ? '#4ade80' : '#f87171',
+                background: delta < 0 ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)',
+              }}>
+              {delta > 0 ? '+' : ''}{delta.toFixed(1)}
+            </span>
+          )}
+          <span className="text-[15px] font-semibold text-white tabular-nums">
+            {value?.toFixed(1)}<span className="text-white/40 text-[12px] ml-0.5">kg</span>
+          </span>
         </button>
       </div>
     </div>
@@ -1143,6 +1153,16 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
     if (datum === localDateStr(yesterday)) return 'Yesterday'
     return new Date(datum + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  }
+
+  // Change vs the previous (older) logged weight — for the per-row trend chip
+  function deltaFor(datum: string): number | null {
+    const idx = allWeightRows.findIndex(r => r.datum === datum)
+    if (idx < 0 || idx + 1 >= allWeightRows.length) return null
+    const cur = allWeightRows[idx].gewicht
+    const prev = allWeightRows[idx + 1].gewicht
+    if (cur == null || prev == null) return null
+    return Math.round((cur - prev) * 10) / 10
   }
 
   function openEdit(datum: string, current: number | null) {
@@ -1327,25 +1347,51 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgb(5,6,8)' }}>
           {/* Header */}
           <div
-            className="flex items-center justify-between px-5 border-b border-white/10 shrink-0"
+            className="flex items-center justify-between px-5 border-b border-white/[0.06] shrink-0"
             style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', paddingBottom: '14px' }}
           >
-            <span className="text-[17px] font-semibold text-white">Weight log</span>
+            <div className="flex flex-col">
+              <span className="text-[19px] font-bold text-white">Weight log</span>
+              <span className="text-[12px] text-white/40">
+                {allWeightRows.length} {allWeightRows.length === 1 ? 'entry' : 'entries'}
+              </span>
+            </div>
             <button
               onClick={() => { setShowList(false); setEditDate(null) }}
-              className="text-[15px] font-semibold text-cyan-400"
+              className="text-[15px] font-semibold text-cyan-400 px-2 py-1 active:opacity-60"
             >
               Done
             </button>
           </div>
 
-          {/* List */}
-          <div className="flex-1 overflow-y-auto px-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
-            {/* Today row — always at top */}
-            <div className="py-4 border-b border-white/[0.07]">
+          {/* Scroll area */}
+          <div className="flex-1 overflow-y-auto px-5 pt-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+
+            {/* Summary card */}
+            <div className="rounded-[20px] p-4 mb-5 flex items-center justify-between"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[12px] font-medium text-white/45">Current</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[28px] font-bold text-white leading-none">{displayWeight ? displayWeight.toFixed(1) : '–'}</span>
+                  <span className="text-[14px] font-semibold text-white/40">kg</span>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-[12px] font-semibold tabular-nums"
+                  style={{ color: change < 0 ? '#4ade80' : change > 0 ? '#f87171' : 'rgba(255,255,255,0.4)' }}>
+                  {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)} kg` : '–'} · {period}d
+                </span>
+                <span className="text-[12px] text-white/40 tabular-nums">Avg {wavg ? wavg.toFixed(1) : '–'} kg</span>
+              </div>
+            </div>
+
+            {/* Today row */}
+            <div className="rounded-[18px] overflow-hidden mb-5"
+              style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.18)' }}>
               {editDate === today ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-[15px] font-semibold text-white w-28 shrink-0">Today</span>
+                <div className="flex items-center gap-3 px-4 py-3.5">
+                  <span className="text-[15px] font-semibold text-teal-300 w-16 shrink-0">Today</span>
                   <input
                     ref={inputRef}
                     type="text"
@@ -1362,48 +1408,64 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
                   <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <span className="text-[15px] font-semibold text-white">Today</span>
-                  <button onClick={() => openEdit(today, rows.find(r => r.datum === today)?.gewicht ?? null)} className="flex items-center gap-2">
-                    {todayHasWeight
-                      ? <><span className="text-[15px] font-semibold text-white">{rows.find(r => r.datum === today)?.gewicht?.toFixed(1)} kg</span><span className="text-[12px] text-white/30">edit</span></>
-                      : <span className="text-[14px] font-semibold text-cyan-400">+ Log</span>
-                    }
-                  </button>
-                </div>
+                <button
+                  onClick={() => openEdit(today, rows.find(r => r.datum === today)?.gewicht ?? null)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 active:opacity-70"
+                >
+                  <span className="text-[15px] font-semibold text-teal-300">Today</span>
+                  {todayHasWeight
+                    ? <span className="flex items-center gap-2">
+                        <span className="text-[15px] font-semibold text-white tabular-nums">
+                          {rows.find(r => r.datum === today)?.gewicht?.toFixed(1)}<span className="text-white/40 text-[12px] ml-0.5">kg</span>
+                        </span>
+                        <span className="text-[12px] text-teal-300/70">edit</span>
+                      </span>
+                    : <span className="text-[14px] font-semibold text-teal-300">+ Log</span>
+                  }
+                </button>
               )}
             </div>
 
-            {/* Past entries */}
-            {allWeightRows.filter(r => r.datum !== today).map(r => (
-              editDate === r.datum ? (
-                <div key={r.datum} className="flex items-center gap-3 py-4 border-b border-white/[0.07]">
-                  <span className="text-[15px] font-medium text-white w-28 shrink-0">{fmtDate(r.datum)}</span>
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    inputMode="decimal"
-                    value={editValue}
-                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setEditValue(v) }}
-                    onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
-                    className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
-                    placeholder="kg"
-                  />
-                  <button onClick={saveWeight} disabled={saving} className="text-cyan-400 font-semibold text-[14px] disabled:opacity-40 shrink-0">
-                    {saving ? '…' : 'Save'}
-                  </button>
-                  <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
+            {/* History */}
+            {allWeightRows.filter(r => r.datum !== today).length > 0 && (
+              <>
+                <span className="text-[12px] font-semibold text-white/35 uppercase tracking-wide px-1">History</span>
+                <div className="rounded-[18px] overflow-hidden mt-2"
+                  style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+                  {allWeightRows.filter(r => r.datum !== today).map((r, i, arr) => (
+                    editDate === r.datum ? (
+                      <div key={r.datum} className={`flex items-center gap-3 px-4 py-3.5 ${i < arr.length - 1 ? 'border-b border-white/[0.06]' : ''}`} style={{ background: 'rgb(13,14,17)' }}>
+                        <span className="text-[15px] font-medium text-white w-24 shrink-0">{fmtDate(r.datum)}</span>
+                        <input
+                          ref={inputRef}
+                          type="text"
+                          inputMode="decimal"
+                          value={editValue}
+                          onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setEditValue(v) }}
+                          onKeyDown={e => { if (e.key === 'Enter') saveWeight() }}
+                          className="flex-1 bg-white/10 rounded-xl px-3 py-2 text-white text-[15px] outline-none"
+                          placeholder="kg"
+                        />
+                        <button onClick={saveWeight} disabled={saving} className="text-cyan-400 font-semibold text-[14px] disabled:opacity-40 shrink-0">
+                          {saving ? '…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditDate(null)} className="text-white/40 text-[14px] shrink-0">Cancel</button>
+                      </div>
+                    ) : (
+                      <WeightSwipeRow
+                        key={r.datum}
+                        label={fmtDate(r.datum)}
+                        value={r.gewicht}
+                        delta={deltaFor(r.datum)}
+                        divider={i < arr.length - 1}
+                        onEdit={() => openEdit(r.datum, r.gewicht)}
+                        onDelete={() => setDeleteConfirm(r.datum)}
+                      />
+                    )
+                  ))}
                 </div>
-              ) : (
-                <WeightSwipeRow
-                  key={r.datum}
-                  label={fmtDate(r.datum)}
-                  value={r.gewicht}
-                  onEdit={() => openEdit(r.datum, r.gewicht)}
-                  onDelete={() => setDeleteConfirm(r.datum)}
-                />
-              )
-            ))}
+              </>
+            )}
           </div>
 
           {/* Delete confirmation popup */}
