@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation'
 import { ArrowUp, ChevronLeft, Loader2, Trash2 } from 'lucide-react'
 
 const MAX_TURNS = 10
+const SUGGESTIONS = [
+  'Hoe was mijn slaap?',
+  'Wat moet ik vandaag trainen?',
+  'Hoeveel eiwit nog vandaag?',
+  'Wat is mijn readiness?',
+]
 import useSWR from 'swr'
 import {
   computePhysiologyReadiness, computeIllnessFlag, computeHRVBaseline, type HealthRow,
@@ -424,6 +430,7 @@ export default function CoachPage() {
   const [status, setStatus]             = useState<'online' | 'typing' | 'offline'>('online')
   const [memory, setMemory]             = useState<string[]>([])
   const bottomRef    = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLTextAreaElement>(null)
   const offlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function scheduleOffline() {
@@ -487,10 +494,11 @@ export default function CoachPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages, streamText])
 
-  async function handleSend() {
-    if (!message.trim() || streaming || atLimit) return
-    const q = message.trim()
+  async function handleSend(override?: string) {
+    const q = (typeof override === 'string' ? override : message).trim()
+    if (!q || streaming || atLimit) return
     setMessage('')
+    if (inputRef.current) inputRef.current.style.height = 'auto'
 
     if (offlineTimer.current) clearTimeout(offlineTimer.current)
     setStatus('online')
@@ -589,6 +597,8 @@ export default function CoachPage() {
         @keyframes blob1 { from { transform: translate(0,0) scale(1); } to { transform: translate(8%,12%) scale(1.12); } }
         @keyframes blob2 { from { transform: translate(0,0) scale(1); } to { transform: translate(-10%,-8%) scale(1.08); } }
         @keyframes blob3 { from { transform: translate(0,0) scale(1); } to { transform: translate(6%,-10%) scale(0.92); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={{ position:'absolute', top:'-15%', left:'-10%', width:'65%', height:'65%', borderRadius:'50%', background:'radial-gradient(circle, rgba(45,212,191,0.18) 0%, transparent 70%)', filter:'blur(48px)', animation:'blob1 9s ease-in-out infinite alternate' }} />
@@ -699,7 +709,7 @@ export default function CoachPage() {
 
       {/* Bottom input bar */}
       <div
-        className="shrink-0 flex items-center gap-2 px-3 relative z-10"
+        className="shrink-0 relative z-10"
         style={{
           paddingTop: '10px',
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
@@ -708,28 +718,54 @@ export default function CoachPage() {
           borderTop: '1px solid rgba(255,255,255,0.07)',
         }}
       >
-        <input
-          type="text"
-          placeholder="Stel een vraag…"
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
-          className="flex-1 h-[44px] px-4 rounded-full text-white placeholder:text-white/30 outline-none text-[16px]"
-          style={{ background: 'rgba(255,255,255,0.08)', opacity: atLimit ? 0.4 : 1 }}
-          disabled={atLimit}
-        />
-        <button
-          onClick={handleSend}
-          aria-label="Verstuur"
-          className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0 disabled:opacity-30"
-          style={{ background: 'rgb(45,212,191)' }}
-          disabled={!message.trim() || streaming || atLimit}
-        >
-          {streaming
-            ? <Loader2 size={18} className="text-black animate-spin" />
-            : <ArrowUp size={18} className="text-black" strokeWidth={2.5} />
-          }
-        </button>
+        {/* Quick-start suggestions — only before the conversation begins */}
+        {chatMessages.length === 0 && !streaming && !atLimit && (
+          <div className="flex gap-2 overflow-x-auto px-3 pb-2.5 no-scrollbar">
+            {SUGGESTIONS.map(s => (
+              <button
+                key={s}
+                onClick={() => handleSend(s)}
+                className="shrink-0 px-3.5 py-2 rounded-full text-[13px] font-medium text-white/80 active:opacity-70 whitespace-nowrap"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-end gap-2 px-3">
+          <textarea
+            ref={inputRef}
+            rows={1}
+            placeholder="Stel een vraag…"
+            value={message}
+            onChange={e => {
+              setMessage(e.target.value)
+              const el = e.target
+              el.style.height = 'auto'
+              el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+            }}
+            className="flex-1 max-h-[120px] py-[11px] px-4 rounded-[22px] text-white placeholder:text-white/30 outline-none text-[16px] resize-none leading-snug no-scrollbar"
+            style={{ background: 'rgba(255,255,255,0.08)', opacity: atLimit ? 0.4 : 1 }}
+            disabled={atLimit}
+          />
+          <button
+            onClick={() => handleSend()}
+            aria-label="Verstuur"
+            className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0 disabled:opacity-30"
+            style={{ background: 'rgb(45,212,191)' }}
+            disabled={!message.trim() || streaming || atLimit}
+          >
+            {streaming
+              ? <Loader2 size={18} className="text-black animate-spin" />
+              : <ArrowUp size={18} className="text-black" strokeWidth={2.5} />
+            }
+          </button>
+        </div>
       </div>
 
     </div>
