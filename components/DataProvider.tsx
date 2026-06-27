@@ -215,15 +215,21 @@ export function DataProvider() {
     return () => { cancelled = true; clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
-  // Poll every 5 min when today's weight is missing (e.g. waiting for Hevy sync on app open).
-  // Stops as soon as weight arrives or after 2 hours.
+  // On app open, if today's weight is missing: trigger hevy-sync every 5 min for max 30 min.
+  // Stops as soon as weight arrives or after 30 min.
   useEffect(() => {
     const supabase = createClient()
     let cancelled = false
     let pollId: ReturnType<typeof setInterval> | null = null
     let stopId: ReturnType<typeof setTimeout> | null = null
 
-    async function refreshAndCheck(userId: string): Promise<boolean> {
+    async function triggerSyncAndCheck(userId: string): Promise<boolean> {
+      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }).catch(() => {})
+      if (cancelled) return false
       const today = new Date().toISOString().split('T')[0]
       const { data: rows } = await supabase
         .from('gezondheid')
@@ -234,8 +240,7 @@ export function DataProvider() {
       if (cancelled) return false
       mutate('health-gezondheid', rows ?? [], false)
       mutate('today', (cur: any) => cur ? { ...cur, latestGezondheid: rows?.[0] ?? null } : cur, false)
-      const todayRow = (rows ?? []).find((r: any) => r.datum === today)
-      return todayRow?.gewicht != null
+      return (rows ?? []).find((r: any) => r.datum === today)?.gewicht != null
     }
 
     async function start() {
@@ -253,8 +258,13 @@ export function DataProvider() {
       if (cancelled || todayRow?.gewicht != null) return
 
       const userId = user.id
+
+      // First attempt immediately
+      const found = await triggerSyncAndCheck(userId)
+      if (found || cancelled) return
+
       pollId = setInterval(async () => {
-        const found = await refreshAndCheck(userId)
+        const found = await triggerSyncAndCheck(userId)
         if (found && pollId) {
           clearInterval(pollId); pollId = null
           if (stopId) { clearTimeout(stopId); stopId = null }
@@ -263,7 +273,7 @@ export function DataProvider() {
 
       stopId = setTimeout(() => {
         if (pollId) { clearInterval(pollId); pollId = null }
-      }, 2 * 60 * 60 * 1000)
+      }, 30 * 60 * 1000)
     }
 
     start()
