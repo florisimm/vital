@@ -53,6 +53,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Link the rating back to the matching coach_override so the learning engine
+    // can use the user's own difficulty signal (best-effort, never blocks).
+    if (feedback_level && workout_date && workout_type) {
+      const { error: linkError } = await supabase
+        .from('coach_overrides')
+        .update({ session_feedback: feedback_level })
+        .eq('user_id', user.id)
+        .eq('date', workout_date)
+        .eq('sport_type', workout_type)
+      if (linkError) console.warn('coach_overrides link skipped:', linkError.message)
+    }
+
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (err) {
     console.error('API error:', err)

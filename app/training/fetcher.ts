@@ -39,7 +39,7 @@ export async function trainingFetcher() {
       .single(),
     supabase
       .from('coach_bias_adjustments')
-      .select('sport_type, bias_adjustment, conservativeness_adjustment, confidence')
+      .select('sport_type, bias_adjustment, conservativeness_adjustment, confidence, reason, behavior_consistency_pct')
       .eq('user_id', user.id)
   ])
 
@@ -82,6 +82,17 @@ export async function trainingFetcher() {
     if (row.confidence !== 'low') biasBySport[row.sport_type] = row.bias_adjustment ?? 0
   }
 
+  // Full learned-adjustment rows (with reason + confidence) for the insight panel
+  const coachLearned = ((biasRows ?? []) as any[])
+    .filter((row) => row.confidence !== 'low' && Number(row.bias_adjustment ?? 0) !== 0)
+    .map((row) => ({
+      sport_type: row.sport_type as string,
+      bias_adjustment: Number(row.bias_adjustment ?? 0),
+      confidence: row.confidence as 'low' | 'medium' | 'high',
+      reason: (row.reason as string) ?? '',
+      consistency_pct: Number(row.behavior_consistency_pct ?? 0),
+    }))
+
   return {
     activities: (activities ?? []) as Activity[],
     hevy: (hevy ?? []) as HevyWorkout[],
@@ -93,6 +104,7 @@ export async function trainingFetcher() {
     trainingIntensity,
     goalPriority,
     biasBySport,
+    coachLearned,
     injuries,
     selfPlanned,
     maxHeartRate,

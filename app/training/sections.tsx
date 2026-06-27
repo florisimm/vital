@@ -4037,6 +4037,55 @@ function TodayDoneCard({ activities, hevy, calendarEvents = [] }: { activities: 
   )
 }
 
+// ─── What the program learned from the user (adaptive coaching) ────────────────
+
+type CoachLearnedRow = {
+  sport_type: string
+  bias_adjustment: number
+  confidence: 'low' | 'medium' | 'high'
+  reason: string
+  consistency_pct: number
+}
+
+export function CoachLearnedCard({ learned }: { learned?: CoachLearnedRow[] }) {
+  if (!learned || learned.length === 0) return null
+  const SPORT_LABEL: Record<string, string> = {
+    running: 'Running', cycling: 'Cycling', strength: 'Strength', swimming: 'Swimming',
+  }
+  return (
+    <div className="rounded-[20px] p-4 flex flex-col gap-3"
+      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}>
+      <div className="flex items-center justify-between">
+        <span className="text-[15px] font-semibold text-white">What your coach learned</span>
+        <span className="text-[11px] text-white/40">from how you recover</span>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {learned.map((l) => {
+          const pct = Math.round(Math.abs(l.bias_adjustment) * 100)
+          const push = l.bias_adjustment > 0
+          return (
+            <div key={l.sport_type} className="flex items-start gap-3">
+              <span className="text-[13px] font-semibold px-2 py-0.5 rounded-md shrink-0 tabular-nums mt-0.5"
+                style={{
+                  color: push ? '#4ade80' : '#fbbf24',
+                  background: push ? 'rgba(74,222,128,0.12)' : 'rgba(251,191,36,0.12)',
+                }}>
+                {push ? '+' : '−'}{pct}%
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[14px] font-medium text-white">
+                  {SPORT_LABEL[l.sport_type] ?? l.sport_type} · {push ? 'pushing you more' : 'staying cautious'}
+                </span>
+                <span className="text-[12px] text-white/45 leading-snug">{l.reason}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function OverviewSection({ activities, hevy, calendarEvents, pastCalendarEvents = [], trainingFrequencies = {}, biasBySport = {}, sportPriority = [], goalPriority = [], trainingIntensity = 'moderate', maxHeartRate = null, onSwitchTab }: {
   activities: Activity[]; hevy: HevyWorkout[]; calendarEvents: any[]
   pastCalendarEvents?: any[]

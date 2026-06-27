@@ -76,16 +76,32 @@ export async function POST(request: NextRequest) {
     let totalAnalyzed = 0
     let totalAdjustments = 0
 
+    // Health window for recovery-outcome classification
+    const healthStart = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
+
     // For each user, analyze all sports
     for (const userId of userIds) {
+      // Fetch this user's recent health once (service role bypasses RLS)
+      const { data: healthRows } = await supabase
+        .from('gezondheid')
+        .select(
+          'datum,hartslag_rust,hrv_rmssd,slaap_minuten,slaap_score,slaap_diep,slaap_rem,slaap_licht,wakker_minuten,wakker_count,spo2,ademhalingsfrequentie'
+        )
+        .eq('user_id', userId)
+        .gte('datum', healthStart)
+        .order('datum', { ascending: false })
+
       for (const sport of SPORTS) {
         try {
           // Analyze this user's pattern for this sport
-          const adjustment = await analyzeCoachingPatterns(userId, sport)
+          const adjustment = await analyzeCoachingPatterns(userId, sport, {
+            client: supabase,
+            healthRows: (healthRows ?? []) as any,
+          })
 
           if (adjustment) {
             // Store the adjustment
-            await storeCoachingAdjustment(userId, adjustment)
+            await storeCoachingAdjustment(userId, adjustment, supabase)
             totalAdjustments++
             console.info(
               `[Coaching Analysis] Updated: ${userId} / ${sport} (confidence: ${adjustment.confidence})`
