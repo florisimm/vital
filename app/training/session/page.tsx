@@ -41,11 +41,15 @@ async function fetchWeather(lat: number, lon: number): Promise<{ wind: WindData 
     const temps: number[]  = json?.hourly?.temperature_2m   ?? []
     const winds: number[]  = json?.hourly?.windspeed_10m    ?? []
     const dirs2: number[]  = json?.hourly?.winddirection_10m ?? []
-    const nowH = new Date().getHours()
+    const now = new Date()
+    const todayKey = now.toDateString()
+    const currentHour = now.getHours()
     const hourly: HourSlot[] = times
       .map((t, i) => ({ hour: new Date(t).getHours(), tempC: Math.round(temps[i] ?? 0), windKmh: Math.round(winds[i] ?? 0), windDir: degToCompass(Math.round(dirs2[i] ?? 0)) }))
-      .filter((s, i) => { const h = new Date(times[i]).getHours(); return h >= nowH && h < nowH + 6 })
-      .slice(0, 6)
+      .filter((_, i) => {
+        const slotTime = new Date(times[i])
+        return slotTime.toDateString() === todayKey && slotTime.getHours() >= currentHour && slotTime.getHours() <= 23
+      })
 
     return { wind, hourly }
   } catch { return { wind: null, hourly: [] } }
@@ -236,8 +240,15 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
     finally { setLoading(false) }
   }
 
+  function nextRouteSeed() {
+    const previous = seedRef.current
+    let next = previous
+    while (next === previous) next = Math.floor(Math.random() * 100000)
+    seedRef.current = next
+  }
+
   function retry() {
-    seedRef.current = Math.floor(Math.random() * 10000)
+    nextRouteSeed()
     if (startCoordRef.current) generateLoopRef.current!(startCoordRef.current[0], startCoordRef.current[1])
     else triggerGps()
   }
@@ -339,18 +350,21 @@ function WeatherCard({ hourly }: { hourly: HourSlot[] }) {
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <span className="text-[13px] font-semibold text-white/40 uppercase tracking-wider">Weather</span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] font-semibold text-white/40 uppercase tracking-wider">Wind & temperature</span>
+          <span className="text-[11px] text-white/30">until 00:00</span>
+        </div>
         <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {hourly.map((s, i) => (
             <div key={i} className="flex flex-col items-center gap-1 shrink-0 px-3 py-2 rounded-[12px]"
-              style={{ background: 'rgba(255,255,255,0.06)', minWidth: 56 }}>
-              <span className="text-[11px] text-white/40">{s.hour}:00</span>
-              <span className="text-[15px] font-bold text-white">{s.tempC}°</span>
+              style={{ background: 'rgba(255,255,255,0.06)', minWidth: 62 }}>
+              <span className="text-[11px] text-white/40">{String(s.hour).padStart(2, '0')}:00</span>
+              <span className="text-[15px] font-bold text-white">{s.tempC}°C</span>
               <div className="flex items-center gap-0.5">
                 <div style={{ transform: `rotate(${windDeg(s.windDir)}deg)` }} className="inline-flex text-white/30">
                   <ArrowUp size={10} />
                 </div>
-                <span className="text-[10px] text-white/40">{s.windKmh}</span>
+                <span className="text-[10px] text-white/40">{s.windKmh} km/h</span>
               </div>
             </div>
           ))}
@@ -532,7 +546,7 @@ function SessionContent() {
           <RouteMapCard advice={result.advice} title={title} sport={sport} onHourly={setHourly} />
 
           {/* Hourly weather — separate card */}
-          <WeatherCard hourly={hourly} />
+          {sport === 'cycling' && <WeatherCard hourly={hourly} />}
         </div>
       )}
     </div>

@@ -1052,11 +1052,19 @@ async function saveTraining() {
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
                   Back
                 </button>
-                <span className="text-[17px] font-semibold text-white">Connected Services</span>
+                <span className="text-[17px] font-semibold text-white">Devices & Apps</span>
                 <div className="w-16" />
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-7" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+
+                <div className="rounded-[18px] px-4 py-3.5"
+                  style={{ background: 'rgba(45,212,191,0.06)', border: '1px solid rgba(45,212,191,0.14)' }}>
+                  <p className="text-[15px] font-semibold text-white">Connect the sources you already use</p>
+                  <p className="text-[13px] text-white/45 mt-1 leading-relaxed">
+                    Kern combines workouts, wearables, recovery and your calendar into one daily recommendation.
+                  </p>
+                </div>
 
                 {/* Training */}
                 <div>
@@ -1141,9 +1149,10 @@ async function saveTraining() {
                   )}
                 </div>
 
-                {/* Health & Schedule */}
+                {/* Wearables & Schedule */}
                 <div>
-                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Health & Schedule</p>
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-1">Wearables</p>
+                  <p className="text-[13px] text-white/35 mb-3 px-1">Recovery devices sync through Google Health.</p>
                   <div className="grid grid-cols-2 gap-3">
 
                     {/* Google Health */}
@@ -1170,9 +1179,13 @@ async function saveTraining() {
                       <div>
                         <p className="text-[15px] font-semibold text-white">Google Health</p>
                         <p className={`text-[12px] mt-0.5 ${services?.fitbit && services.fitbitNeedsReconnect ? 'text-orange-300' : 'text-white/40'}`}>
-                          {services?.fitbit && services.fitbitNeedsReconnect ? 'Reconnect needed' : 'Sleep, HRV & steps'}
+                          {services?.fitbit && services.fitbitNeedsReconnect ? 'Reconnect needed' : 'Sleep, HRV, steps & wearables'}
                         </p>
                       </div>
+                    </div>
+
+                    <div className="col-span-2 pt-2">
+                      <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold">Schedule</p>
                     </div>
 
                     {/* Google Calendar */}
@@ -1202,9 +1215,10 @@ async function saveTraining() {
                   )}
                 </div>
 
-                {/* Coming soon */}
+                {/* Wearable sources */}
                 <div>
-                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Coming soon</p>
+                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-1">Wearable sources</p>
+                  <p className="text-[13px] text-white/35 mb-3 px-1">Connect these to Google Health, then Kern reads the combined data.</p>
                   <div className="grid grid-cols-2 gap-3">
                     {([
                       { icon: '🍎', name: 'Apple Health', desc: 'Steps, sleep & workouts', bg: 'rgba(255,59,48,0.12)'  },
@@ -1215,12 +1229,12 @@ async function saveTraining() {
                       { icon: '🟣', name: 'Wahoo',         desc: 'Cycling & power',        bg: 'rgba(167,139,250,0.10)'},
                     ] as const).map(item => (
                       <div key={item.name} className="rounded-[18px] p-4 flex flex-col gap-3"
-                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', opacity: 0.45 }}>
+                        style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-start justify-between">
                           <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
                             style={{ background: item.bg }}>{item.icon}</div>
                           <span className="text-[10px] font-semibold text-white/35 px-2 py-1 rounded-full"
-                            style={{ background: 'rgba(255,255,255,0.07)' }}>Soon</span>
+                            style={{ background: 'rgba(255,255,255,0.07)' }}>via Health</span>
                         </div>
                         <div>
                           <p className="text-[14px] font-semibold text-white">{item.name}</p>
