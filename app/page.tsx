@@ -15,12 +15,12 @@ import {
   type Activity as TrainingActivity, type HevyWorkout as TrainingHevyWorkout,
 } from '@/app/training/sections'
 import { computeRampRate } from '@/lib/training-load'
+import { hasCompletedPlannedWorkout, isCardioTitle, isStrengthTitle } from '@/lib/workout-matching'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STRENGTH_KW = ['pull', 'push', 'legs', 'chest', 'back', 'squat', 'gym', 'strength', 'deadlift', 'bench', 'bicep', 'tricep', 'shoulder', 'upper', 'lower', 'weights', 'strength']
 const CARDIO_KW   = ['run', 'long run', 'bike', 'swim', 'swim', 'ride', 'cycling', 'run', 'cycle', 'long run', 'interval', 'tempo', 'zone']
-const CARDIO_SPORT_TYPES = ['run', 'ride', 'swim', 'walk', 'hike', 'virtual_run', 'virtual_ride', 'rowing', 'kayaking', 'crossfit', 'elliptical']
 const SPORT_KW = [...new Set([...STRENGTH_KW, ...CARDIO_KW, 'football', 'tennis', 'volleyball', 'training', 'workout', 'tournament', 'sport', 'sports', 'crossfit', 'yoga', 'padel', 'hockey', 'basketball', 'cycling'])]
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
@@ -113,13 +113,7 @@ function isSport(e: any): boolean {
 }
 
 function workoutDone(title: string, hevy: any[], acts: any[]): boolean {
-  const t    = title.toLowerCase()
-  const str  = STRENGTH_KW.some(k => t.includes(k))
-  const car  = CARDIO_KW.some(k => t.includes(k))
-  const cardioActs = acts.filter((a: any) => CARDIO_SPORT_TYPES.some(ct => (a.sport_type ?? '').toLowerCase().includes(ct)))
-  if (str && !car) return hevy.length > 0
-  if (car && !str) return cardioActs.length > 0
-  return hevy.length > 0 || cardioActs.length > 0
+  return hasCompletedPlannedWorkout(title, hevy, acts)
 }
 
 // ─── Lifestyle Focus card ─────────────────────────────────────────────────────
@@ -366,7 +360,7 @@ function buildFocusItems(data: any) {
     const time = fmtTime(todayEvent.start_datetime)
     const done = workoutDone(todayEvent.title, hevy, acts)
     const t    = todayEvent.title.toLowerCase()
-    const isGym = STRENGTH_KW.some(k => t.includes(k)) && !CARDIO_KW.some(k => t.includes(k))
+    const isGym = isStrengthTitle(t) && !isCardioTitle(t)
     items.push({
       label: time ? `${todayEvent.title} at ${time}` : todayEvent.title,
       done,
@@ -850,7 +844,7 @@ function TodayDashboard() {
             const hevy = (effectiveData?.todayHevy ?? []).map((h: any) => ({ name: h.title, sport: 'strength' }))
             const hevyNames = new Set(hevy.map((h: any) => h.name.toLowerCase()))
             const cardio = (effectiveData?.todayActivities ?? [])
-              .filter((a: any) => !STRENGTH_KW.some(k => (a.sport_type ?? '').toLowerCase().includes(k)))
+              .filter((a: any) => !isStrengthTitle(a.sport_type ?? ''))
               .filter((a: any) => !hevyNames.has(a.name.toLowerCase()))
               .map((a: any) => ({ name: a.name, sport: a.sport_type }))
             return [...hevy, ...cardio]

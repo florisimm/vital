@@ -1,16 +1,16 @@
 # Graph Report - web  (2026-06-28)
 
 ## Corpus Check
-- 157 files · ~247,498 words
+- 159 files · ~247,900 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1426 nodes · 2260 edges · 119 communities (96 shown, 23 thin omitted)
-- Extraction: 98% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 31 edges (avg confidence: 0.85)
+- 1449 nodes · 2309 edges · 119 communities (95 shown, 24 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 31 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bca677ee`
+- Built from commit: `a1dd47bc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -165,19 +165,19 @@
 - **Login Screen UI Elements** — playwright_mcp_login_screenshot, login_page, bottom_nav, design_dark_theme [INFERRED 0.85]
 - **Login Screen UI Elements** — playwright_mcp_login_screenshot, login_page, bottom_nav, vital_app_ui, auth_supabase [INFERRED 0.85]
 
-## Communities (119 total, 23 thin omitted)
+## Communities (119 total, 24 thin omitted)
 
 ### Community 0 - "Training Analytics & Insights"
-Cohesion: 0.03
-Nodes (24): ActivityRouteMap, ACWRDetail, BODY_REGION_DEFS, CARDIO_KW, CardioTarget, CoachLearnedRow, deriveTrainedMuscles(), DetailRow (+16 more)
+Cohesion: 0.02
+Nodes (25): ActivityRouteMap, ACWRDetail, BODY_REGION_DEFS, CARDIO_KW, CardioTarget, CoachLearnedCard(), CoachLearnedRow, computeSwimmingVolumeHistory() (+17 more)
 
 ### Community 1 - "Health Monitoring UI"
-Cohesion: 0.10
-Nodes (14): RecoveryPage, avg(), avgSleepTime(), BodyMeasurement, buildSleepInsight(), computeSleepScore(), fmtMin(), fmtTime() (+6 more)
+Cohesion: 0.09
+Nodes (17): HeartPage, RecoveryPage, avg(), avgSleepTime(), BodyMeasurement, buildHeartInsight(), buildSleepInsight(), computeSleepScore() (+9 more)
 
 ### Community 2 - "Food Tracking & AI Scan"
 Cohesion: 0.08
-Nodes (36): POST /api/route-plan (ORS Proxy), POST /api/scan-food (Claude Haiku Vision), MacroDrillSheet(), Barcode Scan Flow (Open Food Facts fallback), SWR Cache Strategy, AddFoodSheet(), buildCoachTip(), cap() (+28 more)
+Nodes (36): AddFoodSheet(), PremiumScreen(), Barcode Scan Flow (Open Food Facts fallback), AddFoodSheet(), buildCoachTip(), cap(), CreateMealView(), CustomFoodView() (+28 more)
 
 ### Community 3 - "Training Navigation & Detail"
 Cohesion: 0.17
@@ -196,20 +196,20 @@ Cohesion: 0.05
 Nodes (47): Architecture, Auth, Commands, Data flow, Design tokens, Environment Variables, Error logging, Fitbit integration (+39 more)
 
 ### Community 7 - "Today Dashboard"
-Cohesion: 0.18
-Nodes (6): MealSection(), ProductDetailView(), Targets, createServerSupabaseClient, FoodLogEntry, Product
+Cohesion: 0.20
+Nodes (3): ProductDetailView(), Targets, MEAL_LABELS_SHORT
 
 ### Community 8 - "TypeScript Config"
 Cohesion: 0.10
 Nodes (19): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+11 more)
 
 ### Community 9 - "App Shell & Navigation"
-Cohesion: 0.08
-Nodes (20): metadata, RootLayout(), viewport, BottomNav(), tabs, DataProvider(), ErrorBoundary, Props (+12 more)
+Cohesion: 0.15
+Nodes (12): metadata, RootLayout(), viewport, BottomNav(), tabs, DataProvider(), PasswordRecoveryGuard(), LEGACY_STORAGE_KEYS (+4 more)
 
 ### Community 10 - "Coach & Profile UI"
-Cohesion: 0.11
-Nodes (11): ALL_CATEGORIES, CATEGORIES, fetchTrainingFreqs(), Sport Keyword Filter for Calendar Events, Activity Type, computeMuscleRecovery, extractKeyLifts, HevyWorkout Type (+3 more)
+Cohesion: 0.13
+Nodes (23): buildFocusItems(), workoutDone(), CARDIO_SPORT_KEYWORDS, CARDIO_TITLE_KEYWORDS, CardioActivity, completedStrengthWorkoutsForPlan(), CompletedWorkout, completedWorkoutsMatchingPlan() (+15 more)
 
 ### Community 11 - "Authentication Flow"
 Cohesion: 0.18
@@ -232,8 +232,8 @@ Cohesion: 0.06
 Nodes (34): Adaptive Coaching System — Implementation Summary, `analyzeCoachingPatterns(userId)`, API Endpoints, Check bias adjustments, Check if table exists, Database Migrations, Documentation Files, Example: Adding to Running Page (+26 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.18
-Nodes (4): NotifStatus, Services, Units, getISOWeek()
+Cohesion: 0.15
+Nodes (10): adviceFor(), BENTO, DAY, FAQ, INTEGRATIONS, LandingPage(), MATH, ReadinessDemo() (+2 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.10
@@ -256,40 +256,40 @@ Cohesion: 0.08
 Nodes (23): Architecture, Auth, Commands, Data flow, Design tokens, Environment Variables, Error logging, Fitbit integration (+15 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.05
-Nodes (48): activityInsight(), buildBriefing(), buildFocusItems(), buildLifestyleFocus(), calendarInsight(), CARDIO_KW, CARDIO_SPORT_TYPES, computeInsights() (+40 more)
+Cohesion: 0.09
+Nodes (26): activityInsight(), buildBriefing(), calendarInsight(), CARDIO_KW, CARDIO_SPORT_TYPES, computeInsights(), DailyBriefingCard(), fetchTodayData (+18 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.12
 Nodes (22): ACCESSORY_TITLE_KEYWORDS, Activity, cardioZoneMultiplier(), COMPOUND_KEYWORDS, computeTrainingForm(), effectiveLoad(), epley1RM(), hevyLoad() (+14 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.09
-Nodes (24): Card(), computeStrengthScore(), PerformancePage(), AiInsight Component, computeFTP, computePerformanceScore, computeRaceProjections (Riegel formula), CyclingSection (+16 more)
+Cohesion: 0.05
+Nodes (56): buildRecs(), buildSections(), ChatMessage, CoachPage(), computeSimpleBaselines(), fmtMin(), Rec, Sections (+48 more)
 
 ### Community 39 - "Community 39"
 Cohesion: 0.10
 Nodes (19): 10:25 | main, 10:28-14:05 | main, 14:12-14:34 | main, 14:43-15:08 | main, 14:56 | main, 14:59 | main, 16:40 | main, 16:43 | main (+11 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.21
-Nodes (14): buildRecs(), buildSections(), ChatMessage, CoachPage(), computeSimpleBaselines(), fmtMin(), Rec, Sections (+6 more)
+Cohesion: 0.22
+Nodes (10): buildLifestyleFocus(), fetchTodayData(), fmtTime(), isToday(), tod0(), tom0(), UpcomingCard(), nightLabel() (+2 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.22
-Nodes (16): CardioDetailScreen(), CyclingWeeklyTrendCard(), ExerciseProgressScreen(), formatDate(), formatDuration(), formatPace(), LastRideCard(), LastRunCard() (+8 more)
+Cohesion: 0.16
+Nodes (20): buildMonthlyInsight(), CardioDetailScreen(), computeSwimmingPaceTrend(), CyclingWeeklyTrendCard(), ExerciseProgressScreen(), formatDate(), formatDuration(), formatPace() (+12 more)
 
 ### Community 42 - "Community 42"
-Cohesion: 0.32
-Nodes (11): InjuryToggle(), TrainingDetailScreen(), CyclingPage(), computePhysiologyReadiness(), HealthRow, ZoneTargets, RunningPage(), SwimmingPage() (+3 more)
+Cohesion: 0.28
+Nodes (4): ErrorBoundary, Props, State, logError()
 
 ### Community 43 - "Community 43"
-Cohesion: 0.32
-Nodes (8): buildStrengthInsight(), computeMuscleDistribution(), computeMuscleGroupAdvice(), computeMuscleRecovery(), computeStrengthProgress(), detectSplitFromTitle(), SplitRecommendationCard(), StrengthSection()
+Cohesion: 0.28
+Nodes (9): buildStrengthInsight(), computeMuscleDistribution(), computeMuscleGroupAdvice(), computeMuscleRecovery(), computeStrengthProgress(), computeWeeklySetBreakdown(), detectSplitFromTitle(), SplitRecommendationCard() (+1 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.22
-Nodes (8): fetchUserSettings(), ActivityPage, healthFetcher(), ActivitySection(), buildWeightInsight(), GezondheidsRow, WeightSection(), WeightPage
+Cohesion: 0.18
+Nodes (12): POST /api/route-plan (ORS Proxy), POST /api/scan-food (Claude Haiku Vision), SWR Cache Strategy, ActivityPage, healthFetcher(), HealthPage(), ActivitySection(), buildWeightInsight() (+4 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.12
@@ -301,11 +301,11 @@ Nodes (16): 1. Run Database Migration (2 minutes), 2. Add Session Feedback to Ru
 
 ### Community 47 - "Community 47"
 Cohesion: 0.20
-Nodes (9): HeartPage, ALL_TABS, CATEGORIES, fetchHealth(), fetchHiddenPages(), refreshHealthCache(), SyncMessage, buildHeartInsight() (+1 more)
+Nodes (10): ITEMS, SetupChecklist(), ALL_TABS, CATEGORIES, fetchHealth(), refreshHealthCache(), SyncMessage, fetchServices() (+2 more)
 
 ### Community 48 - "Community 48"
-Cohesion: 0.14
-Nodes (20): applyWeeklyProgression(), classifyActivity(), classifyCycling(), classifyRunning(), classifySwimming(), computeWeekProgress(), computeZones(), estimateMaxHR() (+12 more)
+Cohesion: 0.08
+Nodes (26): ProfileButton, NotifStatus, ProfileButton(), Services, Units, applyWeeklyProgression(), classifyActivity(), classifyCycling() (+18 more)
 
 ### Community 49 - "Community 49"
 Cohesion: 0.12
@@ -313,35 +313,35 @@ Nodes (15): `AddFoodSheet` (components/AddFoodSheet.tsx), Bekende gedragsverschi
 
 ### Community 50 - "Community 50"
 Cohesion: 0.17
-Nodes (11): AddFoodSheet(), SheetView, BarcodeScanner(), BarcodeScannerProps, CreateMealView(), CustomFoodView(), MealsListView(), BarcodeError (+3 more)
+Nodes (16): SheetView, CreateMealView(), CustomFoodView(), MealsListView(), BarcodeError, ScanResultView(), fetchCustomFoods(), fetchFoodFrequency() (+8 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.30
-Nodes (11): EditEntrySheet(), EditFoodSheet(), MealConfirmView(), cap(), MACRO_LABEL, MACRO_UNIT, MacroKey, MEAL_ICONS (+3 more)
+Cohesion: 0.25
+Nodes (12): EditEntrySheet(), EditFoodSheet(), MacroDrillSheet(), MealConfirmView(), MealSection(), cap(), MACRO_LABEL, MACRO_UNIT (+4 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.15
 Nodes (12): ReadinessConfidenceIndicatorProps, CoachBiasAdjustment, CoachingAdjustment, CoachingAnalysisResult, CoachOverride, CoachOverrideRequest, ReadinessConfidence, SessionFeedback (+4 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.14
-Nodes (9): CoachRecommendation(), MetricRow(), MetricTile(), MinimalWorkoutList(), NutritionProgressBar(), SectionHeader(), SuggestionCard(), SessionFeedbackLevel (+1 more)
+Cohesion: 0.19
+Nodes (7): CoachRecommendation(), MetricRow(), MetricTile(), MinimalWorkoutList(), NutritionProgressBar(), SectionHeader(), SuggestionCard()
 
 ### Community 54 - "Community 54"
 Cohesion: 0.14
 Nodes (13): Adaptive Coaching System — Database Schema, coach_bias_adjustments, coach_overrides, Column Details, Data Immutability, Entity Relationship Diagram, Performance, Query Patterns (+5 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.19
-Nodes (11): ALL_TABS, CATEGORIES, buildCyclingInsight(), buildMonthlyInsight(), CoachLearnedCard(), computeCyclingEnduranceTrend(), computeCyclingReadiness(), computeCyclingWeeklyTrend() (+3 more)
+Cohesion: 0.27
+Nodes (10): blendReadiness(), buildCyclingInsight(), buildSwimmingInsight(), computeCyclingEnduranceTrend(), computeCyclingReadiness(), computeCyclingWeeklyTrend(), computeFTP(), computeSwimmingReadiness() (+2 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.22
 Nodes (9): authPost(), cache, fm, getValidToken(), loginWithPassword(), savedEmail(), savedPassword(), saveTokens() (+1 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.21
-Nodes (13): blendReadiness(), buildRunningInsight(), buildSwimmingInsight(), computeRunning7DayTrend(), computeRunningEfficiencyTrend(), computeRunningReadiness(), computeSwimmingPaceTrend(), computeSwimmingReadiness() (+5 more)
+Cohesion: 0.28
+Nodes (9): buildRunningInsight(), computeRaceProjections(), computeRunning7DayTrend(), computeRunningEfficiencyTrend(), computeRunningReadiness(), formatTime(), predictTimeFromVDOT(), riegelPredict() (+1 more)
 
 ### Community 58 - "Community 58"
 Cohesion: 0.20
@@ -356,8 +356,8 @@ Cohesion: 0.17
 Nodes (11): 07:36-09:10 | main, 09:12-09:35 | main, 10:00-11:04 | main, 11:11 | main, 11:19-12:01 | main, 11:37 | main, 11:40-15:34 | main, 15:36-15:45 | main (+3 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.43
-Nodes (7): computeLoadRatio(), computeRampRate(), buildOverviewInsight(), buildTopInsights(), computeACWRDetail(), computePerformanceScore(), OverviewSection()
+Cohesion: 0.36
+Nodes (8): computeLoadRatio(), computeRampRate(), buildOverviewInsight(), buildTopInsights(), computeACWRDetail(), computePerformanceScore(), computeTodaysFocus(), OverviewSection()
 
 ### Community 62 - "Community 62"
 Cohesion: 0.24
@@ -382,10 +382,6 @@ Nodes (7): graphify reference: extra exports and benchmark, Step 6b - Wiki (only
 ### Community 67 - "Community 67"
 Cohesion: 0.38
 Nodes (7): avgPaceSecPerKm(), avgSpeedKmh(), computeAdvice(), daysSinceLast(), detectTrainingType(), determineUserLevel(), weeklyAvgKm()
-
-### Community 68 - "Community 68"
-Cohesion: 0.40
-Nodes (4): PremiumScreen(), ProfileButton, ProfileButton(), FoodPage()
 
 ### Community 69 - "Community 69"
 Cohesion: 0.33
@@ -436,8 +432,8 @@ Cohesion: 0.40
 Nodes (4): BUTTONS, FeedbackLevel, PlannedItem, PlannedTodayCard()
 
 ### Community 82 - "Community 82"
-Cohesion: 0.18
-Nodes (11): fetchCustomFoods(), fetchFoodData(), fetchFoodFrequency(), fetchMealTemplates(), fetchRecentFoods(), fetchWeeklyNutrition(), RecentFood, fetchMealTemplates() (+3 more)
+Cohesion: 0.17
+Nodes (7): fetchUserSettings(), fetchTrainingFreqs(), fetchHiddenPages(), createClient(), createServerSupabaseClient, SessionFeedbackLevel, SessionFeedbackProps
 
 ### Community 83 - "Community 83"
 Cohesion: 0.50
@@ -520,9 +516,9 @@ Nodes (4): ALL_CATEGORIES, CATEGORIES, fetchHiddenPages(), HealthDetailScreen()
   app/api/scan-food/route.ts · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **613 isolated node(s):** `PreToolUse`, `allow`, `PreToolUse`, `session`, `line` (+608 more)
+- **623 isolated node(s):** `PreToolUse`, `allow`, `PreToolUse`, `session`, `line` (+618 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **23 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -533,11 +529,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `POST /api/scan-food (Claude Haiku Vision)` and `SWR Cache Strategy`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `createClient()` connect `Community 82` to `Training Analytics & Insights`, `Health Monitoring UI`, `Food Tracking & AI Scan`, `Session Planning Engine`, `Today Dashboard`, `App Shell & Navigation`, `Coach & Profile UI`, `Authentication Flow`, `Supabase Server Client`, `Community 30`, `Community 34`, `Community 36`, `Community 42`, `Community 44`, `Community 47`, `Community 50`, `Community 51`, `Community 53`, `Community 55`, `Community 62`, `Community 81`, `Community 110`?**
-  _High betweenness centrality (0.097) - this node is a cross-community bridge._
+- **Why does `createClient()` connect `Community 82` to `Training Analytics & Insights`, `Health Monitoring UI`, `Food Tracking & AI Scan`, `Session Planning Engine`, `Today Dashboard`, `App Shell & Navigation`, `Authentication Flow`, `Supabase Server Client`, `Community 34`, `Community 36`, `Community 38`, `Community 40`, `Community 42`, `Community 44`, `Community 47`, `Community 48`, `Community 50`, `Community 51`, `Community 62`, `Community 81`, `Community 110`?**
+  _High betweenness centrality (0.100) - this node is a cross-community bridge._
 - **Why does `POST()` connect `Supabase Server Client` to `Community 82`?**
   _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **Why does `createServerSupabaseClient()` connect `Supabase Server Client` to `Training Navigation & Detail`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `createClient()` (e.g. with `POST()` and `POST()`) actually correct?**
   _`createClient()` has 3 INFERRED edges - model-reasoned connections that need verification._

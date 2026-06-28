@@ -25,6 +25,7 @@ import { openDevices } from '@/lib/services'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
 import { InjuryToggle } from '@/components/InjuryToggle'
+import { completedWorkoutsMatchingPlan, hasCompletedPlannedWorkout } from '@/lib/workout-matching'
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -2495,22 +2496,12 @@ export function computeTodaysFocus(
 
   const todayActivities = activities.filter(a => a.start_date.slice(0, 10) === todayStr)
   const todayHevy       = hevy.filter(h => h.start_time.slice(0, 10) === todayStr)
-  const todayDoneGym    = todayHevy.length > 0
   const todayDoneRun    = todayActivities.some(a => (a.sport_type ?? '').toLowerCase().includes('run'))
   const todayDoneRide   = todayActivities.some(a => { const t = (a.sport_type ?? '').toLowerCase(); return t.includes('ride') || t.includes('cycl') })
   const todayDoneSwim   = todayActivities.some(a => (a.sport_type ?? '').toLowerCase().includes('swim'))
 
   function isEventDone(e: any): boolean {
-    const t = (e.title ?? '').toLowerCase()
-    const isGymEvt = ['push','pull','legs','squat','gym','kracht','strength','bench','deadlift','hyrox'].some(k => t.includes(k))
-    const isRunEvt = ['run','loop','hardloop','interval','tempo'].some(k => t.includes(k))
-    const isRideEvt = ['ride','fiet','cycl','bike'].some(k => t.includes(k))
-    const isSwimEvt = ['swim','zwem'].some(k => t.includes(k))
-    if (isGymEvt) return todayDoneGym
-    if (isRunEvt) return todayDoneRun
-    if (isRideEvt) return todayDoneRide
-    if (isSwimEvt) return todayDoneSwim
-    return false
+    return hasCompletedPlannedWorkout(e.title ?? '', todayHevy, todayActivities)
   }
 
   const todayEvtsAll  = events.filter(e => evtDate(e) === todayStr    && isSportEvt(e))
@@ -3094,7 +3085,11 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   }
 
   const rc = readinessPct >= 80 ? '#4ade80' : readinessPct >= 60 ? '#2dd4bf' : readinessPct >= 45 ? '#fb923c' : '#f87171'
-  const isDone = (completedToday && completedToday.length > 0) || focus.label.toLowerCase().includes(' done')
+  const focusDoneByLabel = focus.label.toLowerCase().includes(' done')
+  const matchingCompletedToday = focusDoneByLabel
+    ? (completedToday ?? [])
+    : completedWorkoutsMatchingPlan(focus.label, completedToday ?? [])
+  const isDone = focusDoneByLabel || matchingCompletedToday.length > 0
 
   function toDoneHeadline(): string {
     const l = focus.label.toLowerCase()
@@ -3159,9 +3154,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
             </div>
           </div>
 
-          {isDone && completedToday && completedToday.length > 0 && (
+          {isDone && matchingCompletedToday.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
-              {completedToday.map((w, i) => (
+              {matchingCompletedToday.map((w, i) => (
                 <span key={i} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[12px] text-white/70"
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
                   <Check size={11} strokeWidth={3} style={{ color: '#4ade80' }} />
@@ -3227,9 +3222,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
         </div>
       </div>
 
-      {completedToday && completedToday.length > 0 && (
+      {matchingCompletedToday.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {completedToday.map((w, i) => (
+          {matchingCompletedToday.map((w, i) => (
             <span key={i} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[12px] text-white/70"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <Check size={11} strokeWidth={3} style={{ color: '#4ade80' }} />
