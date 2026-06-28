@@ -75,6 +75,7 @@ async function fetchTodayData() {
   }
 
   return {
+    userName: getGreetingName(user.user_metadata?.full_name, user.email),
     latestGezondheid,
     foodLogToday:   foodLogToday   ?? [],
     foodLog7d:      foodLog7d      ?? [],
@@ -93,6 +94,42 @@ async function fetchTodayData() {
 function formatSubtitle() {
   const s = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
   return s.toUpperCase()
+}
+
+type GreetingPeriod = 'morning' | 'afternoon' | 'evening'
+
+const GREETING_VARIANTS: Record<GreetingPeriod, string[]> = {
+  morning: ['Good morning', 'Morning', 'Rise and shine', 'Howdy'],
+  afternoon: ['Good afternoon', 'Afternoon', 'Hey', 'Howdy'],
+  evening: ['Good evening', 'Evening', 'Hey', 'Howdy'],
+}
+
+function getGreetingName(fullName?: unknown, email?: string | null): string {
+  const fromProfile = typeof fullName === 'string' ? fullName.trim() : ''
+  const fromEmail = email?.split('@')[0]?.replace(/[._-]+/g, ' ').trim() ?? ''
+  const first = (fromProfile || fromEmail).split(/\s+/).find(Boolean)
+  if (!first) return 'there'
+  return first.charAt(0).toUpperCase() + first.slice(1)
+}
+
+function getGreetingPeriod(date = new Date()): GreetingPeriod {
+  const hour = date.getHours()
+  if (hour < 12) return 'morning'
+  if (hour < 18) return 'afternoon'
+  return 'evening'
+}
+
+function stableGreetingIndex(period: GreetingPeriod, name: string): number {
+  const key = `${localDateStr()}:${period}:${name}`
+  return Array.from(key).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+}
+
+function buildTodayGreeting(name?: string | null): string {
+  const displayName = name?.trim() || 'there'
+  const period = getGreetingPeriod()
+  const variants = GREETING_VARIANTS[period]
+  const variant = variants[stableGreetingIndex(period, displayName) % variants.length]
+  return `${variant}, ${displayName}`
 }
 
 function fmtTime(dt: string | null): string | null {
@@ -842,7 +879,7 @@ function TodayDashboard() {
     rows.length === 0
 
   return (
-    <PremiumScreen title="Today" subtitle={formatSubtitle()}>
+    <PremiumScreen title={buildTodayGreeting(data?.userName)} subtitle={formatSubtitle()}>
       <div className="mb-6"><SetupChecklist /></div>
       <div className="flex flex-col gap-6" style={{ opacity: data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
         {hasNoData && (
