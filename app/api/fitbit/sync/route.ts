@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { rateLimit, rejectCrossOrigin } from '@/lib/server-security'
 
 const HEALTH_BASE = 'https://health.googleapis.com/v4/users/me/dataTypes'
 
@@ -125,9 +126,15 @@ async function updateThenInsertGezondheid(
 }
 
 export async function POST(_req: NextRequest) {
+  const crossOrigin = rejectCrossOrigin(_req)
+  if (crossOrigin) return crossOrigin
+
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
+
+  const limited = rateLimit(`fitbit-sync:${user.id}`, 6, 30 * 60_000)
+  if (limited) return limited
 
   const token = await getValidToken(supabase, user.id)
   if (!token) return NextResponse.json({ error: 'not connected' }, { status: 404 })
@@ -330,6 +337,6 @@ export async function POST(_req: NextRequest) {
     .update({ last_synced_at: new Date().toISOString() })
     .eq('user_id', user.id)
 
-  const processedRows = Object.fromEntries(Object.entries(rows).filter(([d]) => d >= cutoffDate))
-  return NextResponse.json({ ok: true, healthSynced, stepsSynced, errors, dates: Object.keys(rows).filter(d => d >= cutoffDate).sort(), processedRows })
+  if (errors.length) console.warn('[fitbit/sync] partial sync:', errors.slice(0, 5))
+  return NextResponse.json({ ok: true, healthSynced, stepsSynced, errorCount: errors.length })
 }

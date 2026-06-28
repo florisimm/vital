@@ -54,10 +54,11 @@ export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId
     if (searchTimer.current) clearTimeout(searchTimer.current)
     const q = search.trim()
     if (q.length < 2 || view !== 'search') { setSearchResults([]); return }
+    const controller = new AbortController()
     searchTimer.current = setTimeout(async () => {
       setSearchLoading(true)
       try {
-        const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
+        const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
         if (res.ok) {
           const results: Product[] = await res.json()
           // Boost results the user has logged before to the top
@@ -72,11 +73,19 @@ export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId
             .map(x => x.p)
           setSearchResults(boosted)
         }
-      } catch { /* ignore */ } finally {
+      } catch (error) {
+        if ((error as { name?: string })?.name !== 'AbortError') {
+          /* ignore */
+        }
+      } finally {
+        if (controller.signal.aborted) return
         setSearchLoading(false)
       }
     }, 400)
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+    return () => {
+      controller.abort()
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    }
   }, [search, view])
 
   function handleSelectRemote(product: Product) {

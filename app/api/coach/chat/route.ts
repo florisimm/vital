@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { rateLimit, readJsonLimited, rejectCrossOrigin } from '@/lib/server-security'
 
 const SYSTEM = `You are Rico, the user's personal fitness & health coach. Their full context is already loaded: up to 15 recent Strava sessions (distance, speed, HR), HRV, resting HR, sleep, training load (ACWR), muscle recovery, nutrition, calendar and weather, plus a pre-computed "Observations" section that explains anomalies.
 
@@ -22,21 +23,38 @@ Hard rules:
 - If the user reveals something personal and durable, append on a new line: [LEARN: <fact ≤6 words>].`
 
 export async function POST(req: Request) {
-  if (!process.env.OPENAI_API_KEY) return new Response('OPENAI_API_KEY not configured', { status: 503 })
+  const crossOrigin = rejectCrossOrigin(req)
+  if (crossOrigin) return crossOrigin
+
+  if (!process.env.OPENAI_API_KEY) return new Response('AI service unavailable', { status: 503 })
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new Response('Unauthorized', { status: 401 })
 
-  const { messages } = await req.json()
+  const limited = rateLimit(`coach-chat:${user.id}`, 20, 60_000)
+  if (limited) return limited
 
-  const apiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = messages.map((msg: { role: string; content: any }) => {
+  const payload = await readJsonLimited<{ messages?: Array<{ role?: unknown; content?: unknown }> }>(req, 128_000)
+  const messages = payload?.messages
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 20) {
+    return new Response('Bad request', { status: 400 })
+  }
+
+  const apiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = []
+  for (const msg of messages) {
+    if (msg.role !== 'user' && msg.role !== 'assistant') return new Response('Bad request', { status: 400 })
     const content = typeof msg.content === 'string'
       ? msg.content
-      : (msg.content as { text?: string }[]).map((b: { text?: string }) => b.text ?? '').join('\n\n')
-    return { role: msg.role as 'user' | 'assistant', content }
-  })
+      : Array.isArray(msg.content)
+        ? msg.content
+          .map((b: unknown) => typeof b === 'object' && b !== null && 'text' in b ? String((b as { text?: unknown }).text ?? '') : '')
+          .join('\n\n')
+        : ''
+    if (!content.trim()) return new Response('Bad request', { status: 400 })
+    apiMessages.push({ role: msg.role, content: content.slice(0, 24_000) })
+  }
 
   let stream: AsyncIterable<OpenAI.Chat.ChatCompletionChunk>
   try {

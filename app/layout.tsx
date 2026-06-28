@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { BottomNav } from '@/components/BottomNav'
 import { DataProvider } from '@/components/DataProvider'
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <BottomNav />
         </SWRProvider>
+        <Analytics />
       </body>
     </html>
   )

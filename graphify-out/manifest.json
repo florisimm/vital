@@ -5,8 +5,8 @@
     "semantic_hash": "af5683cedca023035194f9ad92eb0eef"
   },
   "app/api/route-plan/route.ts": {
-    "mtime": 1782312690.0970657,
-    "ast_hash": "df1cc48c53afde0729b3125a10a28ff0",
+    "mtime": 1782638538.6344323,
+    "ast_hash": "342e2308c28dbdd0a8cd95ac6dd3ab2c",
     "semantic_hash": ""
   },
   "app/api/scan-food/route.ts": {
@@ -80,8 +80,8 @@
     "semantic_hash": ""
   },
   "app/layout.tsx": {
-    "mtime": 1782636729.0571523,
-    "ast_hash": "5c16dca36aba71c4b3ac2bd3cf70c65f",
+    "mtime": 1782645657.0463657,
+    "ast_hash": "48371d23668db475c7d227f7bfb292e6",
     "semantic_hash": ""
   },
   "app/loading.tsx": {
@@ -230,13 +230,13 @@
     "semantic_hash": "90426577ad8f38459f3e566411c85589"
   },
   "next.config.ts": {
-    "mtime": 1780255526.8773296,
-    "ast_hash": "00e1e46b44cfb2339e9bc7e470ed75b8",
-    "semantic_hash": "00e1e46b44cfb2339e9bc7e470ed75b8"
+    "mtime": 1782638850.160486,
+    "ast_hash": "01a8d9440e14ec8bc288d01d1b90a82a",
+    "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1782312690.1823106,
-    "ast_hash": "a7eda04e0ac845175bf4ca26424ee926",
+    "mtime": 1782645648.5611343,
+    "ast_hash": "d52fda9257bf473f28c2794eb1e8faa1",
     "semantic_hash": ""
   },
   "postcss.config.mjs": {
@@ -350,18 +350,18 @@
     "semantic_hash": ""
   },
   "app/api/account/delete/route.ts": {
-    "mtime": 1782636729.0303829,
-    "ast_hash": "4b53cdf7423b85f7b8ee41bba9267dd3",
+    "mtime": 1782638725.7189984,
+    "ast_hash": "94614c96081804c44f448037893c0745",
     "semantic_hash": ""
   },
   "app/api/barcode-lookup/route.ts": {
-    "mtime": 1782636729.0318034,
-    "ast_hash": "1e65afec7a82a582b3b4d0d5b3d34632",
+    "mtime": 1782638725.7189984,
+    "ast_hash": "380cf510a919f87cc8643f162b12f86c",
     "semantic_hash": ""
   },
   "app/api/coach/chat/route.ts": {
-    "mtime": 1782636729.0318034,
-    "ast_hash": "5ddb6caec4b46f6b5ddba28344312a05",
+    "mtime": 1782638750.6094851,
+    "ast_hash": "0ce45fc079d499bd3bf3f15aaa5bf0de",
     "semantic_hash": ""
   },
   "app/api/cron/coaching-analysis/route.ts": {
@@ -370,13 +370,13 @@
     "semantic_hash": ""
   },
   "app/api/fitbit/callback/route.ts": {
-    "mtime": 1782312690.0873148,
-    "ast_hash": "582fb6deaf40cd6423e04e00e4370efb",
+    "mtime": 1782638508.331282,
+    "ast_hash": "08500a0c6693c1efedf79404ba257fed",
     "semantic_hash": ""
   },
   "app/api/fitbit/connect/route.ts": {
-    "mtime": 1781171292.0454848,
-    "ast_hash": "49e0737eb66e06fbb57ca73c97b44240",
+    "mtime": 1782638493.6913998,
+    "ast_hash": "f54c3f18970c5d3d3903c870966bef6a",
     "semantic_hash": ""
   },
   "app/api/fitbit/debug/route.ts": {
@@ -385,18 +385,18 @@
     "semantic_hash": ""
   },
   "app/api/fitbit/sync/route.ts": {
-    "mtime": 1782636729.0318034,
-    "ast_hash": "031b7e763cab3be05fc33051da6094fb",
+    "mtime": 1782638583.3089974,
+    "ast_hash": "c08244aecad9aca2eaf00347b4f9a847",
     "semantic_hash": ""
   },
   "app/api/food-search/route.ts": {
-    "mtime": 1782636729.0359595,
-    "ast_hash": "466c385d78f096d47c75e1a030eb85cf",
+    "mtime": 1782645517.2798395,
+    "ast_hash": "644433ff115805e41da275a861864f7d",
     "semantic_hash": ""
   },
   "app/api/training/session-feedback/route.ts": {
-    "mtime": 1782636729.0372095,
-    "ast_hash": "8a43afc5c75f3f0d8aa4aefa926d5221",
+    "mtime": 1782638725.7189984,
+    "ast_hash": "e8a9113a52bf1580a6fe26fc5888b0ec",
     "semantic_hash": ""
   },
   "app/api/weather/route.ts": {
@@ -410,13 +410,13 @@
     "semantic_hash": ""
   },
   "app/food/components/AddFoodSheet.tsx": {
-    "mtime": 1782636729.0436103,
-    "ast_hash": "1bc07308ccce06c92dea912e5033a6c4",
+    "mtime": 1782640630.6013222,
+    "ast_hash": "b4e491ff053d4d3556c2492a8be15d29",
     "semantic_hash": ""
   },
   "app/food/components/CreateMealView.tsx": {
-    "mtime": 1782636729.0436103,
-    "ast_hash": "a00f601598b8e88b8a985d4e557e4124",
+    "mtime": 1782640630.6033363,
+    "ast_hash": "cebe41f63f7b9f1e47fbb21579fdd8a0",
     "semantic_hash": ""
   },
   "app/food/components/CustomFoodView.tsx": {
@@ -535,8 +535,8 @@
     "semantic_hash": ""
   },
   "components/SWRProvider.tsx": {
-    "mtime": 1782636729.0778418,
-    "ast_hash": "63b6848223369af99403e8637608597d",
+    "mtime": 1782638725.7265427,
+    "ast_hash": "0dbca5bb97c2f7021d66a52a48c41ad9",
     "semantic_hash": ""
   },
   "components/SetupChecklist.tsx": {
@@ -832,6 +832,26 @@
   "public/rico.png": {
     "mtime": 1782312690.2032661,
     "ast_hash": "9d992737536d081e1fe3616665ffa374",
+    "semantic_hash": ""
+  },
+  "lib/server-security.ts": {
+    "mtime": 1782638478.2733152,
+    "ast_hash": "cf888ddd801fe7f0281f7e44c377340b",
+    "semantic_hash": ""
+  },
+  "migrations/0003_security_rls_core_tables.sql": {
+    "mtime": 1782638750.6094851,
+    "ast_hash": "2983e774e2af301e55d86e718dd1caea",
+    "semantic_hash": ""
+  },
+  "migrations/0004_food_index.sql": {
+    "mtime": 1782641191.8583298,
+    "ast_hash": "1fe46fec752024e6b0d49cc8116490fa",
+    "semantic_hash": ""
+  },
+  "scripts/import-fooddata-central.mjs": {
+    "mtime": 1782645130.8988414,
+    "ast_hash": "9a48a846b1d4f23a0f21a0f5da0c0337",
     "semantic_hash": ""
   }
 }

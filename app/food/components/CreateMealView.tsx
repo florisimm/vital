@@ -27,16 +27,25 @@ export function CreateMealView({ newMealName, setNewMealName, templateItems, set
     if (timer.current) clearTimeout(timer.current)
     const q = pickerSearch.trim()
     if (q.length < 2) { setUsdaResults([]); return }
+    const controller = new AbortController()
     timer.current = setTimeout(async () => {
       setUsdaLoading(true)
       try {
-        const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
+        const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
         if (res.ok) setUsdaResults(await res.json())
-      } catch { /* ignore */ } finally {
+      } catch (error) {
+        if ((error as { name?: string })?.name !== 'AbortError') {
+          /* ignore */
+        }
+      } finally {
+        if (controller.signal.aborted) return
         setUsdaLoading(false)
       }
     }, 400)
-    return () => { if (timer.current) clearTimeout(timer.current) }
+    return () => {
+      controller.abort()
+      if (timer.current) clearTimeout(timer.current)
+    }
   }, [pickerSearch])
 
   function addToMeal() {

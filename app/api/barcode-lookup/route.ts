@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { rateLimit } from '@/lib/server-security'
 import type { Product } from '@/lib/types'
 
 const OFN_BASE = 'https://world.openfoodfacts.org/api/v0/product'
@@ -9,7 +10,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const barcode = searchParams.get('barcode')?.trim()
 
-  if (!barcode || barcode.length < 4 || barcode.length > 50 || /\s/.test(barcode)) {
+  if (!barcode || !/^[A-Za-z0-9-]{4,50}$/.test(barcode)) {
     return NextResponse.json({ error: 'Invalid barcode' }, { status: 400 })
   }
 
@@ -19,6 +20,9 @@ export async function GET(req: Request) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const limited = rateLimit(`barcode-lookup:${user.id}`, 60, 60_000)
+  if (limited) return limited
 
   // Fetch from Open Food Facts
   let ofnData: Record<string, unknown>
@@ -33,8 +37,9 @@ export async function GET(req: Request) {
     ofnData = await res.json() as Record<string, unknown>
   } catch (err: unknown) {
     const isTimeout = (err as { name?: string })?.name === 'AbortError'
+    console.warn('[barcode-lookup] Open Food Facts failed:', isTimeout ? 'timeout' : err)
     return NextResponse.json(
-      { error: isTimeout ? 'Open Food Facts request timed out' : 'Open Food Facts unreachable' },
+      { error: 'Product lookup unavailable' },
       { status: 502 },
     )
   }

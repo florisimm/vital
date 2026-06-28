@@ -4,12 +4,18 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const code       = searchParams.get('code')
-  const userId     = searchParams.get('state')
+  const state      = searchParams.get('state')
   const oauthError = searchParams.get('error')
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
-  if (oauthError || !code || !userId) {
+  if (oauthError || !code || !state) {
+    return NextResponse.redirect(`${siteUrl}/health?fitbit=error`)
+  }
+
+  const storedState = req.cookies.get('fitbit_oauth_state')?.value
+  const [userId, nonce] = storedState?.split(':') ?? []
+  if (!userId || nonce !== state) {
     return NextResponse.redirect(`${siteUrl}/health?fitbit=error`)
   }
 
@@ -49,5 +55,7 @@ export async function GET(req: NextRequest) {
     needs_reconnect: false,
   })
 
-  return NextResponse.redirect(`${siteUrl}/health?fitbit=connected`)
+  const response = NextResponse.redirect(`${siteUrl}/health?fitbit=connected`)
+  response.cookies.delete('fitbit_oauth_state')
+  return response
 }

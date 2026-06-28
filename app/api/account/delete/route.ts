@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { rateLimit, readJsonLimited, rejectCrossOrigin } from '@/lib/server-security'
 
 // Every public table that holds per-user rows (has a user_id column). Deleted
 // before removing the auth user so nothing is left orphaned.
@@ -14,7 +15,8 @@ const USER_TABLES = [
 ]
 
 export async function POST(request: Request) {
-  const { password } = await request.json().catch(() => ({ password: '' }))
+  const crossOrigin = rejectCrossOrigin(request)
+  if (crossOrigin) return crossOrigin
 
   // 1. Identify the logged-in user from their session cookie
   const supabase = await createServerSupabaseClient()
@@ -22,6 +24,12 @@ export async function POST(request: Request) {
   if (!user || !user.email) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
+
+  const limited = rateLimit(`account-delete:${user.id}`, 5, 15 * 60_000)
+  if (limited) return limited
+
+  const payload = await readJsonLimited<{ password?: unknown }>(request, 8_000)
+  const password = typeof payload?.password === 'string' ? payload.password : ''
 
   // 2. Re-verify the password before allowing destructive deletion
   if (!password) {
@@ -53,14 +61,16 @@ export async function POST(request: Request) {
     const { error } = await admin.from(table).delete().eq('user_id', user.id)
     if (error) errors.push(`${table}: ${error.message}`)
   }
+  if (errors.length > 0) console.warn('[account/delete] table cleanup errors:', errors)
 
   const { error: delError } = await admin.auth.admin.deleteUser(user.id)
   if (delError) {
-    return NextResponse.json({ error: delError.message, tableErrors: errors }, { status: 500 })
+    console.error('[account/delete] deleteUser failed:', delError)
+    return NextResponse.json({ error: 'Could not delete account' }, { status: 500 })
   }
 
   // 4. Clear the session cookies on this device
   await supabase.auth.signOut().catch(() => {})
 
-  return NextResponse.json({ ok: true, tableErrors: errors })
+  return NextResponse.json({ ok: true, cleanupErrorCount: errors.length })
 }

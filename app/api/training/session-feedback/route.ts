@@ -1,8 +1,22 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { rateLimit, readJsonLimited, rejectCrossOrigin } from '@/lib/server-security'
 import { NextRequest, NextResponse } from 'next/server'
+
+type FeedbackPayload = {
+  user_id?: unknown
+  workout_date?: unknown
+  workout_type?: unknown
+  workout_id?: unknown
+  feedback_level?: unknown
+  coach_advice?: unknown
+  timestamp?: unknown
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const crossOrigin = rejectCrossOrigin(request)
+    if (crossOrigin) return crossOrigin
+
     const supabase = await createServerSupabaseClient()
     const {
       data: { user },
@@ -15,7 +29,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body = await request.json()
+    const limited = rateLimit(`session-feedback:${user.id}`, 30, 60_000)
+    if (limited) return limited
+
+    const body = await readJsonLimited<FeedbackPayload>(request, 16_000)
+    if (!body) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     const {
       user_id,
       workout_date,
@@ -34,6 +52,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (
+      typeof workout_date !== 'string'
+      || typeof workout_type !== 'string'
+      || (workout_id !== undefined && workout_id !== null && typeof workout_id !== 'string')
+      || typeof feedback_level !== 'string'
+      || !['too_easy', 'just_right', 'too_hard'].includes(feedback_level)
+      || (coach_advice !== undefined && coach_advice !== null && typeof coach_advice !== 'string')
+      || (timestamp !== undefined && timestamp !== null && typeof timestamp !== 'string')
+    ) {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+    }
+
     // Insert into session_feedback table
     const { error } = await supabase.from('session_feedback').insert({
       user_id,
@@ -48,7 +78,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Supabase insert error:', error)
       return NextResponse.json(
-        { error: error.message },
+        { error: 'Could not save feedback' },
         { status: 400 }
       )
     }
@@ -69,7 +99,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('API error:', err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Internal server error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
