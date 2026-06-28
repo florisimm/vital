@@ -99,9 +99,36 @@ function formatSubtitle() {
 type GreetingPeriod = 'morning' | 'afternoon' | 'evening'
 
 const GREETING_VARIANTS: Record<GreetingPeriod, string[]> = {
-  morning: ['Good morning', 'Morning', 'Rise and shine', 'Howdy'],
-  afternoon: ['Good afternoon', 'Afternoon', 'Hey', 'Howdy'],
-  evening: ['Good evening', 'Evening', 'Hey', 'Howdy'],
+  morning: [
+    'Good morning',
+    'Morning',
+    'Rise and shine',
+    'Howdy',
+    'Top of the morning',
+    'Bright morning',
+    'Ready for the day',
+    'Sun is up',
+  ],
+  afternoon: [
+    'Good afternoon',
+    'Afternoon',
+    'Hey',
+    'Howdy',
+    'Cruising through the day',
+    'Looking sharp this afternoon',
+    'Hope your day is flowing',
+    'Midday check-in',
+  ],
+  evening: [
+    'Good evening',
+    'Evening',
+    'Hey',
+    'Howdy',
+    'Hope your evening is smooth',
+    'Easy evening',
+    'Winding down',
+    'Evening check-in',
+  ],
 }
 
 function getGreetingName(fullName?: unknown, email?: string | null): string {
@@ -154,6 +181,18 @@ function workoutDone(title: string, hevy: any[], acts: any[]): boolean {
 }
 
 // ─── Lifestyle Focus card ─────────────────────────────────────────────────────
+
+function mergeUniqueByKey<T>(base: T[], extras: T[], keyOf: (item: T) => string): T[] {
+  const seen = new Set(base.map(keyOf))
+  const merged = [...base]
+  for (const item of extras) {
+    const key = keyOf(item)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    merged.push(item)
+  }
+  return merged
+}
 
 type FocusTip = { emoji: string; label: string; sub?: string }
 
@@ -873,6 +912,26 @@ function TodayDashboard() {
     [rows, effectiveData, unifiedReadinessPct, weatherData], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  const todayActivitiesForCards = useMemo(() => {
+    const trainingToday = ((training?.activities ?? []) as TrainingActivity[])
+      .filter(a => (a.start_date ?? '').slice(0, 10) === todayStr)
+    return mergeUniqueByKey(
+      trainingToday,
+      (effectiveData?.todayActivities ?? []) as TrainingActivity[],
+      (a) => String(a.id ?? `${a.name}:${a.start_date}`),
+    )
+  }, [training, effectiveData, todayStr])
+
+  const todayHevyForCards = useMemo(() => {
+    const trainingToday = ((training?.hevy ?? []) as TrainingHevyWorkout[])
+      .filter(h => (h.start_time ?? '').slice(0, 10) === todayStr)
+    return mergeUniqueByKey(
+      trainingToday,
+      (effectiveData?.todayHevy ?? []) as TrainingHevyWorkout[],
+      (h) => String(h.id ?? `${h.title}:${h.start_time}`),
+    )
+  }, [training, effectiveData, todayStr])
+
   const hasNoData = !!data && !!training &&
     (training?.activities ?? []).length === 0 &&
     (training?.hevy ?? []).length === 0 &&
@@ -896,9 +955,9 @@ function TodayDashboard() {
           biasApplied={biasApplied}
           label="Today's Recommendation"
           completedToday={(() => {
-            const hevy = (effectiveData?.todayHevy ?? []).map((h: any) => ({ name: h.title, sport: 'strength' }))
+            const hevy = todayHevyForCards.map((h: any) => ({ name: h.title, sport: 'strength' }))
             const hevyNames = new Set(hevy.map((h: any) => h.name.toLowerCase()))
-            const cardio = (effectiveData?.todayActivities ?? [])
+            const cardio = todayActivitiesForCards
               .filter((a: any) => !isStrengthTitle(a.sport_type ?? ''))
               .filter((a: any) => !hevyNames.has(a.name.toLowerCase()))
               .map((a: any) => ({ name: a.name, sport: a.sport_type }))
@@ -909,8 +968,8 @@ function TodayDashboard() {
         <ProgressCard data={effectiveData} />
         <UpcomingCard
           events={(effectiveData?.calendarEvents ?? []).filter(isSport)}
-          hevy={effectiveData?.todayHevy ?? []}
-          acts={effectiveData?.todayActivities ?? []}
+          hevy={todayHevyForCards}
+          acts={todayActivitiesForCards}
           onSync={async () => {
             try {
               const supabase = createClient()
