@@ -743,11 +743,11 @@ function TodayDashboard() {
 
   const hevySyncedRef = useRef(false)
   useEffect(() => {
-    // Sync Hevy on every visit until today's weight is in — then stop for the day.
+    // Sync Hevy once per visit so a workout done later today shows up promptly
+    // (and the "done" recommendation state updates). Must NOT be gated on today's
+    // weight being present — the user often logs weight in the morning and trains
+    // later, which previously skipped the sync until the hourly cron ran.
     if (hevySyncedRef.current) return
-    if (!gezondheid) return // wait until health data is loaded
-    const todayRow = gezondheid.find(r => r.datum === localDateStr())
-    if (todayRow?.gewicht != null) return // weight already fetched today → skip
     hevySyncedRef.current = true
     async function syncHevy() {
       try {
@@ -759,7 +759,7 @@ function TodayDashboard() {
       } catch { /* ignore */ }
     }
     syncHevy()
-  }, [gezondheid])
+  }, [])
 
   const todayStr = localDateStr()
   const todayHealthRow = rows.find(r => r.datum === todayStr)
