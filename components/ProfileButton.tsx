@@ -116,6 +116,19 @@ export function ProfileButton() {
   const { data: healthRows = [] } = useSWR<any[]>('health-gezondheid')
   const router = useRouter()
 
+  function getLatestKnownWeightKg(requireRecent = false) {
+    const latestWeightRow = healthRows.find((r: any) => r.gewicht != null)
+    if (!latestWeightRow) return null
+    if (requireRecent) {
+      const isRecent = latestWeightRow.datum
+        ? Date.now() - new Date(latestWeightRow.datum).getTime() <= 14 * 24 * 60 * 60 * 1000
+        : false
+      if (!isRecent) return null
+    }
+    const weightKg = Number(latestWeightRow.gewicht)
+    return weightKg > 0 ? Math.round(weightKg * 10) / 10 : null
+  }
+
   useEffect(() => {
     const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
     if (nav) nav.style.display = open ? 'none' : ''
@@ -193,7 +206,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
               supabase.from('hevy_workouts').select('start_time,end_time').eq('user_id', uid).gte('start_time', since28),
               supabase.from('gezondheid').select('gewicht').eq('user_id', uid).not('gewicht', 'is', null).order('datum', { ascending: false }).limit(1).maybeSingle(),
             ]).then(([strava, hevy, weightRow]) => {
-              const wKg = Number((weightRow as any)?.data?.gewicht) || 0
+              const wKg = Number((weightRow as any)?.data?.gewicht) || getLatestKnownWeightKg() || 0
               if (!wKg) return
               const stravaHours = ((strava.data ?? []) as any[]).reduce((s, r) => s + (Number(r.moving_time) || 0), 0) / 3600
               const hevyHours = ((hevy.data ?? []) as any[]).reduce((s, r) => {
@@ -512,13 +525,8 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
   }
 
   function openMacroCalc(fromEstimate = false) {
-    const latestWeightRow = healthRows.find((r: any) => r.gewicht != null)
-    const weightIsRecent = latestWeightRow?.datum
-      ? Date.now() - new Date(latestWeightRow.datum).getTime() <= 14 * 24 * 60 * 60 * 1000
-      : false
-    const weight = latestWeightRow && weightIsRecent
-      ? String(Math.round(Number(latestWeightRow.gewicht) * 10) / 10)
-      : ''
+    const latestRecentWeightKg = getLatestKnownWeightKg(true)
+    const weight = latestRecentWeightKg ? String(latestRecentWeightKg) : ''
 
     setCalcGender(savedCalcGender)
     setCalcAge(savedCalcAge)
