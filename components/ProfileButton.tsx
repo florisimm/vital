@@ -835,7 +835,7 @@ async function saveTraining() {
                 <span className="text-[17px] font-semibold text-white">Account</span>
                 <div className="w-16" />
               </div>
-              <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex-1 overflow-y-auto px-5 pt-1 pb-10 flex flex-col gap-4" style={{ scrollbarWidth: 'none' }}>
                 <ProfileSection>
                   <ProfileRow separator>
                     <button className="flex items-center justify-between w-full gap-3"
@@ -1058,192 +1058,151 @@ async function saveTraining() {
 
               <div className="flex-1 overflow-y-auto px-5 pt-2 pb-12 flex flex-col gap-6" style={{ scrollbarWidth: 'none' }}>
 
-                <div className="rounded-[18px] px-4 py-3.5"
-                  style={{ background: 'rgba(45,212,191,0.06)', border: '1px solid rgba(45,212,191,0.14)' }}>
-                  <p className="text-[15px] font-semibold text-white">Connect the sources you already use</p>
-                  <p className="text-[13px] text-white/45 mt-1 leading-relaxed">
-                    Kern combines workouts, wearables, recovery and your calendar into one daily recommendation.
-                  </p>
+                <div className="rounded-[16px] px-4 py-3 flex items-center justify-between gap-4"
+                  style={{ background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.16)' }}>
+                  <div>
+                    <p className="text-[14px] font-semibold text-white">Data sources</p>
+                    <p className="text-[12px] text-white/42 mt-0.5">Workouts, recovery and schedule in one place.</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[22px] font-bold text-white leading-none">
+                      {[services?.strava, services?.hevy, services?.fitbit, services?.google].filter(Boolean).length}<span className="text-[12px] text-white/35">/4</span>
+                    </p>
+                    <p className="text-[10px] text-white/35 uppercase tracking-[0.10em] mt-1">active</p>
+                  </div>
                 </div>
 
-                {/* Training */}
-                <div>
-                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-3">Training</p>
-                  <div className="grid grid-cols-2 gap-3">
-
-                    {/* Strava */}
-                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
-                          style={{ background: 'rgba(252,82,0,0.15)' }}>🏃</div>
-                        {services?.strava === true
-                          ? <button onClick={() => setConfirmDisconnect('strava')}
-                              className="text-[12px] font-semibold text-green-400 active:opacity-60">✓ On</button>
-                          : services?.strava === false
-                            ? <button onClick={connectStrava}
-                                className="text-[12px] font-semibold text-teal-400 active:opacity-60">Connect</button>
-                            : <span className="text-[12px] text-white/25">…</span>}
+                <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="px-3.5 py-2.5 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.035)' }}>
+                    <p className="text-[11px] text-white/35 uppercase tracking-[0.12em] font-semibold">Training</p>
+                    <p className="text-[11px] text-white/30">activities and strength</p>
+                  </div>
+                  <div className="divide-y divide-white/[0.07]">
+                    <div className="px-3.5 py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[12px] flex items-center justify-center text-[12px] font-bold text-orange-300" style={{ background: 'rgba(252,82,0,0.13)' }}>ST</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-white leading-tight">Strava</p>
+                        <p className="text-[12px] text-white/38 mt-0.5">Running and cycling history</p>
                       </div>
-                      <div>
-                        <p className="text-[15px] font-semibold text-white">Strava</p>
-                        <p className="text-[12px] text-white/40 mt-0.5">Running & cycling</p>
-                      </div>
+                      {services?.strava === true
+                        ? <button onClick={() => setConfirmDisconnect('strava')} className="shrink-0 h-[30px] px-3 rounded-full text-[12px] font-semibold text-green-300" style={{ background: 'rgba(34,197,94,0.11)' }}>On</button>
+                        : services?.strava === false
+                          ? <button onClick={connectStrava} className="shrink-0 h-[30px] px-3 rounded-full text-[12px] font-semibold text-teal-300" style={{ background: 'rgba(45,212,191,0.12)' }}>Connect</button>
+                          : <span className="text-[12px] text-white/25">...</span>}
                     </div>
-
-                    {/* Hevy */}
-                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
-                          style={{ background: 'rgba(255,200,100,0.10)' }}>🏋️</div>
-                        <div className="flex items-center gap-2">
-                          {services?.hevy && (
-                            <button onClick={async () => {
-                              setHevySyncing(true)
-                              const supabase = createClient()
-                              const { data: { session } } = await supabase.auth.getSession()
-                              await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`,
-                                { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: '{}' }
-                              ).catch(() => {})
-                              setHevySyncing(false); mutate('health-gezondheid'); mutate('today')
-                            }} className="text-[12px] text-teal-400">
-                              {hevySyncing ? '…' : 'Sync'}
-                            </button>
-                          )}
-                          {services?.hevy
-                            ? <span className="text-[12px] font-semibold text-green-400">✓ On</span>
-                            : services?.hevy === false
-                              ? <button onClick={() => setShowHevyInput(v => !v)}
-                                  className="text-[12px] font-semibold text-teal-400 active:opacity-60">
-                                  {showHevyInput ? 'Cancel' : 'Connect'}
-                                </button>
-                              : <span className="text-[12px] text-white/25">…</span>}
-                        </div>
+                    <div className="px-3.5 py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[12px] flex items-center justify-center text-[12px] font-bold text-amber-200" style={{ background: 'rgba(255,200,100,0.10)' }}>HV</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-white leading-tight">Hevy</p>
+                        <p className="text-[12px] text-white/38 mt-0.5">Strength sessions and lifts</p>
                       </div>
-                      <div>
-                        <p className="text-[15px] font-semibold text-white">Hevy</p>
-                        <p className="text-[12px] text-white/40 mt-0.5">Strength training</p>
+                      <div className="shrink-0 flex items-center gap-2">
+                        {services?.hevy && (
+                          <button onClick={async () => {
+                            setHevySyncing(true)
+                            const supabase = createClient()
+                            const { data: { session } } = await supabase.auth.getSession()
+                            await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/hevy-sync`,
+                              { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: '{}' }
+                            ).catch(() => {})
+                            setHevySyncing(false); mutate('health-gezondheid'); mutate('today')
+                          }} className="text-[12px] text-teal-300">
+                            {hevySyncing ? '...' : 'Sync'}
+                          </button>
+                        )}
+                        {services?.hevy
+                          ? <span className="h-[30px] px-3 rounded-full text-[12px] font-semibold text-green-300 flex items-center" style={{ background: 'rgba(34,197,94,0.11)' }}>On</span>
+                          : services?.hevy === false
+                            ? <button onClick={() => setShowHevyInput(v => !v)} className="h-[30px] px-3 rounded-full text-[12px] font-semibold text-teal-300" style={{ background: 'rgba(45,212,191,0.12)' }}>{showHevyInput ? 'Cancel' : 'Connect'}</button>
+                            : <span className="text-[12px] text-white/25">...</span>}
                       </div>
                     </div>
                   </div>
-
-                  {/* Hevy API key — full-width below grid */}
                   {showHevyInput && !services?.hevy && (
-                    <div className="mt-3 rounded-[16px] p-4 flex flex-col gap-3"
-                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="mx-3.5 mb-3 rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: 'rgba(0,0,0,0.16)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <input type="text" inputMode="text" autoCapitalize="none" autoCorrect="off"
                         placeholder="Paste your Hevy API key"
                         value={hevyKeyInput} onChange={e => setHevyKeyInput(e.target.value)}
-                        className="h-[44px] px-3.5 rounded-[12px] text-white placeholder:text-white/30 text-[14px] outline-none"
+                        className="h-[40px] px-3 rounded-[11px] text-white placeholder:text-white/30 text-[14px] outline-none"
                         style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }} />
                       <div className="flex items-center justify-between gap-3">
-                        <a href="https://hevy.com/settings?developer" target="_blank" rel="noopener noreferrer"
-                          className="text-[12px] text-teal-400/80 active:opacity-60">Where do I find this?</a>
-                        <button onClick={saveHevyKey} disabled={hevyKeySaving || !hevyKeyInput.trim()}
-                          className="px-4 h-[36px] rounded-full text-black text-[14px] font-semibold bg-white disabled:opacity-30">
-                          {hevyKeySaving ? 'Saving…' : 'Save & sync'}
+                        <a href="https://hevy.com/settings?developer" target="_blank" rel="noopener noreferrer" className="text-[12px] text-teal-400/80 active:opacity-60">Find API key</a>
+                        <button onClick={saveHevyKey} disabled={hevyKeySaving || !hevyKeyInput.trim()} className="px-4 h-[34px] rounded-full text-black text-[13px] font-semibold bg-white disabled:opacity-30">
+                          {hevyKeySaving ? 'Saving...' : 'Save & sync'}
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Wearables & Schedule */}
-                <div>
-                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-1">Wearables</p>
-                  <p className="text-[13px] text-white/35 mb-3 px-1">Recovery devices sync through Google Health.</p>
-                  <div className="grid grid-cols-2 gap-3">
-
-                    {/* Google Health */}
-                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
-                          style={{ background: 'rgba(0,178,202,0.15)' }}>⌚</div>
-                        {services?.fitbit === true ? (
-                          services.fitbitNeedsReconnect
-                            ? <button onClick={connectFitbit} className="text-[12px] font-semibold text-orange-400 active:opacity-60">Reconnect</button>
-                            : <div className="flex items-center gap-1.5">
-                                <button onClick={syncFitbit} disabled={fitbitSyncing}
-                                  className="text-[12px] text-teal-400 disabled:opacity-50 active:opacity-60">
-                                  {fitbitSyncing ? '…' : 'Sync'}
-                                </button>
-                                <button onClick={() => setConfirmDisconnect('fitbit')}
-                                  className="text-[12px] font-semibold text-green-400 active:opacity-60">✓ On</button>
-                              </div>
-                        ) : services?.fitbit === false
-                          ? <button onClick={connectFitbit} className="text-[12px] font-semibold text-teal-400 active:opacity-60">Connect</button>
-                          : <span className="text-[12px] text-white/25">…</span>}
-                      </div>
-                      <div>
-                        <p className="text-[15px] font-semibold text-white">Google Health</p>
-                        <p className={`text-[12px] mt-0.5 ${services?.fitbit && services.fitbitNeedsReconnect ? 'text-orange-300' : 'text-white/40'}`}>
-                          {services?.fitbit && services.fitbitNeedsReconnect ? 'Reconnect needed' : 'Sleep, HRV, steps & wearables'}
+                <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="px-3.5 py-2.5 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.035)' }}>
+                    <p className="text-[11px] text-white/35 uppercase tracking-[0.12em] font-semibold">Health & schedule</p>
+                    <p className="text-[11px] text-white/30">daily context</p>
+                  </div>
+                  <div className="divide-y divide-white/[0.07]">
+                    <div className="px-3.5 py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[12px] flex items-center justify-center text-[12px] font-bold text-cyan-200" style={{ background: 'rgba(0,178,202,0.13)' }}>GH</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-white leading-tight">Google Health</p>
+                        <p className={`text-[12px] mt-0.5 ${services?.fitbit && services.fitbitNeedsReconnect ? 'text-orange-300' : 'text-white/38'}`}>
+                          {services?.fitbit && services.fitbitNeedsReconnect ? 'Reconnect needed' : 'Sleep, HRV, steps and wearables'}
                         </p>
                       </div>
+                      {services?.fitbit === true ? (
+                        services?.fitbitNeedsReconnect
+                          ? <button onClick={connectFitbit} className="shrink-0 h-[30px] px-3 rounded-full text-[12px] font-semibold text-orange-300" style={{ background: 'rgba(251,146,60,0.12)' }}>Reconnect</button>
+                          : <div className="shrink-0 flex items-center gap-2">
+                              <button onClick={syncFitbit} disabled={fitbitSyncing} className="text-[12px] text-teal-300 disabled:opacity-50 active:opacity-60">{fitbitSyncing ? '...' : 'Sync'}</button>
+                              <button onClick={() => setConfirmDisconnect('fitbit')} className="h-[30px] px-3 rounded-full text-[12px] font-semibold text-green-300" style={{ background: 'rgba(34,197,94,0.11)' }}>On</button>
+                            </div>
+                      ) : services?.fitbit === false
+                        ? <button onClick={connectFitbit} className="shrink-0 h-[30px] px-3 rounded-full text-[12px] font-semibold text-teal-300" style={{ background: 'rgba(45,212,191,0.12)' }}>Connect</button>
+                        : <span className="text-[12px] text-white/25">...</span>}
                     </div>
-
-                    <div className="col-span-2 pt-2">
-                      <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold">Schedule</p>
-                    </div>
-
-                    {/* Google Calendar */}
-                    <div className="rounded-[18px] p-4 flex flex-col gap-3"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
-                          style={{ background: 'rgba(66,133,244,0.15)' }}>📅</div>
-                        {services?.google === true
-                          ? <button onClick={() => setConfirmDisconnect('google')}
-                              className="text-[12px] font-semibold text-green-400 active:opacity-60">✓ On</button>
-                          : services?.google === false
-                            ? <button onClick={connectGoogleCalendar}
-                                className="text-[12px] font-semibold text-teal-400 active:opacity-60">Connect</button>
-                            : <span className="text-[12px] text-white/25">…</span>}
+                    <div className="px-3.5 py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[12px] flex items-center justify-center text-[12px] font-bold text-blue-200" style={{ background: 'rgba(66,133,244,0.13)' }}>GC</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-white leading-tight">Google Calendar</p>
+                        <p className="text-[12px] text-white/38 mt-0.5">Planned training and events</p>
                       </div>
-                      <div>
-                        <p className="text-[15px] font-semibold text-white">Google Calendar</p>
-                        <p className="text-[12px] text-white/40 mt-0.5">Training schedule</p>
-                      </div>
+                      {services?.google === true
+                        ? <button onClick={() => setConfirmDisconnect('google')} className="shrink-0 h-[30px] px-3 rounded-full text-[12px] font-semibold text-green-300" style={{ background: 'rgba(34,197,94,0.11)' }}>On</button>
+                        : services?.google === false
+                          ? <button onClick={connectGoogleCalendar} className="shrink-0 h-[30px] px-3 rounded-full text-[12px] font-semibold text-teal-300" style={{ background: 'rgba(45,212,191,0.12)' }}>Connect</button>
+                          : <span className="text-[12px] text-white/25">...</span>}
                     </div>
                   </div>
                   {fitbitSyncMessage && (
-                    <p className={`text-[12px] mt-2 px-1 ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>
-                      {fitbitSyncMessage.text}
-                    </p>
+                    <p className={`text-[12px] px-3.5 py-2 ${fitbitSyncMessage.type === 'ok' ? 'text-teal-400' : 'text-orange-300'}`}>{fitbitSyncMessage.text}</p>
                   )}
                 </div>
 
-                {/* Wearable sources */}
-                <div>
-                  <p className="text-[11px] text-white/30 uppercase tracking-[0.10em] font-semibold mb-1">Wearable sources</p>
-                  <p className="text-[13px] text-white/35 mb-3 px-1">Connect these to Google Health, then Kern reads the combined data.</p>
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-[18px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div className="px-3.5 py-2.5 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <p className="text-[11px] text-white/35 uppercase tracking-[0.12em] font-semibold">Wearables via Google Health</p>
+                    <p className="text-[11px] text-white/30">supported sources</p>
+                  </div>
+                  <div className="grid grid-cols-2 divide-x divide-y divide-white/[0.06]">
                     {([
-                      { icon: '🍎', name: 'Apple Health', desc: 'Steps, sleep & workouts', bg: 'rgba(255,59,48,0.12)'  },
-                      { icon: '⌚', name: 'Garmin',        desc: 'GPS watches & cycling',  bg: 'rgba(0,126,197,0.12)'  },
-                      { icon: '🔴', name: 'Whoop',         desc: 'Recovery & strain',      bg: 'rgba(220,38,38,0.10)'  },
-                      { icon: '🫀', name: 'Polar',         desc: 'HR & training load',     bg: 'rgba(235,87,87,0.10)'  },
-                      { icon: '💍', name: 'Oura',          desc: 'Sleep & readiness',      bg: 'rgba(255,200,0,0.08)'  },
-                      { icon: '🟣', name: 'Wahoo',         desc: 'Cycling & power',        bg: 'rgba(167,139,250,0.10)'},
+                      { code: 'AH', name: 'Apple Health', desc: 'Steps, sleep, workouts' },
+                      { code: 'GA', name: 'Garmin', desc: 'Watches and cycling' },
+                      { code: 'WH', name: 'Whoop', desc: 'Recovery and strain' },
+                      { code: 'PL', name: 'Polar', desc: 'HR and load' },
+                      { code: 'OU', name: 'Oura', desc: 'Sleep and readiness' },
+                      { code: 'WA', name: 'Wahoo', desc: 'Cycling and power' },
                     ] as const).map(item => (
-                      <div key={item.name} className="rounded-[18px] p-4 flex flex-col gap-3"
-                        style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div className="flex items-start justify-between">
-                          <div className="w-10 h-10 rounded-[12px] flex items-center justify-center text-[20px]"
-                            style={{ background: item.bg }}>{item.icon}</div>
-                          <span className="text-[10px] font-semibold text-white/35 px-2 py-1 rounded-full"
-                            style={{ background: 'rgba(255,255,255,0.07)' }}>via Health</span>
-                        </div>
-                        <div>
-                          <p className="text-[14px] font-semibold text-white">{item.name}</p>
-                          <p className="text-[11px] text-white/40 mt-0.5">{item.desc}</p>
+                      <div key={item.name} className="p-3 flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-[10px] font-bold text-white/55" style={{ background: 'rgba(255,255,255,0.07)' }}>{item.code}</div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold text-white leading-tight">{item.name}</p>
+                          <p className="text-[11px] text-white/35 mt-0.5 leading-snug">{item.desc}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
+
 
               </div>
             </div>
