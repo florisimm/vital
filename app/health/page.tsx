@@ -57,6 +57,31 @@ const ALL_TABS = [
   { label: 'Activity', key: 'activity', href: '/health/activity' },
 ]
 
+const WAKE_TARGET_MIN = 7 * 60
+
+function formatClockMin(totalMin: number): string {
+  const normalized = ((totalMin % 1440) + 1440) % 1440
+  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`
+}
+
+function sleepTargetForTonight(lastSleepMin: number | null): number {
+  if (lastSleepMin === null) return 8 * 60
+  if (lastSleepMin < 5 * 60) return 9 * 60 + 30
+  if (lastSleepMin < 6 * 60) return 9 * 60
+  if (lastSleepMin < 7 * 60) return 8 * 60 + 30
+  return 8 * 60
+}
+
+function formatSleepTarget(totalMin: number): string {
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
+function bedtimeForSevenWake(lastSleepMin: number | null): string {
+  return formatClockMin(WAKE_TARGET_MIN - sleepTargetForTonight(lastSleepMin))
+}
+
 function FitbitSyncHandler() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -198,7 +223,6 @@ export default function HealthPage() {
   const hrvBaseline  = computeHRVBaseline(rows)
   const _sleepMin    = latestWithSleep?.slaap_minuten ?? null
   const _sleepDeep   = latestWithSleep?.slaap_diep    ?? null
-  const _wakeMin     = (latestWithSleep as any)?.slaap_einde_min ?? null
   const _hrThreshold = (() => {
     const vals = rows.filter(r => r.hartslag_rust != null).slice(0, 14).map(r => r.hartslag_rust as number)
     return vals.length >= 5 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) + 5 : 65
@@ -217,10 +241,8 @@ export default function HealthPage() {
     }
     if (_sleepMin !== null && _sleepMin < 420) {
       const hh = Math.floor(_sleepMin / 60), mm = _sleepMin % 60
-      const bed = _wakeMin !== null
-        ? (() => { const b = ((_wakeMin - 8 * 60) + 1440) % 1440; return `${String(Math.floor(b / 60)).padStart(2, '0')}:${String(b % 60).padStart(2, '0')}` })()
-        : '22:30'
-      return { emoji: '🛏️', title: `In bed by ${bed} tonight`, sub: `You got ${hh}h ${mm}m last night — 30 min more sleep meaningfully improves HRV and recovery.` }
+      const targetMin = sleepTargetForTonight(_sleepMin)
+      return { emoji: '🛏️', title: `In bed by ${bedtimeForSevenWake(_sleepMin)} tonight`, sub: `You got ${hh}h ${mm}m last night — aim for ${formatSleepTarget(targetMin)} before a 07:00 wake-up.` }
     }
     if (_sleepDeep !== null && _sleepMin !== null && _sleepDeep / _sleepMin < 0.15)
       return { emoji: '🌙', title: 'No alcohol or screens after 21:00', sub: `Deep sleep was ${Math.round(_sleepDeep / _sleepMin * 100)}% last night (target 20%). Alcohol and blue light suppress slow-wave sleep.` }
@@ -251,7 +273,6 @@ export default function HealthPage() {
     const pct      = readinessPct
     const sleepMin = latestWithSleep?.slaap_minuten ?? null
     const sleepDeep = latestWithSleep?.slaap_diep ?? null
-    const wakeMin  = latestWithSleep?.slaap_einde_min ?? null
 
     // Very low readiness → complete rest
     if (pct !== null && pct < 35)
@@ -274,11 +295,10 @@ export default function HealthPage() {
     // Sleep short → suggest earlier bedtime
     if (sleepMin !== null && sleepMin < 420) {
       const hh = Math.floor(sleepMin / 60), mm = sleepMin % 60
-      const bedSuggestion = wakeMin !== null
-        ? (() => { const b = ((wakeMin - 8 * 60) + 1440) % 1440; return `${String(Math.floor(b / 60)).padStart(2,'0')}:${String(b % 60).padStart(2,'0')}` })()
-        : '22:30'
+      const targetMin = sleepTargetForTonight(sleepMin)
+      const bedSuggestion = bedtimeForSevenWake(sleepMin)
       return { emoji: '🛏️', title: `In bed by ${bedSuggestion} tonight`, bullets: [
-        `You got ${hh}h ${mm}m last night — 30 min more sleep improves HRV and recovery`,
+        `You got ${hh}h ${mm}m last night — aim for ${formatSleepTarget(targetMin)} before a 07:00 wake-up`,
         'No screens from 30 min before bedtime',
         tomEvt ? `${tomEvt.title} planned tomorrow — good sleep helps performance` : 'Consistent bedtime anchors your circadian rhythm',
       ], cta: { label: 'Check sleep →', tab: 'sleep' as const, href: null } }

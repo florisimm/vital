@@ -130,10 +130,10 @@ export default function TrainingPage() {
 
       {/* Tab content — only after mount so SSR and first client render match */}
       <div style={{ opacity: mounted && data ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-        {mounted && activeTab === 'overview'    && <>
+        {mounted && activeTab === 'overview'    && <div className="flex flex-col gap-[18px]">
           <CoachLearnedCard learned={(data as any)?.coachLearned} />
           <OverviewSection activities={activities} hevy={hevy} calendarEvents={calendarEvents} pastCalendarEvents={pastCalendarEvents} trainingFrequencies={trainingFrequencies} biasBySport={biasBySport} sportPriority={sportPriority} goalPriority={goalPriority} trainingIntensity={trainingIntensity} maxHeartRate={maxHeartRate} onSwitchTab={switchTab} />
-        </>}
+        </div>}
         {mounted && activeTab === 'running' && <>
           <RunningSection activities={activities} hevy={hevy} todaySport={todaySport} trainingIntensity={trainingIntensity} injuries={injuries} maxHeartRate={maxHeartRate} />
           <SportPlanCard sport="running" freq={freqs.running ?? 0} injured={!!injuries.running} activities={activities} savedTargets={(data as any)?.zoneTargets?.running ?? null} onSaveTargets={t => handleSaveTargets('running', t)} />

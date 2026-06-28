@@ -2993,7 +2993,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     .filter((e: any) => (e.start_datetime || e.start_date) >= now)
     .sort((a: any, b: any) => (a.start_datetime || a.start_date).localeCompare(b.start_datetime || b.start_date))[0]
 
-  const [ctaLabel, ctaHref] = (() => {
+  const ctaTuple = (() => {
     if (focus.label.toLowerCase().includes('room for easy') || focus.action.includes('Zone 2')) {
       const l = focus.label.toLowerCase()
       if (l.includes('cycling')) return ['Go for an easy ride →', '/training?tab=cycling']
@@ -3005,8 +3005,6 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     // shows exactly how much to do. Profile-target and muscle-group suggestions
     // (e.g. "Easy running recommended", "Leg day") land here even with no event.
     const l = focus.label.toLowerCase()
-    const plannedTitle = focus.label.split(' · ')[0].split(' Â· ')[0]
-    if (plannedTitle !== focus.label && plannedTitle.trim()) return plannedTitle
     const e = focus.emoji
     const isRest = l.includes('rest') || l.includes('recovery day') || l.includes('active recovery')
       || l.includes('keep it light') || l.includes('light movement')
@@ -3026,6 +3024,12 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     const dateStr = next.start_datetime || next.start_date
     return ['View session →', `/training/session?title=${encodeURIComponent(next.title ?? '')}&time=${encodeURIComponent(dateStr)}`]
   })()
+  const [ctaLabel, ctaHref] = Array.isArray(ctaTuple)
+    ? ctaTuple
+    : [
+        String(ctaTuple).toLowerCase().includes('fiet') ? 'View cycling plan →' : 'View training →',
+        String(ctaTuple).toLowerCase().includes('fiet') ? '/training?tab=cycling' : '/training',
+      ]
 
   function toSpecificRecommendation(): string {
     const l = focus.label.toLowerCase()
