@@ -193,6 +193,7 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
   const [locMode, setLocMode] = useState<'gps' | 'manual'>('gps')
   const [fromQuery, setFromQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
+  const [routeKm, setRouteKm] = useState<number | null>(null)
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
   const [showSendOptions, setShowSendOptions] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -213,10 +214,12 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
     startCoordRef.current = [lat, lon]
     setStartCoord([lat, lon])
     setLoading(true); setError(null)
+    setRouteKm(null)
     fetchWeather(lat, lon).then(({ hourly: h }) => onHourly(h))
     try {
       const result = await orsRoundTrip(lat, lon, advice.targetKm, sport, seedRef.current, !heuvelsRef.current, groteWegRef.current, mtbRef.current)
       setRouteCoords(result.coords)
+      setRouteKm(result.actualKm)
     } catch (e: any) { setError(e?.message ? `Route error: ${e.message}` : 'Could not load route') }
     finally { setLoading(false) }
   }
@@ -328,8 +331,15 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
           <p className="text-white/20 text-[12px]">Set ORS_API_KEY in Vercel to enable routes</p>
         </div>
       ) : routeCoords ? (
-        <div className="mx-4 mb-4 rounded-[12px] overflow-hidden" style={{ height: 240 }}>
+        <div className="mx-4 mb-4 rounded-[12px] overflow-hidden relative" style={{ height: 240 }}>
           <RouteMap coords={routeCoords} />
+          {routeKm !== null && (
+            <div className="absolute left-3 top-3 rounded-full px-3 py-1.5 flex items-baseline gap-1.5" style={{ background: 'rgba(0,0,0,0.62)', border: '1px solid rgba(255,255,255,0.12)' }}>
+              <span className="text-[11px] text-white/45 font-semibold uppercase tracking-[0.08em]">Route</span>
+              <span className="text-[14px] text-white font-bold">{routeKm.toFixed(1)}</span>
+              <span className="text-[11px] text-white/45">km</span>
+            </div>
+          )}
         </div>
       ) : null}
 
