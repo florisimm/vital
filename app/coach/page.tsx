@@ -578,8 +578,8 @@ export default function CoachPage() {
       setStatus('online')
       scheduleOffline()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Onbekende fout'
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `Er is iets misgegaan: ${msg}` }])
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Something went wrong: ${msg}` }])
       setStatus('online')
       scheduleOffline()
     } finally {
@@ -698,9 +698,9 @@ export default function CoachPage() {
         {atLimit && (
           <div className="rounded-[14px] px-4 py-3 text-center text-[14px] text-white/50"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            Limiet bereikt —{' '}
-            <button onClick={clearChat} className="text-teal-400 underline-offset-2 underline">wis het gesprek</button>
-            {' '}om door te gaan.
+            Limit reached —{' '}
+            <button onClick={clearChat} className="text-teal-400 underline-offset-2 underline">clear the chat</button>
+            {' '}to continue.
           </div>
         )}
 
@@ -738,7 +738,7 @@ export default function CoachPage() {
           <textarea
             ref={inputRef}
             rows={1}
-            placeholder="Stel een vraag…"
+            placeholder="Ask a question…"
             value={message}
             onChange={e => {
               setMessage(e.target.value)
@@ -755,7 +755,7 @@ export default function CoachPage() {
           />
           <button
             onClick={() => handleSend()}
-            aria-label="Verstuur"
+            aria-label="Send"
             className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0 disabled:opacity-30"
             style={{ background: 'rgb(45,212,191)' }}
             disabled={!message.trim() || streaming || atLimit}

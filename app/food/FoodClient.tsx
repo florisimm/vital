@@ -280,10 +280,10 @@ export function FoodClient() {
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 py-10">
-        <p className="text-white/40 text-[15px] text-center">Kon data niet laden</p>
+        <p className="text-white/40 text-[15px] text-center">Couldn't load data</p>
         <p className="text-white/20 text-[12px] text-center">{String(error)}</p>
         <button onClick={() => mutate()} className="text-teal-400 text-[15px] font-medium">
-          Opnieuw proberen
+          Try again
         </button>
       </div>
     )

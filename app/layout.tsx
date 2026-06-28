@@ -55,7 +55,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="nl">
+    <html lang="en">
       <body>
         {/* Fixed full-screen background matching AppBackground in Swift */}
         <div

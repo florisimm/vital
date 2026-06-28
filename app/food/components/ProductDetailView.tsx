@@ -119,7 +119,7 @@ function ServingSheet({ servingPills, active, onPick, onClose, onAddServing }: {
             style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
             <span className="w-6 h-6 rounded-full flex items-center justify-center text-[14px] font-bold shrink-0"
               style={{ background: 'rgba(45,212,191,0.15)', color: 'rgb(45,212,191)' }}>+</span>
-            <span className="text-[16px] text-white/60">Portie toevoegen</span>
+            <span className="text-[16px] text-white/60">Add portion</span>
           </button>
         </div>
       </div>
@@ -172,17 +172,17 @@ function AddServingSheet({ onSave, onClose }: {
         style={{ background: 'rgb(18,19,22)', animation: 'sheetUp 0.32s cubic-bezier(0.32,0.72,0,1)' }}
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 shrink-0">
-          <span className="text-[17px] font-semibold text-white">Portie toevoegen</span>
+          <span className="text-[17px] font-semibold text-white">Add portion</span>
           <button onClick={onClose} className="text-white/50 text-[15px] font-semibold px-3 py-1 rounded-full"
-            style={{ background: 'rgba(255,255,255,0.08)' }}>Annuleer</button>
+            style={{ background: 'rgba(255,255,255,0.08)' }}>Cancel</button>
         </div>
         <div className="px-5 flex flex-col gap-3 pb-2">
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.07em]">Naam</span>
+            <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.07em]">Name</span>
             <input
               autoFocus
               type="text"
-              placeholder="bijv. 1 sneetje, 1 kopje"
+              placeholder="e.g. 1 slice, 1 cup"
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full h-[46px] px-4 rounded-[14px] text-white placeholder:text-white/25 outline-none text-[15px]"
@@ -190,11 +190,11 @@ function AddServingSheet({ onSave, onClose }: {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.07em]">Gram</span>
+            <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.07em]">Grams</span>
             <input
               type="text"
               inputMode="decimal"
-              placeholder="bijv. 35"
+              placeholder="e.g. 35"
               value={grams}
               onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setGrams(v) }}
               className="w-full h-[46px] px-4 rounded-[14px] text-white placeholder:text-white/25 outline-none text-[15px]"
@@ -207,7 +207,7 @@ function AddServingSheet({ onSave, onClose }: {
             className="w-full h-[46px] mt-1 rounded-[14px] font-bold text-[15px] flex items-center justify-center disabled:opacity-30"
             style={{ background: 'rgba(45,212,191,0.15)', color: 'rgb(45,212,191)', border: '1px solid rgba(45,212,191,0.25)' }}
           >
-            Opslaan
+            Save
           </button>
         </div>
       </div>
@@ -593,10 +593,10 @@ export function ProductDetailView({ selected, meal, setMeal, userId, today, tota
                 color: preview ? 'rgb(45,212,191)' : 'rgba(255,255,255,0.22)',
               }}>
               {saving ? (
-                <span className="opacity-70">{editEntry ? 'Opslaan…' : 'Saving…'}</span>
+                <span className="opacity-70">{editEntry ? 'Saving…' : 'Saving…'}</span>
               ) : editEntry ? (
                 <>
-                  <span>Opslaan</span>
+                  <span>Save</span>
                   {preview && <span className="font-normal text-[12px]" style={{ opacity: 0.55 }}>· {Math.round(preview.kcal)} kcal</span>}
                 </>
               ) : (

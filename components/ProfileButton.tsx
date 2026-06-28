@@ -304,7 +304,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
     })
     setEditSaving(false)
     if (verifyError) {
-      setEditMsg({ type: 'err', text: 'Huidig wachtwoord is onjuist' })
+      setEditMsg({ type: 'err', text: 'Current password is onjuist' })
       return
     }
     setEditMsg(null)
@@ -315,10 +315,10 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
   async function savePassword() {
     if (!editPassword) return
     if (editPassword !== editPasswordConfirm) {
-      setEditMsg({ type: 'err', text: 'Wachtwoorden komen niet overeen' }); return
+      setEditMsg({ type: 'err', text: 'Passwords do not match' }); return
     }
     if (editPassword.length < 6) {
-      setEditMsg({ type: 'err', text: 'Minimaal 6 tekens vereist' }); return
+      setEditMsg({ type: 'err', text: 'At least 6 characters required' }); return
     }
     setEditSaving(true); setEditMsg(null)
     const { error } = await createClient().auth.updateUser({ password: editPassword })
@@ -327,7 +327,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
       setEditMsg({ type: 'err', text: error.message })
     } else {
       setEditCurrentPassword(''); setEditPassword(''); setEditPasswordConfirm('')
-      setEditMsg({ type: 'ok', text: 'Wachtwoord opgeslagen.' })
+      setEditMsg({ type: 'ok', text: 'Password saved.' })
       setTimeout(() => { setEditingPassword(false); setEditMsg(null) }, 900)
     }
   }
@@ -373,7 +373,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
       })
       const data = await res.json().catch(() => null)
       if (!res.ok || !data?.ok) {
-        setDeleteMsg(data?.error ?? 'Verwijderen mislukt. Probeer het opnieuw.')
+        setDeleteMsg(data?.error ?? 'Deletion failed. Please try again.')
         setDeleteBusy(false)
         return
       }
@@ -382,7 +382,7 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
       router.push('/login')
       router.refresh()
     } catch {
-      setDeleteMsg('Verwijderen mislukt. Probeer het opnieuw.')
+      setDeleteMsg('Deletion failed. Please try again.')
       setDeleteBusy(false)
     }
   }
@@ -873,7 +873,7 @@ async function saveTraining() {
                           {shortcutToken ? `${shortcutToken.slice(0, 8)}…` : '—'}
                         </span>
                         <span className="text-[13px] text-teal-400 shrink-0">
-                          {tokenCopied ? 'Gekopieerd!' : 'Kopieer'}
+                          {tokenCopied ? 'Copied!' : 'Copy'}
                         </span>
                       </div>
                     </button>
@@ -944,7 +944,7 @@ async function saveTraining() {
                       autoFocus
                       value={editEmail}
                       onChange={e => setEditEmail(e.target.value)}
-                      placeholder="nieuw@email.com"
+                      placeholder="new@email.com"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
@@ -971,11 +971,11 @@ async function saveTraining() {
                   style={{ background: 'rgba(255,255,255,0.10)' }}>
                   Back
                 </button>
-                <span className="text-[17px] font-semibold text-white">Wachtwoord</span>
+                <span className="text-[17px] font-semibold text-white">Password</span>
                 {passwordStep === 'current' ? (
                   <button onClick={verifyCurrentPassword} disabled={editSaving || !editCurrentPassword}
                     className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
-                    {editSaving ? '…' : 'Volgende'}
+                    {editSaving ? '…' : 'Next'}
                   </button>
                 ) : (
                   <button onClick={savePassword} disabled={editSaving || !editPassword || !editPasswordConfirm}
@@ -986,7 +986,7 @@ async function saveTraining() {
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
                 {passwordStep === 'current' ? (
-                  <ProfileSection title="Huidig wachtwoord">
+                  <ProfileSection title="Current password">
                     <ProfileRow>
                       <input
                         type="password"
@@ -994,21 +994,21 @@ async function saveTraining() {
                         value={editCurrentPassword}
                         onChange={e => setEditCurrentPassword(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter' && editCurrentPassword) verifyCurrentPassword() }}
-                        placeholder="Huidig wachtwoord"
+                        placeholder="Current password"
                         autoComplete="current-password"
                         className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                       />
                     </ProfileRow>
                   </ProfileSection>
                 ) : (
-                  <ProfileSection title="Nieuw wachtwoord">
+                  <ProfileSection title="New password">
                     <ProfileRow separator>
                       <input
                         type="password"
                         autoFocus
                         value={editPassword}
                         onChange={e => setEditPassword(e.target.value)}
-                        placeholder="Nieuw wachtwoord"
+                        placeholder="New password"
                         autoComplete="new-password"
                         className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                       />
@@ -1018,7 +1018,7 @@ async function saveTraining() {
                         type="password"
                         value={editPasswordConfirm}
                         onChange={e => setEditPasswordConfirm(e.target.value)}
-                        placeholder="Bevestig wachtwoord"
+                        placeholder="Confirm password"
                         autoComplete="new-password"
                         className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                       />
@@ -2225,7 +2225,7 @@ async function saveTraining() {
             {deleteStep === 'password' ? (
               <button onClick={() => { setDeleteMsg(null); setDeleteStep('confirm') }} disabled={!deletePassword}
                 className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
-                Volgende
+                Next
               </button>
             ) : <div className="w-16" />}
           </div>
@@ -2233,32 +2233,31 @@ async function saveTraining() {
           <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
             {deleteStep === 'password' ? (
               <>
-                <ProfileSection title="Bevestig je wachtwoord">
+                <ProfileSection title="Confirm your password">
                   <ProfileRow>
                     <input
                       type="password"
                       autoFocus
                       value={deletePassword}
                       onChange={e => setDeletePassword(e.target.value)}
-                      placeholder="Wachtwoord"
+                      placeholder="Password"
                       autoComplete="current-password"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
                 </ProfileSection>
                 <p className="text-[13px] text-white/40 px-1 leading-relaxed">
-                  Voer je wachtwoord in om door te gaan. In de volgende stap bevestig je het definitief verwijderen.
+                  Enter your password to continue. You'll confirm permanent deletion in the next step.
                 </p>
               </>
             ) : (
               <>
                 <div className="rounded-[18px] px-4 py-4"
                   style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.25)' }}>
-                  <p className="text-[15px] font-semibold text-red-400 mb-1.5">Weet je het zeker?</p>
+                  <p className="text-[15px] font-semibold text-red-400 mb-1.5">Are you sure?</p>
                   <p className="text-[13.5px] text-white/55 leading-relaxed">
-                    Dit verwijdert je account en <strong className="text-white/80">alle</strong> bijbehorende data
-                    permanent — voeding, trainingen, gezondheid, koppelingen en instellingen. Dit kan niet ongedaan
-                    worden gemaakt.
+                    This permanently deletes your account and <strong className="text-white/80">all</strong> associated
+                    data — nutrition, workouts, health, connections and settings. This cannot be undone.
                   </p>
                 </div>
                 <button
@@ -2266,7 +2265,7 @@ async function saveTraining() {
                   disabled={deleteBusy}
                   className="h-[54px] rounded-[16px] text-white font-semibold text-[16px] flex items-center justify-center disabled:opacity-50 active:scale-[0.98] transition-transform"
                   style={{ background: 'rgb(220,38,38)' }}>
-                  {deleteBusy ? 'Verwijderen…' : 'Verwijder mijn account permanent'}
+                  {deleteBusy ? 'Deleting…' : 'Delete my account permanently'}
                 </button>
               </>
             )}

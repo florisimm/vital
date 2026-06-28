@@ -32,9 +32,9 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search)
     if (params.get('error') === 'email_exists') {
       setTab('signin'); setView('auth')
-      setError('Er bestaat al een account met dit e-mailadres. Log in met je wachtwoord hieronder.')
+      setError('An account with this email already exists. Sign in with your password below.')
     } else if (params.get('error') === 'auth') {
-      setError('Inloggen mislukt. Probeer het opnieuw.')
+      setError('Login failed. Please try again.')
     }
   }, [])
 
@@ -67,10 +67,10 @@ export default function LoginPage() {
   async function handleBasicSignUp(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!firstName.trim() || !lastName.trim()) { setError('Vul je voor- en achternaam in'); return }
-    if (password.length < 6) { setError('Wachtwoord moet minimaal 6 tekens zijn'); return }
-    if (password !== confirm) { setError('De wachtwoorden komen niet overeen'); return }
-    if (!birthdate) { setError('Vul je geboortedatum in'); return }
+    if (!firstName.trim() || !lastName.trim()) { setError('Enter your first and last name'); return }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (password !== confirm) { setError('Passwords do not match'); return }
+    if (!birthdate) { setError('Enter your date of birth'); return }
 
     setLoading(true)
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
@@ -104,12 +104,12 @@ export default function LoginPage() {
     setNotice('Reset link sent — check your email')
   }
 
-  const heading = view === 'basic' ? 'Maak je account'
-    : view === 'verify' ? 'Bevestig je e-mail'
+  const heading = view === 'basic' ? 'Create your account'
+    : view === 'verify' ? 'Confirm your email'
     : tab === 'signin' ? 'Welcome back'
     : 'Get started'
-  const subheading = view === 'basic' ? 'Een paar basisgegevens om te starten.'
-    : view === 'verify' ? 'Nog één stap voordat we beginnen.'
+  const subheading = view === 'basic' ? 'A few basics to get started.'
+    : view === 'verify' ? 'One more step before we begin.'
     : tab === 'signin' ? 'Sign in to your Kern account'
     : 'Create your Kern account'
 
@@ -134,7 +134,7 @@ export default function LoginPage() {
               onClick={() => { setView(view === 'verify' ? 'basic' : 'auth'); setError(null) }}
               className="flex items-center gap-1.5 text-white/45 active:text-white text-[15px] font-medium mb-6"
             >
-              <ArrowLeft size={18} /> Terug
+              <ArrowLeft size={18} /> Back
             </button>
           )}
           <div
@@ -234,7 +234,7 @@ export default function LoginPage() {
               style={{ background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.18)' }}
             >
               <p className="text-[15px] text-white/70 leading-relaxed">
-                We stellen je een paar korte vragen zodat Kern jouw coaching volledig op jou afstemt. Dit duurt ongeveer een minuut.
+                We'll ask a few short questions so Kern can tailor your coaching to you. It takes about a minute.
               </p>
             </div>
 
@@ -245,7 +245,7 @@ export default function LoginPage() {
               onClick={() => { setError(null); setNotice(null); setView('basic') }}
               className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              Laten we beginnen <ArrowRight size={18} strokeWidth={2.3} />
+              Let's get started <ArrowRight size={18} strokeWidth={2.3} />
             </button>
 
             <OrDivider />
@@ -264,14 +264,14 @@ export default function LoginPage() {
               <div className="grid grid-cols-2 gap-2.5">
                 <Field icon={<User size={18} className="text-white/30 shrink-0" />}>
                   <input
-                    type="text" placeholder="Voornaam" value={firstName}
+                    type="text" placeholder="First name" value={firstName}
                     onChange={e => setFirstName(e.target.value)} required autoComplete="given-name"
                     className="flex-1 min-w-0 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                   />
                 </Field>
                 <Field icon={<User size={18} className="text-white/30 shrink-0" />}>
                   <input
-                    type="text" placeholder="Achternaam" value={lastName}
+                    type="text" placeholder="Last name" value={lastName}
                     onChange={e => setLastName(e.target.value)} required autoComplete="family-name"
                     className="flex-1 min-w-0 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                   />
@@ -279,34 +279,34 @@ export default function LoginPage() {
               </div>
               <Field icon={<Mail size={18} className="text-white/30 shrink-0" />}>
                 <input
-                  type="email" placeholder="E-mailadres" value={email}
+                  type="email" placeholder="Email address" value={email}
                   onChange={e => setEmail(e.target.value)} required autoComplete="email"
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                 />
               </Field>
               <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
                 <input
-                  type="password" placeholder="Wachtwoord (min. 6 tekens)" value={password}
+                  type="password" placeholder="Password (min. 6 characters)" value={password}
                   onChange={e => setPassword(e.target.value)} required autoComplete="new-password"
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                 />
               </Field>
               <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
                 <input
-                  type="password" placeholder="Bevestig wachtwoord" value={confirm}
+                  type="password" placeholder="Confirm password" value={confirm}
                   onChange={e => setConfirm(e.target.value)} required autoComplete="new-password"
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px]"
                 />
               </Field>
               <Field icon={<Calendar size={18} className="text-white/30 shrink-0" />}>
                 <input
-                  type="date" placeholder="Geboortedatum" value={birthdate}
+                  type="date" placeholder="Date of birth" value={birthdate}
                   onChange={e => setBirthdate(e.target.value)} required
                   max={new Date().toISOString().split('T')[0]}
                   className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none text-[17px] [color-scheme:dark]"
                 />
               </Field>
-              <p className="text-[12px] text-white/30 px-1 -mt-0.5">Je geboortedatum bepaalt je hartslagzones en caloriebehoefte.</p>
+              <p className="text-[12px] text-white/30 px-1 -mt-0.5">Your date of birth sets your heart-rate zones and calorie needs.</p>
             </div>
 
             {error && <p className="text-red-400 text-[14px] text-center px-2">{error}</p>}
@@ -315,7 +315,7 @@ export default function LoginPage() {
               type="submit" disabled={loading}
               className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
-              {loading ? 'Account aanmaken…' : <>Doorgaan <ArrowRight size={18} strokeWidth={2.3} /></>}
+              {loading ? 'Creating account…' : <>Continue <ArrowRight size={18} strokeWidth={2.3} /></>}
             </button>
           </form>
         )}
@@ -331,12 +331,12 @@ export default function LoginPage() {
             </div>
             <div>
               <p className="text-[17px] text-white/70 leading-relaxed">
-                We hebben een bevestigingslink gestuurd naar
+                We sent a confirmation link to
               </p>
               <p className="text-[17px] font-semibold text-white mt-1 break-all">{email}</p>
             </div>
             <p className="text-[14px] text-white/40 leading-relaxed max-w-xs">
-              Klik op de link in je mail om je account te activeren. Daarna stellen we samen je coach in.
+              Click the link in your email to activate your account. Then we'll set up your coach together.
             </p>
             <button
               type="button"
@@ -344,7 +344,7 @@ export default function LoginPage() {
               className="h-[52px] w-full rounded-[18px] font-semibold text-[16px] text-white active:scale-[0.98] transition-transform"
               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
             >
-              Terug naar inloggen
+              Back to sign in
             </button>
           </div>
         )}

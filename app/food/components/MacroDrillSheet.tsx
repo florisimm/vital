@@ -18,11 +18,11 @@ export function MacroDrillSheet({ macro, log, onClose }: { macro: MacroKey; log:
       <div className="flex items-center justify-between px-5 py-4 shrink-0">
         <div className="w-16" />
         <span className="text-[17px] font-semibold text-white">{MACRO_LABEL[macro]}</span>
-        <button onClick={onClose} className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold">Klaar</button>
+        <button onClick={onClose} className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold">Done</button>
       </div>
       <div className="flex-1 overflow-y-auto px-5 pb-12 flex flex-col gap-5">
         {groups.length === 0 ? (
-          <p className="text-white/40 text-[15px] text-center mt-10">Nog niets gelogd vandaag</p>
+          <p className="text-white/40 text-[15px] text-center mt-10">Nothing logged yet today</p>
         ) : groups.map(({ meal, items }) => {
           const groupTotal = items.reduce((s, e) => s + Number(e[macro] ?? 0), 0)
           return (

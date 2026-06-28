@@ -1511,7 +1511,7 @@ function ExerciseProgressScreen({ exerciseTitle, allWorkouts, onBack }: {
             </div>
           ))}
           {sessions.length === 0 && (
-            <p className="text-[13px] text-white/30 text-center pt-8">Geen historische data gevonden</p>
+            <p className="text-[13px] text-white/30 text-center pt-8">No historical data yet</p>
           )}
         </div>
       </div>
@@ -3780,7 +3780,7 @@ function PlannedEventsCard({
 
   const dayLabel = (d: string) =>
     d === todayStr ? 'Vandaag' : d === tomorrowStr ? 'Morgen'
-    : new Date(d + 'T12:00:00').toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' })
+    : new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })
 
   const grouped: { label: string; events: any[] }[] = []
   for (const e of planEvents) {
@@ -3817,7 +3817,7 @@ function PlannedEventsCard({
                   const { sport, emoji } = sportInfoFromTitle(e.title ?? '')
                   const done = isEventCompleted(d, sport, activities, hevy)
                   const time = e.start_datetime
-                    ? new Date(e.start_datetime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+                    ? new Date(e.start_datetime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
                     : null
                   return (
                     <div key={i} className="flex items-center gap-3">
@@ -3845,7 +3845,7 @@ function PlannedEventsCard({
             ))}
           </div>
         ) : (
-          <span className="text-[15px] text-white/30">Geen training gepland voor vandaag of morgen</span>
+          <span className="text-[15px] text-white/30">No training planned for today or tomorrow</span>
         )}
 
         {recoveryDetail.factors.length > 0 && (
@@ -4781,11 +4781,11 @@ function SplitRecommendationCard({ hevy, calendarEvents = [] }: { hevy: HevyWork
   const nsDateStr  = nextEvent ? (nextEvent.start_datetime || nextEvent.start_date) : null
   const nsToday    = nsDateStr?.slice(0, 10) === now.slice(0, 10)
   const nsTomorrow = nsDateStr?.slice(0, 10) === new Date(Date.now() + 86400000).toISOString().slice(0, 10)
-  const nsWhen     = nsDateStr ? new Date(nsDateStr).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' }) : null
-  const nsLabel    = nsToday ? 'Vandaag' : nsTomorrow ? 'Morgen' : nsWhen
+  const nsWhen     = nsDateStr ? new Date(nsDateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' }) : null
+  const nsLabel    = nsToday ? 'Today' : nsTomorrow ? 'Tomorrow' : nsWhen
 
   const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
-  const sl = (pct: number) => pct >= 80 ? 'Klaar' : pct >= 55 ? 'Mogelijk' : 'Herstel'
+  const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Caution' : 'Recover'
 
   return (
     <div className="p-5 rounded-[24px] border border-white/[0.12]" style={{ background: 'rgba(251,146,60,0.07)' }}>
@@ -4821,7 +4821,7 @@ function SplitRecommendationCard({ hevy, calendarEvents = [] }: { hevy: HevyWork
                   {isPlanned && (
                     <span className="text-[9px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full"
                       style={{ background: `${s.color}25`, color: s.color }}>
-                      {plannedSplit ? 'gepland' : 'volgende'}
+                      {plannedSplit ? 'planned' : 'next'}
                     </span>
                   )}
                 </div>

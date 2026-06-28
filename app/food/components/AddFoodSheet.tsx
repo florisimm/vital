@@ -168,7 +168,7 @@ export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId
     : view === 'search'       ? 'Search Food'
     : view === 'scan'         ? 'Scan Barcode'
     : view === 'meals'        ? 'Meals'
-    : view === 'meal-confirm' ? (confirmTemplate?.name ?? 'Maaltijd')
+    : view === 'meal-confirm' ? (confirmTemplate?.name ?? 'Meal')
     : view === 'create-meal'  ? (confirmTemplate ? 'Edit meal' : 'New meal')
     : view === 'custom-food'  ? 'Custom Food'
     : 'Add Food'
@@ -271,7 +271,7 @@ export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId
             <div className="flex items-center gap-3 h-[46px] px-4 rounded-[12px] shrink-0"
               style={{ background: 'rgba(255,255,255,0.08)' }}>
               <Search size={16} className="text-white/40 shrink-0" />
-              <input type="text" placeholder="Zoek voedsel…" value={search}
+              <input type="text" placeholder="Search food…" value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-white placeholder:text-white/30 text-[16px] outline-none" />
             </div>
@@ -285,7 +285,7 @@ export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId
                 if (matches.length === 0) return null
                 return (
                   <>
-                    <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">Mijn voedsel</p>
+                    <p className="text-[11px] font-semibold text-white/30 uppercase tracking-widest px-1">My food</p>
                     <div className="flex flex-col rounded-[16px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
                       {matches.map((p, i) => (
                         <button key={p.id} onClick={() => { setSelected(p); navigate('detail') }}
@@ -331,7 +331,7 @@ export function AddFoodSheet({ customFoods, recentFoods, preselectedMeal, userId
                     ))}
                   </div>
                 ) : (
-                  <p className="px-4 py-5 text-[14px] text-white/30 text-center">Geen resultaten voor "{search}"</p>
+                  <p className="px-4 py-5 text-[14px] text-white/30 text-center">No results for "{search}"</p>
                 )
               )}
 

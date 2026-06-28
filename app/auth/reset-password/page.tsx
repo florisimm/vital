@@ -14,8 +14,8 @@ export default function ResetPasswordPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (password !== confirm) { setError('Wachtwoorden komen niet overeen'); return }
-    if (password.length < 6)  { setError('Minimaal 6 tekens vereist'); return }
+    if (password !== confirm) { setError('Passwords do not match'); return }
+    if (password.length < 6)  { setError('At least 6 characters required'); return }
     setLoading(true); setError(null)
     const { error } = await createClient().auth.updateUser({ password })
     if (error) { setError(error.message); setLoading(false); return }
@@ -48,10 +48,10 @@ export default function ResetPasswordPage() {
             <Activity size={32} className="text-teal-400" strokeWidth={2} />
           </div>
           <h1 className="text-[40px] font-bold leading-none text-white tracking-tight">
-            Nieuw wachtwoord
+            New password
           </h1>
           <p className="text-[16px] text-white/40 mt-2.5 font-medium">
-            Kies een nieuw wachtwoord voor je Kern account.
+            Choose a new password for your Kern account.
           </p>
         </div>
 
@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
             <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
               <input
                 type="password"
-                placeholder="Nieuw wachtwoord"
+                placeholder="New password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
@@ -72,7 +72,7 @@ export default function ResetPasswordPage() {
             <Field icon={<Lock size={18} className="text-white/30 shrink-0" />}>
               <input
                 type="password"
-                placeholder="Bevestig wachtwoord"
+                placeholder="Confirm password"
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 required
@@ -89,7 +89,7 @@ export default function ResetPasswordPage() {
             disabled={loading || !password || !confirm}
             className="h-[56px] rounded-[18px] bg-white text-black font-semibold text-[17px] mt-1 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
           >
-            {loading ? 'Opslaan…' : <>Wachtwoord opslaan <ArrowRight size={18} strokeWidth={2.3} /></>}
+            {loading ? 'Saving…' : <>Save password <ArrowRight size={18} strokeWidth={2.3} /></>}
           </button>
         </form>
       </div>

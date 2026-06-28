@@ -456,7 +456,7 @@ export function SleepSection() {
       {usingAvg && (
         <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-[12px]" style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.25)' }}>
           <span className="text-orange-400 text-[13px]">⚑</span>
-          <span className="text-[12px] font-medium text-orange-300">Geen Google Health-data — onderstaande waarden zijn je 7-daags gemiddelde</span>
+          <span className="text-[12px] font-medium text-orange-300">No Google Health data — values below are your 7-day average</span>
         </div>
       )}
 
@@ -1475,7 +1475,7 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
               <div className="w-full max-w-xs rounded-[20px] p-5 flex flex-col gap-4"
                 style={{ background: 'rgb(22,23,28)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="flex flex-col gap-1 text-center">
-                  <span className="text-[17px] font-semibold text-white">Gewicht verwijderen?</span>
+                  <span className="text-[17px] font-semibold text-white">Delete weight?</span>
                   <span className="text-[14px] text-white/45">
                     {fmtDate(deleteConfirm)} · {rows.find(r => r.datum === deleteConfirm)?.gewicht?.toFixed(1)} kg
                   </span>
@@ -1484,12 +1484,12 @@ export function WeightSection({ rows }: { rows: GezondheidsRow[] }) {
                   <button onClick={() => setDeleteConfirm(null)}
                     className="flex-1 h-11 rounded-[14px] text-[15px] font-semibold text-white"
                     style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    Annuleer
+                    Cancel
                   </button>
                   <button onClick={handleDelete}
                     className="flex-1 h-11 rounded-[14px] text-[15px] font-semibold text-white"
                     style={{ background: '#ef4444' }}>
-                    Verwijder
+                    Delete
                   </button>
                 </div>
               </div>
