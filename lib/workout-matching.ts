@@ -4,7 +4,10 @@ type StrengthWorkout = {
 }
 
 type CardioActivity = {
+  name?: string | null
+  title?: string | null
   sport_type?: string | null
+  sport?: string | null
 }
 
 export type CompletedWorkout = {
@@ -45,6 +48,8 @@ const GENERIC_STRENGTH_MARKERS = new Set([
   'weight', 'gewichten', 'session', 'sessie',
 ])
 
+type CardioKind = 'running' | 'cycling' | 'swimming'
+
 function normalizeText(value: string): string {
   return value
     .toLowerCase()
@@ -57,6 +62,10 @@ function normalizeText(value: string): string {
 }
 
 function workoutName(workout: StrengthWorkout): string {
+  return workout.title ?? workout.name ?? ''
+}
+
+function cardioWorkoutName(workout: CardioActivity): string {
   return workout.title ?? workout.name ?? ''
 }
 
@@ -73,6 +82,15 @@ export function isCardioTitle(title: string): boolean {
 export function isCardioSport(sport: string | null | undefined): boolean {
   const normalized = normalizeText(sport ?? '')
   return CARDIO_SPORT_KEYWORDS.some(keyword => normalized.includes(keyword))
+}
+
+function detectCardioKind(value: string | null | undefined): CardioKind | null {
+  const normalized = normalizeText(value ?? '')
+  if (!normalized) return null
+  if (normalized.includes('swim') || normalized.includes('zwem')) return 'swimming'
+  if (normalized.includes('cycl') || normalized.includes('ride') || normalized.includes('bike') || normalized.includes('fiet')) return 'cycling'
+  if (normalized.includes('run') || normalized.includes('loop') || normalized.includes('hardloop')) return 'running'
+  return null
 }
 
 export function isGenericStrengthTitle(title: string): boolean {
@@ -107,6 +125,15 @@ export function completedStrengthWorkoutsForPlan<T extends StrengthWorkout>(plan
   return workouts.filter(workout => strengthSessionMatches(plannedTitle, workoutName(workout)))
 }
 
+export function cardioWorkoutMatches(plannedTitle: string, workout: CardioActivity): boolean {
+  const plannedKind = detectCardioKind(plannedTitle)
+  const workoutKind = detectCardioKind(workout.sport_type ?? workout.sport ?? cardioWorkoutName(workout))
+
+  if (plannedKind && workoutKind) return plannedKind === workoutKind
+  if (plannedKind) return detectCardioKind(cardioWorkoutName(workout)) === plannedKind
+  return isCardioSport(workout.sport_type ?? workout.sport ?? cardioWorkoutName(workout))
+}
+
 export function hasCompletedPlannedWorkout(
   plannedTitle: string,
   strengthWorkouts: StrengthWorkout[],
@@ -115,7 +142,7 @@ export function hasCompletedPlannedWorkout(
   const strengthPlan = isStrengthTitle(plannedTitle)
   const cardioPlan = isCardioTitle(plannedTitle)
   const hasStrength = completedStrengthWorkoutsForPlan(plannedTitle, strengthWorkouts).length > 0
-  const hasCardio = cardioActivities.some(activity => isCardioSport(activity.sport_type))
+  const hasCardio = cardioActivities.some(activity => cardioWorkoutMatches(plannedTitle, activity))
 
   if (strengthPlan && !cardioPlan) return hasStrength
   if (cardioPlan && !strengthPlan) return hasCardio
@@ -124,8 +151,13 @@ export function hasCompletedPlannedWorkout(
 }
 
 export function completedWorkoutsMatchingPlan<T extends CompletedWorkout>(plannedTitle: string, workouts: T[]): T[] {
-  if (!isStrengthTitle(plannedTitle)) return []
-  return workouts.filter(workout => strengthSessionMatches(plannedTitle, workout.name ?? workout.title ?? ''))
+  if (isStrengthTitle(plannedTitle)) {
+    return workouts.filter(workout => strengthSessionMatches(plannedTitle, workout.name ?? workout.title ?? ''))
+  }
+  if (isCardioTitle(plannedTitle)) {
+    return workouts.filter(workout => cardioWorkoutMatches(plannedTitle, workout))
+  }
+  return []
 }
 
 export function completedWorkoutsForTodaySummary<T extends CompletedWorkout>(plannedTitle: string, workouts: T[]): T[] {
