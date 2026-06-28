@@ -3005,6 +3005,8 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     // shows exactly how much to do. Profile-target and muscle-group suggestions
     // (e.g. "Easy running recommended", "Leg day") land here even with no event.
     const l = focus.label.toLowerCase()
+    const plannedTitle = focus.label.split(' · ')[0].split(' Â· ')[0]
+    if (plannedTitle !== focus.label && plannedTitle.trim()) return plannedTitle
     const e = focus.emoji
     const isRest = l.includes('rest') || l.includes('recovery day') || l.includes('active recovery')
       || l.includes('keep it light') || l.includes('light movement')
@@ -3072,6 +3074,8 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
 
   function toSimpleLabel(): string {
     const l = focus.label.toLowerCase()
+    const plannedTitle = focus.label.split(' · ')[0].split(' Â· ')[0]
+    if (plannedTitle !== focus.label && plannedTitle.trim()) return plannedTitle
     if (l.includes('rest') || l.includes('recovery day')) return 'Rest today'
     if (l.includes('active recovery') || l.includes('keep it light') || l.includes('light movement')) return 'Active recovery'
     if ((l.includes('run') || l.includes('loop') || focus.emoji === '🏃') && !l.includes('swim')) return 'Easy run'
@@ -3081,7 +3085,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
     if (l.includes('push')) return 'Push day'
     if (l.includes('pull')) return 'Pull day'
     if (l.includes('strength') || l.includes('gym') || l.includes('kracht') || focus.emoji === '💪') return 'Strength session'
-    return focus.label.split(' · ')[0]
+    return plannedTitle
   }
 
   const rc = readinessPct >= 80 ? '#4ade80' : readinessPct >= 60 ? '#2dd4bf' : readinessPct >= 45 ? '#fb923c' : '#f87171'

@@ -39,6 +39,12 @@ const STRENGTH_STOP_WORDS = new Set([
   'sessie', 'planned', 'plan', 'done', 'completed', 'voltooid',
 ])
 
+const STRENGTH_SPLIT_WORDS = new Set(['pull', 'push', 'legs', 'leg'])
+const GENERIC_STRENGTH_MARKERS = new Set([
+  'gym', 'strength', 'training', 'workout', 'kracht', 'fitness', 'weights',
+  'weight', 'gewichten', 'session', 'sessie',
+])
+
 function normalizeText(value: string): string {
   return value
     .toLowerCase()
@@ -86,7 +92,15 @@ export function strengthSessionMatches(plannedTitle: string, completedTitle: str
   if (isGenericStrengthTitle(plannedTitle)) return isStrengthTitle(completedTitle) || normalizeText(completedTitle).length > 0
   const planned = normalizeStrengthSessionTitle(plannedTitle)
   const completed = normalizeStrengthSessionTitle(completedTitle)
-  return planned.length > 0 && planned === completed
+  if (planned.length > 0 && planned === completed) return true
+
+  const plannedTokens = new Set(normalizeText(plannedTitle).split(' ').filter(Boolean))
+  const completedTokens = new Set(normalizeText(completedTitle).split(' ').filter(Boolean))
+  const plannedSplit = [...STRENGTH_SPLIT_WORDS].find(token => plannedTokens.has(token))
+  const plannedHasGenericMarker = [...GENERIC_STRENGTH_MARKERS].some(token => plannedTokens.has(token))
+  if (plannedSplit && plannedHasGenericMarker && completedTokens.has(plannedSplit)) return true
+
+  return false
 }
 
 export function completedStrengthWorkoutsForPlan<T extends StrengthWorkout>(plannedTitle: string, workouts: T[]): T[] {
