@@ -874,6 +874,123 @@ function computeTrainingStreak(hevy: HevyWorkout[]) {
   return { streak, totalDays: days.size, totalWorkouts: hevy.length }
 }
 
+type MuscleAdvice = ReturnType<typeof computeMuscleGroupAdvice>[number]
+
+function StrengthMuscleMapCard({ groups }: { groups: MuscleAdvice[] }) {
+  const byLabel = new Map(groups.map(g => [g.label, g]))
+  const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
+  const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
+  const fill = (label: string) => byLabel.has(label) ? sc(byLabel.get(label)!.recovery) : 'rgba(255,255,255,0.07)'
+  const stroke = (label: string) => byLabel.has(label) ? sc(byLabel.get(label)!.recovery) : 'rgba(255,255,255,0.13)'
+  const opacity = (label: string) => byLabel.has(label) ? 0.86 : 1
+  const glow = (label: string) => byLabel.has(label) ? 'url(#strength-muscle-glow)' : undefined
+  const baseFill = 'rgba(255,255,255,0.045)'
+  const baseStroke = 'rgba(255,255,255,0.13)'
+  const muscleProps = (label: string) => ({ fill: fill(label), stroke: stroke(label), opacity: opacity(label), filter: glow(label), strokeWidth: 0.9 })
+  const tinted = (label: string, activeOpacity = 0.72, inactiveOpacity = 1) => ({ fill: fill(label), stroke: stroke(label), opacity: byLabel.has(label) ? activeOpacity : inactiveOpacity, filter: glow(label), strokeWidth: 0.9 })
+
+  const defs = (
+    <defs>
+      <filter id="strength-muscle-glow" x="-35%" y="-35%" width="170%" height="170%">
+        <feGaussianBlur stdDeviation="1.6" result="blur" />
+        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <linearGradient id="strength-body-shadow" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stopColor="rgba(255,255,255,0.11)" />
+        <stop offset="100%" stopColor="rgba(255,255,255,0.035)" />
+      </linearGradient>
+    </defs>
+  )
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Muscle groups</span>
+          <span className="text-[11px] text-white/30">7-day recovery</span>
+        </div>
+
+        <div className="rounded-[18px] px-3 py-4" style={{ background: 'rgba(0,0,0,0.14)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="grid grid-cols-2 gap-3 items-start">
+            <div className="flex flex-col items-center gap-2">
+              <svg viewBox="0 0 150 300" className="w-full max-w-[150px] h-[245px]" style={{ overflow: 'visible' }} aria-label="Front muscle map">
+                {defs}
+                <circle cx="75" cy="22" r="14" fill="url(#strength-body-shadow)" stroke={baseStroke} strokeWidth="0.9" />
+                <path d="M65 36h20l4 10H61z" fill={baseFill} stroke={baseStroke} strokeWidth="0.9" />
+                <path d="M55 51 Q75 42 95 51 L102 118 Q87 132 75 132 Q63 132 48 118 Z" fill={baseFill} stroke={baseStroke} strokeWidth="0.9" />
+                <path d="M37 54 Q48 48 57 53 Q54 66 44 71 Q35 67 32 60 Z" {...muscleProps('Shoulders')} />
+                <path d="M113 54 Q102 48 93 53 Q96 66 106 71 Q115 67 118 60 Z" {...muscleProps('Shoulders')} />
+                <path d="M56 57 Q72 53 74 70 Q73 84 58 83 Q49 75 50 65 Q51 59 56 57 Z" {...muscleProps('Chest')} />
+                <path d="M94 57 Q78 53 76 70 Q77 84 92 83 Q101 75 100 65 Q99 59 94 57 Z" {...muscleProps('Chest')} />
+                <path d="M60 88 Q75 92 90 88 L86 128 Q75 134 64 128 Z" {...tinted('Chest', 0.28, 0.18)} />
+                <path d="M64 88 h22 q4 18 2 38 q-13 7 -26 0 q-2 -20 2 -38 Z" fill={baseFill} stroke={baseStroke} strokeWidth="0.75" />
+                <path d="M69 92 h12 v38 h-12z" fill="rgba(255,255,255,0.045)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.6" />
+                <path d="M36 70 Q45 72 48 84 L43 121 Q35 119 31 107 Q31 86 36 70 Z" {...muscleProps('Biceps')} />
+                <path d="M114 70 Q105 72 102 84 L107 121 Q115 119 119 107 Q119 86 114 70 Z" {...muscleProps('Biceps')} />
+                <path d="M31 118 Q41 119 43 132 L39 164 Q30 164 27 151 Q27 130 31 118 Z" {...tinted('Biceps', 0.7)} />
+                <path d="M119 118 Q109 119 107 132 L111 164 Q120 164 123 151 Q123 130 119 118 Z" {...tinted('Biceps', 0.7)} />
+                <path d="M51 129 Q63 137 74 137 L70 170 Q57 171 50 158 Z" {...tinted('Legs', 0.72)} />
+                <path d="M99 129 Q87 137 76 137 L80 170 Q93 171 100 158 Z" {...tinted('Legs', 0.72)} />
+                <path d="M52 168 Q62 172 70 171 L67 229 Q55 229 51 209 Z" {...muscleProps('Legs')} />
+                <path d="M98 168 Q88 172 80 171 L83 229 Q95 229 99 209 Z" {...muscleProps('Legs')} />
+                <path d="M50 232 Q61 229 68 233 L66 280 Q53 281 49 263 Z" {...tinted('Legs', 0.68)} />
+                <path d="M100 232 Q89 229 82 233 L84 280 Q97 281 101 263 Z" {...tinted('Legs', 0.68)} />
+                <ellipse cx="57" cy="286" rx="12" ry="5" fill={baseFill} stroke={baseStroke} strokeWidth="0.8" />
+                <ellipse cx="93" cy="286" rx="12" ry="5" fill={baseFill} stroke={baseStroke} strokeWidth="0.8" />
+                <path d="M75 55 v74" stroke="rgba(255,255,255,0.16)" strokeWidth="0.7" />
+                <path d="M66 99 h18 M65 112 h20 M64 125 h22" stroke="rgba(255,255,255,0.11)" strokeWidth="0.6" />
+              </svg>
+              <span className="text-[10px] text-white/30 uppercase tracking-[0.10em]">Front</span>
+            </div>
+
+            <div className="flex flex-col items-center gap-2">
+              <svg viewBox="0 0 150 300" className="w-full max-w-[150px] h-[245px]" style={{ overflow: 'visible' }} aria-label="Back muscle map">
+                {defs}
+                <circle cx="75" cy="22" r="14" fill="url(#strength-body-shadow)" stroke={baseStroke} strokeWidth="0.9" />
+                <path d="M65 36h20l4 10H61z" fill={baseFill} stroke={baseStroke} strokeWidth="0.9" />
+                <path d="M55 51 Q75 42 95 51 L102 118 Q87 132 75 132 Q63 132 48 118 Z" fill={baseFill} stroke={baseStroke} strokeWidth="0.9" />
+                <path d="M37 54 Q48 48 57 53 Q54 67 44 72 Q34 68 32 60 Z" {...muscleProps('Shoulders')} />
+                <path d="M113 54 Q102 48 93 53 Q96 67 106 72 Q116 68 118 60 Z" {...muscleProps('Shoulders')} />
+                <path d="M59 48 Q75 42 91 48 L84 64 H66 Z" {...tinted('Back', 0.82)} />
+                <path d="M52 64 Q62 60 72 66 L70 114 Q55 108 49 92 Q48 76 52 64 Z" {...muscleProps('Back')} />
+                <path d="M98 64 Q88 60 78 66 L80 114 Q95 108 101 92 Q102 76 98 64 Z" {...muscleProps('Back')} />
+                <path d="M66 66 Q75 70 84 66 L84 121 Q75 128 66 121 Z" {...tinted('Back', 0.32, 0.2)} />
+                <path d="M36 70 Q45 72 48 86 L43 121 Q35 119 31 107 Q31 86 36 70 Z" {...muscleProps('Triceps')} />
+                <path d="M114 70 Q105 72 102 86 L107 121 Q115 119 119 107 Q119 86 114 70 Z" {...muscleProps('Triceps')} />
+                <path d="M31 118 Q41 119 43 132 L39 164 Q30 164 27 151 Q27 130 31 118 Z" {...tinted('Biceps', 0.6)} />
+                <path d="M119 118 Q109 119 107 132 L111 164 Q120 164 123 151 Q123 130 119 118 Z" {...tinted('Biceps', 0.6)} />
+                <path d="M55 119 Q75 129 95 119 L99 145 Q86 158 75 158 Q64 158 51 145 Z" {...tinted('Legs', 0.7)} />
+                <path d="M52 153 Q62 158 72 157 L68 224 Q55 223 51 199 Z" {...muscleProps('Legs')} />
+                <path d="M98 153 Q88 158 78 157 L82 224 Q95 223 99 199 Z" {...muscleProps('Legs')} />
+                <path d="M50 226 Q61 224 68 229 L66 280 Q53 281 49 263 Z" {...tinted('Legs', 0.78)} />
+                <path d="M100 226 Q89 224 82 229 L84 280 Q97 281 101 263 Z" {...tinted('Legs', 0.78)} />
+                <ellipse cx="57" cy="286" rx="12" ry="5" fill={baseFill} stroke={baseStroke} strokeWidth="0.8" />
+                <ellipse cx="93" cy="286" rx="12" ry="5" fill={baseFill} stroke={baseStroke} strokeWidth="0.8" />
+                <path d="M75 49 v102" stroke="rgba(255,255,255,0.16)" strokeWidth="0.7" />
+                <path d="M58 76 Q75 83 92 76 M57 96 Q75 106 93 96 M55 137 Q75 150 95 137" stroke="rgba(255,255,255,0.10)" strokeWidth="0.7" fill="none" />
+              </svg>
+              <span className="text-[10px] text-white/30 uppercase tracking-[0.10em]">Back</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {groups.map(g => (
+            <div key={g.label} className="rounded-[12px] px-3 py-2 flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: sc(g.recovery), boxShadow: `0 0 10px ${sc(g.recovery)}66` }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-semibold text-white truncate">{g.label}</p>
+                <p className="text-[10px] text-white/35">{g.recovery}%</p>
+              </div>
+              <span className="text-[10px] font-semibold shrink-0" style={{ color: sc(g.recovery) }}>{sl(g.recovery)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 // ─── AI Insight builders ──────────────────────────────────────────────────────
 
 function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[]): string {
@@ -4869,9 +4986,6 @@ export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorko
   const lastWorkout  = [...hevy].sort((a, b) => b.start_time.localeCompare(a.start_time))[0] ?? null
   const setBreakdown = computeWeeklySetBreakdown(hevy)
 
-  const sc = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
-  const sl = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
-
   return (
     <div className="flex flex-col gap-6">
 
@@ -4894,22 +5008,7 @@ export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorko
       <SplitRecommendationCard hevy={hevy} calendarEvents={calendarEvents} />
 
       {muscleAdvice.length > 0 && (
-        <Card>
-          <div className="flex flex-col gap-3">
-            <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Muscle groups</span>
-            {muscleAdvice.map(g => (
-              <div key={g.label} className="flex items-center gap-3">
-                <span className="text-[14px] text-white w-[80px] shrink-0">{g.label}</span>
-                <div className="flex-1 h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <div className="h-full rounded-full" style={{ width: `${g.recovery}%`, background: sc(g.recovery) }} />
-                </div>
-                <span className="text-[12px] font-semibold w-[52px] text-right shrink-0" style={{ color: sc(g.recovery) }}>
-                  {sl(g.recovery)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <StrengthMuscleMapCard groups={muscleAdvice} />
       )}
 
       {lastWorkout && <LastStrengthWorkoutCard workout={lastWorkout} allWorkouts={hevy} />}
