@@ -194,6 +194,7 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
   const [fromQuery, setFromQuery] = useState('')
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
   const [startCoord, setStartCoord] = useState<[number, number] | null>(null)
+  const [showSendOptions, setShowSendOptions] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const seedRef = useRef(Math.floor(Math.random() * 10000))
@@ -259,15 +260,24 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
     window.open(`https://www.google.com/maps/dir/?api=1&origin=${startCoord[0]},${startCoord[1]}&destination=${startCoord[0]},${startCoord[1]}&travelmode=${mode}`, '_blank')
   }
 
-  function downloadGpx() {
+  function downloadGpx(target = 'route') {
     if (!routeCoords) return
     const gpx = buildGpx(routeCoords, title)
     const blob = new Blob([gpx], { type: 'application/gpx+xml' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `${title.replace(/\s+/g, '-').toLowerCase()}.gpx`; a.click()
+    const suffix = target === 'route' ? '' : `-${target}`
+    a.href = url; a.download = `${title.replace(/\s+/g, '-').toLowerCase()}${suffix}.gpx`; a.click()
     URL.revokeObjectURL(url)
   }
+
+  const sendOptions = [
+    { label: 'Strava', hint: 'GPX for route upload', action: () => downloadGpx('strava') },
+    { label: 'Garmin', hint: 'GPX for Garmin Connect', action: () => downloadGpx('garmin') },
+    { label: 'Wahoo / Komoot', hint: 'GPX for bike computers', action: () => downloadGpx('bike') },
+    { label: 'GPX file', hint: 'Save route file', action: () => downloadGpx() },
+    { label: 'Google Maps', hint: 'Open navigation', action: openGoogleMaps },
+  ]
 
   useEffect(() => { triggerGps() }, [])
 
@@ -325,16 +335,35 @@ function RouteMapCard({ advice, title, sport, onHourly }: { advice: Advice; titl
 
       {/* Buttons */}
       {routeCoords && (
-        <div className="px-4 pb-4 flex gap-2">
-          <button onClick={retry} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-            <RefreshCw size={14} />New route
-          </button>
-          <button onClick={openGoogleMaps} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold flex-1 justify-center" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-            <Map size={14} />Google Maps
-          </button>
-          <button onClick={downloadGpx} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
-            <Download size={14} />Strava
-          </button>
+        <div className="px-4 pb-4 flex flex-col gap-3">
+          <div className="flex gap-2">
+            <button onClick={retry} className="flex items-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold" style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.7)' }}>
+              <RefreshCw size={14} />New route
+            </button>
+            <button onClick={() => setShowSendOptions(v => !v)} className="flex items-center justify-center gap-1.5 h-[40px] px-3 rounded-[12px] text-[13px] font-semibold flex-1" style={{ background: 'rgba(45,212,191,0.16)', color: 'rgba(255,255,255,0.86)', border: '1px solid rgba(45,212,191,0.20)' }}>
+              <Download size={14} />Send route
+            </button>
+          </div>
+
+          {showSendOptions && (
+            <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="flex items-center gap-2 px-1">
+                <p className="text-[11px] text-white/35 uppercase tracking-[0.12em] font-semibold">Send to</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {sendOptions.map(option => (
+                  <button key={option.label} onClick={option.action} className="min-h-[52px] rounded-[12px] px-3 text-left flex items-center justify-between gap-3 active:scale-[0.99]" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <span>
+                      <span className="block text-[13px] font-semibold text-white">{option.label}</span>
+                      <span className="block text-[11px] text-white/35 mt-0.5">{option.hint}</span>
+                    </span>
+                    {option.label === 'Google Maps' ? <Map size={15} className="text-white/45" /> : <Download size={15} className="text-white/45" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
