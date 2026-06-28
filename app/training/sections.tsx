@@ -25,7 +25,7 @@ import { openDevices } from '@/lib/services'
 import { formatTime as formatClockTime } from '@/lib/timeFormat'
 import { PlannedTodayCard, type PlannedItem } from './PlannedTodayCard'
 import { InjuryToggle } from '@/components/InjuryToggle'
-import { completedWorkoutsMatchingPlan, hasCompletedPlannedWorkout } from '@/lib/workout-matching'
+import { completedWorkoutsForTodaySummary, completedWorkoutsMatchingPlan, hasCompletedPlannedWorkout } from '@/lib/workout-matching'
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -3089,6 +3089,7 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
   const matchingCompletedToday = focusDoneByLabel
     ? (completedToday ?? [])
     : completedWorkoutsMatchingPlan(focus.label, completedToday ?? [])
+  const completedTodaySummary = completedWorkoutsForTodaySummary(focus.label, completedToday ?? [])
   const isDone = focusDoneByLabel || matchingCompletedToday.length > 0
 
   function toDoneHeadline(): string {
@@ -3154,9 +3155,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
             </div>
           </div>
 
-          {isDone && matchingCompletedToday.length > 0 && (
+          {completedTodaySummary.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
-              {matchingCompletedToday.map((w, i) => (
+              {completedTodaySummary.map((w, i) => (
                 <span key={i} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[12px] text-white/70"
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
                   <Check size={11} strokeWidth={3} style={{ color: '#4ade80' }} />
@@ -3222,9 +3223,9 @@ export function TodaysPlanCard({ focus, calendarEvents, readinessPct, biasApplie
         </div>
       </div>
 
-      {matchingCompletedToday.length > 0 && (
+      {completedTodaySummary.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {matchingCompletedToday.map((w, i) => (
+          {completedTodaySummary.map((w, i) => (
             <span key={i} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[12px] text-white/70"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <Check size={11} strokeWidth={3} style={{ color: '#4ade80' }} />

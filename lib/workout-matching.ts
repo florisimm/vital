@@ -113,3 +113,19 @@ export function completedWorkoutsMatchingPlan<T extends CompletedWorkout>(planne
   if (!isStrengthTitle(plannedTitle)) return []
   return workouts.filter(workout => strengthSessionMatches(plannedTitle, workout.name ?? workout.title ?? ''))
 }
+
+export function completedWorkoutsForTodaySummary<T extends CompletedWorkout>(plannedTitle: string, workouts: T[]): T[] {
+  const seen = new Set<string>()
+  const completed = workouts.filter(workout => {
+    const name = workout.name ?? workout.title ?? ''
+    if (!name.trim()) return false
+    const key = `${normalizeText(name)}:${normalizeText(workout.sport ?? '')}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  if (completed.length === 0) return []
+
+  const matching = completedWorkoutsMatchingPlan(plannedTitle, completed)
+  return matching.length > 0 ? matching : completed
+}

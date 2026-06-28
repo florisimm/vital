@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {
+  completedWorkoutsForTodaySummary,
   completedWorkoutsMatchingPlan,
   hasCompletedPlannedWorkout,
   strengthSessionMatches,
@@ -23,4 +24,9 @@ assert.deepEqual(
 assert.deepEqual(
   completedWorkoutsMatchingPlan('Pull day recommended', [{ name: 'Pull Day', sport: 'strength' }]),
   [{ name: 'Pull Day', sport: 'strength' }],
+)
+
+assert.deepEqual(
+  completedWorkoutsForTodaySummary('Pull day recommended', [{ name: 'Pull B', sport: 'strength' }]),
+  [{ name: 'Pull B', sport: 'strength' }],
 )

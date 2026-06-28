@@ -764,8 +764,28 @@ function TodayDashboard() {
   // Compute training recommendation using the same logic as the Training overview
 
   const { todaysFocus, unifiedReadinessPct, biasApplied } = useMemo(() => {
-    const activities: TrainingActivity[] = training?.activities ?? []
-    const hevy: TrainingHevyWorkout[]    = training?.hevy ?? []
+    function mergeWorkouts<T>(base: T[], todayRows: T[], keyOf: (item: T) => string): T[] {
+      const seen = new Set(base.map(keyOf))
+      const merged = [...base]
+      for (const row of todayRows) {
+        const key = keyOf(row)
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        merged.push(row)
+      }
+      return merged
+    }
+
+    const activities: TrainingActivity[] = mergeWorkouts(
+      (training?.activities ?? []) as TrainingActivity[],
+      (effectiveData?.todayActivities ?? []) as TrainingActivity[],
+      (a) => String(a.id ?? `${a.name}:${a.start_date}`),
+    )
+    const hevy: TrainingHevyWorkout[] = mergeWorkouts(
+      (training?.hevy ?? []) as TrainingHevyWorkout[],
+      (effectiveData?.todayHevy ?? []) as TrainingHevyWorkout[],
+      (h) => String(h.id ?? `${h.title}:${h.start_time}`),
+    )
     const calendarEvents                 = effectiveData?.calendarEvents ?? []
     const biasBySport: Record<string, number> = training?.biasBySport ?? {}
     const trainingFrequencies: Record<string, number> = training?.trainingFrequencies ?? {}
