@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { FRONT_MUSCLES, BACK_MUSCLES, type MuscleDef } from 'body-muscles'
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
@@ -992,6 +993,101 @@ function StrengthMuscleMapCard({ groups }: { groups: MuscleAdvice[] }) {
 }
 
 // ─── AI Insight builders ──────────────────────────────────────────────────────
+
+type MuscleGroupLabel = MuscleAdvice['label']
+
+function muscleGroupForBodyMuscle(id: string): MuscleGroupLabel | null {
+  if (id.startsWith('chest-')) return 'Chest'
+  if (id.startsWith('traps-') || id.startsWith('lats-') || id === 'spine' || id.startsWith('lower-back-') || id === 'nape' || id.startsWith('neck-')) return 'Back'
+  if (id.startsWith('shoulder-') || id.startsWith('deltoid-rear-')) return 'Shoulders'
+  if (id.startsWith('triceps-') || id.startsWith('forearm-flexors-') || id.startsWith('forearm-extensors-')) return 'Triceps'
+  if (id.startsWith('biceps-') || id.startsWith('forearm-')) return 'Biceps'
+  if (
+    id.startsWith('quads-') ||
+    id.startsWith('adductors-') ||
+    id.startsWith('hip-flexor-') ||
+    id.startsWith('gluteus-') ||
+    id.startsWith('hamstrings-') ||
+    id.startsWith('calves-') ||
+    id.startsWith('tibialis-')
+  ) return 'Legs'
+  return null
+}
+
+function BodyMusclesStrengthMapCard({ groups }: { groups: MuscleAdvice[] }) {
+  const byLabel = new Map<MuscleGroupLabel, MuscleAdvice>(groups.map(g => [g.label, g]))
+  const statusColor = (pct: number) => pct >= 80 ? '#4ade80' : pct >= 55 ? '#facc15' : '#f87171'
+  const statusLabel = (pct: number) => pct >= 80 ? 'Ready' : pct >= 55 ? 'Possible' : 'Recovery'
+
+  function renderMuscles(muscles: MuscleDef[]) {
+    return muscles.map(muscle => {
+      const group = muscleGroupForBodyMuscle(muscle.id)
+      const advice = group ? byLabel.get(group) : null
+      const color = advice ? statusColor(advice.recovery) : 'rgba(255,255,255,0.075)'
+      const stroke = advice ? statusColor(advice.recovery) : 'rgba(255,255,255,0.16)'
+      return (
+        <path
+          key={muscle.id}
+          d={muscle.path}
+          fill={color}
+          fillOpacity={advice ? 0.86 : 0.72}
+          stroke={stroke}
+          strokeOpacity={advice ? 0.92 : 0.55}
+          strokeWidth={0.16}
+          vectorEffect="non-scaling-stroke"
+          style={{
+            filter: advice ? `drop-shadow(0 0 2px ${statusColor(advice.recovery)}66)` : undefined,
+            transition: 'fill 160ms ease, stroke 160ms ease, opacity 160ms ease',
+          }}
+        />
+      )
+    })
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-[0.08em]">Muscle groups</span>
+          <span className="text-[11px] text-white/30">70+ regions</span>
+        </div>
+
+        <div className="rounded-[18px] px-3 py-4" style={{ background: 'rgba(0,0,0,0.14)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="grid grid-cols-2 gap-3 items-start">
+            <div className="flex flex-col items-center gap-2 min-w-0">
+              <svg viewBox="0 0 32 94" preserveAspectRatio="xMidYMid meet" className="w-full max-w-[150px] h-[258px]" aria-label="Front muscle recovery map">
+                <rect x="0" y="0" width="32" height="94" rx="1.5" fill="rgba(255,255,255,0.018)" />
+                {renderMuscles(FRONT_MUSCLES)}
+              </svg>
+              <span className="text-[10px] text-white/30 uppercase tracking-[0.10em]">Front</span>
+            </div>
+
+            <div className="flex flex-col items-center gap-2 min-w-0">
+              <svg viewBox="37 0 32 94" preserveAspectRatio="xMidYMid meet" className="w-full max-w-[150px] h-[258px]" aria-label="Back muscle recovery map">
+                <rect x="37" y="0" width="32" height="94" rx="1.5" fill="rgba(255,255,255,0.018)" />
+                {renderMuscles(BACK_MUSCLES)}
+              </svg>
+              <span className="text-[10px] text-white/30 uppercase tracking-[0.10em]">Back</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {groups.map(g => (
+            <div key={g.label} className="rounded-[12px] px-3 py-2 flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: statusColor(g.recovery), boxShadow: `0 0 10px ${statusColor(g.recovery)}66` }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-semibold text-white truncate">{g.label}</p>
+                <p className="text-[10px] text-white/35">{g.recovery}% recovery</p>
+              </div>
+              <span className="text-[10px] font-semibold shrink-0" style={{ color: statusColor(g.recovery) }}>{statusLabel(g.recovery)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
 
 function buildOverviewInsight(activities: Activity[], hevy: HevyWorkout[], calendarEvents: any[]): string {
   const { loadRatio } = computePerformanceScore(activities, hevy)
@@ -5008,7 +5104,7 @@ export function StrengthSection({ hevy, calendarEvents = [] }: { hevy: HevyWorko
       <SplitRecommendationCard hevy={hevy} calendarEvents={calendarEvents} />
 
       {muscleAdvice.length > 0 && (
-        <StrengthMuscleMapCard groups={muscleAdvice} />
+        <BodyMusclesStrengthMapCard groups={muscleAdvice} />
       )}
 
       {lastWorkout && <LastStrengthWorkoutCard workout={lastWorkout} allWorkouts={hevy} />}
