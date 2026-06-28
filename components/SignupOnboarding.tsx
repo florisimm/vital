@@ -113,7 +113,8 @@ export function SignupOnboarding({
   const [intensity, setIntensity] = useState<Intensity>('moderate')
   const [sportOrder, setSportOrder] = useState<Sport[]>(['running', 'cycling', 'swimming', 'gym'])
   const [devices, setDevices] = useState<string[]>([])
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -208,14 +209,24 @@ export function SignupOnboarding({
   }
 
   async function createAccount(): Promise<boolean> {
+    if (!firstName.trim() || !lastName.trim()) { setErr('Enter your first and last name'); return false }
     if (!email || !password) { setErr('Enter an email and password'); return false }
     if (password.length < 6) { setErr('Password must be at least 6 characters'); return false }
     setBusy(true); setErr(null)
     const supabase = createClient()
     const payload = buildPayload()
+    const cleanFirstName = firstName.trim()
+    const cleanLastName = lastName.trim()
     const { data, error } = await supabase.auth.signUp({
       email, password,
-      options: { data: { full_name: name, kern_profile: JSON.stringify(payload) } },
+      options: {
+        data: {
+          full_name: `${cleanFirstName} ${cleanLastName}`,
+          first_name: cleanFirstName,
+          last_name: cleanLastName,
+          kern_profile: JSON.stringify(payload),
+        },
+      },
     })
     if (error) { setErr(error.message); setBusy(false); return false }
 
@@ -274,7 +285,7 @@ export function SignupOnboarding({
     switch (current) {
       case 'about': return !!sex && !!age
       case 'goal': return !!goal
-      case 'account': return !!email && password.length >= 6
+      case 'account': return !!firstName.trim() && !!lastName.trim() && !!email && password.length >= 6
       default: return true
     }
   })()
@@ -459,7 +470,10 @@ export function SignupOnboarding({
         {current === 'account' && (
           <StepWrap title="Create your account" subtitle="Last step — your login details.">
             <div className="flex flex-col gap-2.5">
-              <TextField placeholder="Name" value={name} onChange={setName} />
+              <div className="grid grid-cols-2 gap-2.5">
+                <TextField placeholder="First name" value={firstName} onChange={setFirstName} />
+                <TextField placeholder="Last name" value={lastName} onChange={setLastName} />
+              </div>
               <TextField placeholder="Email address" value={email} onChange={setEmail} type="email" />
               <TextField placeholder="Password (min. 6 characters)" value={password} onChange={setPassword} type="password" />
             </div>

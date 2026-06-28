@@ -26,7 +26,8 @@ export function ProfileButton() {
   const [userId, setUserId] = useState<string | null>(null)
   const [confirmDisconnect, setConfirmDisconnect] = useState<'strava' | 'google' | 'fitbit' | null>(null)
   const [editingAccount, setEditingAccount] = useState(false)
-  const [editName, setEditName] = useState('')
+  const [editFirstName, setEditFirstName] = useState('')
+  const [editLastName, setEditLastName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editPassword, setEditPassword] = useState('')
   const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
@@ -129,6 +130,28 @@ export function ProfileButton() {
     return weightKg > 0 ? Math.round(weightKg * 10) / 10 : null
   }
 
+  function parseProfileName(user: any) {
+    const first = typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name.trim() : ''
+    const last = typeof user?.user_metadata?.last_name === 'string' ? user.user_metadata.last_name.trim() : ''
+    if (first || last) return { firstName: first, lastName: last }
+
+    const fullName = typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : ''
+    if (fullName) {
+      const parts = fullName.split(/\s+/).filter(Boolean)
+      return {
+        firstName: parts[0] ?? '',
+        lastName: parts.slice(1).join(' '),
+      }
+    }
+
+    return {
+      firstName: user?.email?.split('@')[0] ?? '',
+      lastName: '',
+    }
+  }
+
+  const fullName = [editFirstName.trim(), editLastName.trim()].filter(Boolean).join(' ')
+
   useEffect(() => {
     const nav = document.querySelector('[data-bottom-nav]') as HTMLElement | null
     if (nav) nav.style.display = open ? 'none' : ''
@@ -157,8 +180,10 @@ export function ProfileButton() {
 
     supabase.auth.getUser().then(({ data }) => {
       const uid = data.user?.id ?? null
+      const profileName = parseProfileName(data.user)
       setEmail(data.user?.email ?? null)
-      setEditName(data.user?.user_metadata?.full_name ?? data.user?.email?.split('@')[0] ?? '')
+      setEditFirstName(profileName.firstName)
+      setEditLastName(profileName.lastName)
       setUserId(uid)
       if (!uid) return
 
@@ -255,7 +280,8 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
   }, [open])
 
   function openEditAccount() {
-    setEditName(email?.split('@')[0] ?? '')
+    setEditFirstName(email?.split('@')[0] ?? '')
+    setEditLastName('')
     setEditEmail(email ?? '')
     setEditPassword('')
     setEditPasswordConfirm('')
@@ -283,8 +309,20 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
 
   async function saveName() {
     if (!userId) return
+    const firstName = editFirstName.trim()
+    const lastName = editLastName.trim()
+    if (!firstName || !lastName) {
+      setEditMsg({ type: 'err', text: 'Enter your first and last name' })
+      return
+    }
     setEditSaving(true); setEditMsg(null)
-    const { error } = await createClient().auth.updateUser({ data: { full_name: editName } })
+    const { error } = await createClient().auth.updateUser({
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`,
+      },
+    })
     setEditSaving(false)
     if (error) {
       setEditMsg({ type: 'err', text: error.message })
@@ -346,18 +384,23 @@ if (data?.height_cm) setSavedCalcHeight(String(Math.round(Number(data.height_cm)
   }
 
   async function saveAccount() {
+    const firstName = editFirstName.trim()
+    const lastName = editLastName.trim()
     if (editPassword && editPassword !== editPasswordConfirm) {
       setEditMsg({ type: 'err', text: "Passwords don't match" }); return
     }
     if (editPassword && editPassword.length < 6) {
       setEditMsg({ type: 'err', text: 'Password must be at least 6 characters' }); return
     }
+    if (!firstName || !lastName) {
+      setEditMsg({ type: 'err', text: 'Enter your first and last name' }); return
+    }
     setEditSaving(true); setEditMsg(null)
     const supabase = createClient()
-    const updates: { email?: string; password?: string; data?: { full_name: string } } = {}
+    const updates: { email?: string; password?: string; data?: { first_name: string; last_name: string; full_name: string } } = {}
     if (editEmail !== email) updates.email = editEmail
     if (editPassword) updates.password = editPassword
-    updates.data = { full_name: editName }
+    updates.data = { first_name: firstName, last_name: lastName, full_name: `${firstName} ${lastName}` }
     const { error } = await supabase.auth.updateUser(updates)
     setEditSaving(false)
     if (error) {
@@ -840,9 +883,19 @@ async function saveTraining() {
                   <ProfileRow separator>
                     <button className="flex items-center justify-between w-full gap-3"
                       onClick={() => { setEditMsg(null); setEditingName(true) }}>
-                      <span className="text-[15px] text-white/40 shrink-0">Name</span>
+                      <span className="text-[15px] text-white/40 shrink-0">First name</span>
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[17px] text-white truncate">{editName || '—'}</span>
+                        <span className="text-[17px] text-white truncate">{editFirstName || '—'}</span>
+                        <ChevronRight size={16} className="text-white/25 shrink-0" />
+                      </div>
+                    </button>
+                  </ProfileRow>
+                  <ProfileRow separator>
+                    <button className="flex items-center justify-between w-full gap-3"
+                      onClick={() => { setEditMsg(null); setEditingName(true) }}>
+                      <span className="text-[15px] text-white/40 shrink-0">Last name</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[17px] text-white truncate">{editLastName || '—'}</span>
                         <ChevronRight size={16} className="text-white/25 shrink-0" />
                       </div>
                     </button>
@@ -902,19 +955,27 @@ async function saveTraining() {
                   Back
                 </button>
                 <span className="text-[17px] font-semibold text-white">Name</span>
-                <button onClick={saveName} disabled={editSaving || !editName}
+                <button onClick={saveName} disabled={editSaving || !editFirstName.trim() || !editLastName.trim()}
                   className="px-4 h-[34px] rounded-full bg-white text-black text-[15px] font-semibold disabled:opacity-40">
                   {editSaving ? '…' : 'Save'}
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 pt-4 pb-12 flex flex-col gap-4">
-                <ProfileSection title="Display name">
-                  <ProfileRow>
+                <ProfileSection title="Name">
+                  <ProfileRow separator>
                     <input
                       autoFocus
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      placeholder="Your name"
+                      value={editFirstName}
+                      onChange={e => setEditFirstName(e.target.value)}
+                      placeholder="First name"
+                      className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
+                    />
+                  </ProfileRow>
+                  <ProfileRow>
+                    <input
+                      value={editLastName}
+                      onChange={e => setEditLastName(e.target.value)}
+                      placeholder="Last name"
                       className="w-full bg-transparent text-white text-[17px] outline-none placeholder:text-white/25"
                     />
                   </ProfileRow>
@@ -2099,7 +2160,7 @@ async function saveTraining() {
                 <User size={26} className="text-teal-300" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[19px] font-semibold text-white truncate">{editName || '—'}</p>
+                <p className="text-[19px] font-semibold text-white truncate">{fullName || '—'}</p>
                 <p className="text-[13px] text-white/40 truncate">{maskEmail(email ?? '—')}</p>
               </div>
               <ChevronRight size={20} className="text-white/25 shrink-0" />
