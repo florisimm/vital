@@ -233,7 +233,7 @@ function buildLifestyleFocus({
 
   if (unifiedReadinessPct < 60) {
     neededMin = Math.max(neededMin, 8.5 * 60)
-    bedtimeSub = 'Recovery mode — aim for extra sleep'
+    bedtimeSub = 'Aim for extra sleep tonight'
   }
 
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
@@ -242,7 +242,7 @@ function buildLifestyleFocus({
     if (e.start_date !== tomStr || !e.start_datetime) return false
     return new Date(e.start_datetime).getHours() < 9
   })
-  if (earlyTomorrow) bedtimeSub = earlyTomorrow.title ? `Early: ${earlyTomorrow.title}` : 'Early session tomorrow'
+  if (earlyTomorrow) bedtimeSub = 'Early start tomorrow — sleep earlier'
 
   const rawBedtime = WAKE_MINS - neededMin
   const bedtimeMins = ((rawBedtime % 1440) + 1440) % 1440
@@ -310,34 +310,46 @@ function buildLifestyleFocus({
   const caffCutoffStr = fmtMins(caffCutoffMins)
   const hoursUntilCaff = caffCutoffH - nowH
 
-  // ── Variable tips (max 2, shown before the fixed 4) ──
+  // ── Variable lifestyle tips (context-aware — health & daily habits, no training advice) ──
   const variableTips: FocusTip[] = []
-
-  if (hrvBelowBaseline) {
-    variableTips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline' })
-  }
-  if (unifiedReadinessPct < 55) {
-    variableTips.push({ emoji: '🛋️', label: 'Rest or easy walk only', sub: 'Recovery is the training today' })
-  } else if (unifiedReadinessPct >= 85) {
-    variableTips.push({ emoji: '⚡', label: 'Your body is ready — go for it', sub: 'Readiness is high' })
-  }
-
-  const todayCalEvent = (effectiveData?.calendarEvents ?? []).find((e: any) => isToday(e) && isSport(e))
-  if (todayCalEvent?.start_datetime) {
-    const hoursUntil = (new Date(todayCalEvent.start_datetime).getTime() - Date.now()) / 3_600_000
-    if (hoursUntil > 0.5 && hoursUntil <= 2.5) {
-      const t = fmtTime(todayCalEvent.start_datetime)
-      variableTips.push({ emoji: '🍌', label: `Eat before your ${t} session`, sub: 'Light carbs 60–90 min before' })
-    }
-  }
-
-  const hasTrainingToday = (effectiveData?.calendarEvents ?? []).some((e: any) => isToday(e) && isSport(e))
   const tempC = weatherData?.temp_c
+
+  // Morning daylight — anchors your circadian rhythm and boosts alertness
+  if (nowH >= 6 && nowH < 10) {
+    variableTips.push({ emoji: '☀️', label: 'Get 10 min of daylight', sub: 'Morning light sets your body clock and lifts your mood' })
+  }
+
+  // Protein-forward breakfast earlier in the day
+  if (nowH >= 6 && nowH < 11) {
+    variableTips.push({ emoji: '🍳', label: 'Eat a protein-rich breakfast', sub: 'Keeps you full and steadies energy through the morning' })
+  }
+
+  // Low HRV → ease off alcohol so the body can recover overnight
+  if (hrvBelowBaseline) {
+    variableTips.push({ emoji: '🚫', label: 'Skip alcohol tonight', sub: 'HRV is below your baseline — give your body a break' })
+  }
+
+  // Sleep debt nudge
+  if (avgSleepMin != null && avgSleepMin < 7 * 60) {
+    const avgH = (avgSleepMin / 60).toFixed(1).replace('.0', '')
+    variableTips.push({ emoji: '😴', label: 'Catch up on sleep today', sub: `Averaging ${avgH}h lately — wind down a little earlier` })
+  }
+
+  // Hydration — heat-aware, otherwise a gentle daytime baseline
   if (tempC != null && tempC >= 28) {
-    variableTips.push({ emoji: '🌡️', label: `Train early — it's ${Math.round(tempC)}°C today`, sub: 'Heat raises HR and reduces performance.' })
     variableTips.push({ emoji: '💧', label: 'Drink 3L+ today', sub: `${Math.round(tempC)}°C increases fluid loss significantly` })
-  } else if (hasTrainingToday) {
-    variableTips.push({ emoji: '💧', label: 'Drink at least 2.5L today', sub: 'Performance drops at 2% dehydration' })
+  } else if (nowH >= 8 && nowH < 18) {
+    variableTips.push({ emoji: '💧', label: 'Stay hydrated', sub: 'Sip water through the day — aim for around 2L' })
+  }
+
+  // Cold-weather dressing
+  if (tempC != null && tempC <= 2) {
+    variableTips.push({ emoji: '🧥', label: `Layer up — it's ${Math.round(tempC)}°C`, sub: 'Dress warm before you head outside' })
+  }
+
+  // Midday sedentary break — movement, not a workout
+  if (nowH >= 13 && nowH < 18) {
+    variableTips.push({ emoji: '🧍', label: 'Stand up and stretch', sub: 'Break up long sitting — helps circulation and focus' })
   }
 
   // Minutes until bedtime (wraps correctly across midnight)
@@ -389,12 +401,17 @@ function buildLifestyleFocus({
     fixed.push({ emoji: '💧', label: 'Stop drinking now', sub: 'No fluids 2h before sleep — prevents waking up at night' })
   }
 
-  // 5. No screens — only within 1h of bedtime
+  // 5. Wind-down — dim the lights as bedtime approaches
+  if (minsUntilBed <= 90) {
+    fixed.push({ emoji: '🌆', label: 'Start winding down', sub: 'Dim the lights to help melatonin rise' })
+  }
+
+  // 6. No screens — only within 1h of bedtime
   if (minsUntilBed <= 60) {
     fixed.push({ emoji: '📵', label: 'Put your phone down', sub: 'Blue light suppresses melatonin' })
   }
 
-  return [...variableTips.slice(0, 2), ...fixed]
+  return [...variableTips.slice(0, 4), ...fixed]
 }
 
 function LifestyleFocusCard({ tips }: { tips: FocusTip[] }) {
