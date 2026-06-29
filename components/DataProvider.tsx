@@ -10,6 +10,15 @@ import { fetchServices } from '@/lib/services'
 // so every tab has data ready before the user clicks it.
 // Also auto-syncs Google Calendar in the background on every app open.
 export function DataProvider() {
+  // Expose the browser timezone to the server (via cookie) so server-side
+  // rendering computes "today" in the user's local zone, not UTC.
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+      if (tz) document.cookie = `tz=${tz};path=/;max-age=31536000;samesite=lax`
+    } catch { /* ignore */ }
+  }, [])
+
   useEffect(() => {
     async function prefetch() {
       const supabase = createClient()
