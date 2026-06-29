@@ -1492,6 +1492,116 @@ type ActivityExtra = {
   hrZonesReal: { z1: number; z2: number; z3: number; z4: number; z5: number } | null
 }
 
+type Insights = { verdict: string; bullets: { emoji: string; text: string }[]; takeaway: string }
+
+// Rule-based ("coach's read") analysis of a single activity — pure if/else over
+// the data we already have, no API. Progressively richer as the lazily-fetched
+// stream/splits/efforts (`extra`) load in.
+function buildActivityInsights(a: Activity, extra: ActivityExtra | null, isRide: boolean, isSwim: boolean): Insights | null {
+  const bullets: { emoji: string; text: string }[] = []
+  const distKm = a.distance ? a.distance / 1000 : 0
+  const movingMin = a.moving_time ? a.moving_time / 60 : 0
+  if (movingMin < 1) return null
+
+  // Intensity / session type — prefer measured HR zones, else avg/max HR ratio.
+  let intensity: 'easy' | 'endurance' | 'tempo' | 'hard' = 'endurance'
+  const z = extra?.hrZonesReal
+  if (z) {
+    const secs = [z.z1, z.z2, z.z3, z.z4, z.z5]
+    const total = secs.reduce((s, v) => s + v, 0) || 1
+    const lowPct = (secs[0] + secs[1]) / total
+    const midPct = secs[2] / total
+    const highPct = (secs[3] + secs[4]) / total
+    const hiMin = Math.round((secs[3] + secs[4]) / 60)
+    const z2min = Math.round(secs[1] / 60)
+    if (highPct >= 0.3) { intensity = 'hard'; bullets.push({ emoji: '🔥', text: `High intensity — ${hiMin} min in Z4–Z5. Real stimulus that needs recovery.` }) }
+    else if (midPct >= 0.4 || highPct >= 0.15) { intensity = 'tempo'; bullets.push({ emoji: '🟡', text: `Tempo effort — sustained Z3 with ${hiMin} min up high.` }) }
+    else if (lowPct >= 0.8) { intensity = 'easy'; bullets.push({ emoji: '🟢', text: `Easy aerobic — ${Math.round(lowPct * 100)}% in Z1–Z2. Textbook base work.` }) }
+    else { intensity = 'endurance'; bullets.push({ emoji: '🫀', text: `Aerobic builder — ${z2min} min in Z2 growing your engine.` }) }
+  } else if (a.average_heartrate && a.max_heartrate) {
+    const ratio = a.average_heartrate / a.max_heartrate
+    intensity = ratio >= 0.9 ? 'hard' : ratio >= 0.82 ? 'tempo' : ratio <= 0.72 ? 'easy' : 'endurance'
+    bullets.push({ emoji: '🫀', text: `Average HR ${Math.round(a.average_heartrate)} bpm — ${Math.round(ratio * 100)}% of your max.` })
+  }
+
+  // Pacing — negative vs positive split from the per-km splits.
+  const splits = extra?.splits
+  if (Array.isArray(splits) && splits.length >= 4) {
+    const half = Math.floor(splits.length / 2)
+    const avg = (arr: any[]) => arr.reduce((s, x) => s + (Number(x.average_speed) || 0), 0) / (arr.length || 1)
+    const first = avg(splits.slice(0, half)), second = avg(splits.slice(half))
+    if (first > 0) {
+      const diff = (second - first) / first
+      if (diff >= 0.03) bullets.push({ emoji: '📈', text: `Negative split — ${Math.round(diff * 100)}% quicker in the back half. Strong finish.` })
+      else if (diff <= -0.05) bullets.push({ emoji: '📉', text: `Faded ${Math.round(-diff * 100)}% late — start a touch easier next time.` })
+      else bullets.push({ emoji: '➡️', text: 'Even pacing front to back — nicely controlled.' })
+    }
+  }
+
+  // Terrain & conditions.
+  if (a.total_elevation_gain && distKm > 0) {
+    const perKm = a.total_elevation_gain / distKm
+    if (perKm >= 12) bullets.push({ emoji: '⛰️', text: `Hilly — ${Math.round(a.total_elevation_gain)} m of climbing (${Math.round(perKm)} m/km).` })
+  }
+  if (extra?.average_temp != null && extra.average_temp >= 25) {
+    bullets.push({ emoji: '🌡️', text: `Hot at ${Math.round(extra.average_temp)}°C — HR likely ran 5–10 bpm high for the pace.` })
+  }
+
+  // Achievements.
+  const prs = (extra?.bests ?? []).filter((b: any) => b.pr_rank === 1).map((b: any) => b.name)
+  if (prs.length) bullets.push({ emoji: '🏆', text: `New PR: ${prs.slice(0, 3).join(', ')}. Fitness is trending up.` })
+  const koms = (extra?.segments ?? []).filter((s: any) => s.kom_rank && s.kom_rank <= 10).length
+  if (koms) bullets.push({ emoji: '👑', text: `${koms} top-10 segment${koms > 1 ? 's' : ''} bagged this session.` })
+
+  if (bullets.length === 0) return null
+
+  const sport = isRide ? 'ride' : isSwim ? 'swim' : 'run'
+  const distLabel = isSwim ? `${Math.round(a.distance ?? 0)} m` : `${distKm.toFixed(1)} km`
+  const verdict = intensity === 'hard' ? `A hard ${distLabel} ${sport} — you brought real intensity.`
+    : intensity === 'tempo' ? `A controlled tempo ${sport} over ${distLabel}.`
+    : intensity === 'easy' ? `An easy aerobic ${sport} of ${distLabel} — recovery done right.`
+    : `A steady endurance ${sport} of ${distLabel}.`
+  const takeaway = intensity === 'hard' ? 'Prioritise sleep and protein tonight — let the adaptation land.'
+    : intensity === 'easy' ? 'Great base work. Keep easy days truly easy so hard days can be hard.'
+    : prs.length ? 'Ride the momentum — bank an easy day before chasing the next PR.'
+    : 'Solid work. Keep stacking sessions like this for steady gains.'
+
+  return { verdict, bullets: bullets.slice(0, 4), takeaway }
+}
+
+function AnalysisCard({ insights, loading }: { insights: Insights | null; loading: boolean }) {
+  if (!insights && !loading) return null
+  return (
+    <div className="rounded-[20px] overflow-hidden" style={{ background: 'linear-gradient(160deg, rgba(45,212,191,0.10), rgba(45,212,191,0.02))', border: '1px solid rgba(45,212,191,0.22)' }}>
+      <div className="px-4 pt-4 pb-3 flex items-center gap-2">
+        <span className="text-[15px]">✨</span>
+        <span className="text-[12px] font-bold text-teal-300 uppercase tracking-[0.1em]">Coach's read</span>
+      </div>
+      {!insights ? (
+        <div className="px-4 pb-4 flex flex-col gap-2">
+          {[0, 1, 2].map(i => <div key={i} className="h-3 rounded-full" style={{ width: `${90 - i * 18}%`, background: 'rgba(255,255,255,0.06)' }} />)}
+        </div>
+      ) : (
+        <div className="px-4 pb-4 flex flex-col gap-3.5">
+          <p className="text-[16px] font-semibold text-white leading-snug">{insights.verdict}</p>
+          <div className="flex flex-col gap-2.5">
+            {insights.bullets.map((b, i) => (
+              <div key={i} className="flex items-start gap-2.5">
+                <span className="text-[15px] leading-none mt-0.5 shrink-0">{b.emoji}</span>
+                <span className="text-[13.5px] text-white/70 leading-snug">{b.text}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-[14px]" style={{ background: 'rgba(45,212,191,0.10)', border: '1px solid rgba(45,212,191,0.18)' }}>
+            <span className="text-[14px] leading-none mt-0.5 shrink-0">🎯</span>
+            <span className="text-[13px] text-teal-100/90 leading-snug font-medium">{insights.takeaway}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
   // Lazily pull the enriched Strava data (detail call + streams) for this one
   // activity. Kept out of the bulk training query so the list stays lean.
@@ -1546,10 +1656,10 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
   const suffer = a.suffer_score ? `${a.suffer_score}` : null
 
   // Hero metrics: the 3 most important numbers for this sport
-  const heroLeft   = { label: isSwimA ? 'Afstand' : 'Afstand', value: dist,  unit: '' }
-  const heroMid    = { label: 'Duur',    value: dur,   unit: '' }
+  const heroLeft   = { label: 'Distance', value: dist,  unit: '' }
+  const heroMid    = { label: 'Duration', value: dur,   unit: '' }
   const heroRight  = isRide
-    ? { label: 'Snelheid', value: speed,    unit: '' }
+    ? { label: 'Speed',    value: speed,    unit: '' }
     : isSwimA
     ? { label: 'Pace',     value: swimPace, unit: '/100m' }
     : { label: 'Pace',     value: pace,     unit: '/km' }
@@ -1561,8 +1671,8 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
     maxHr    && { label: 'Max HR',    value: maxHr,            color: '#fca5a5' },
     cadence  && { label: 'Cadence',   value: cadence,          color: 'rgba(255,255,255,0.7)' },
     watts    && { label: 'Power',     value: watts,            color: '#c084fc' },
-    kj       && { label: 'Energie',   value: kj,               color: '#fbbf24' },
-    rest     && { label: 'Pauze',     value: rest,             color: 'rgba(255,255,255,0.35)' },
+    kj       && { label: 'Energy',    value: kj,               color: '#fbbf24' },
+    rest     && { label: 'Rest',      value: rest,             color: 'rgba(255,255,255,0.35)' },
     isRide && maxSpeed && { label: 'Max speed', value: maxSpeed, color: '#67e8f9' },
     !isRide && !isSwimA && maxPace && { label: 'Best pace', value: `${maxPace}/km`, color: '#5eead4' },
     suffer   && { label: 'Suffer',    value: suffer,           color: '#fb923c' },
@@ -1607,6 +1717,7 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
 
   const hasMap = !!(a.map_polyline && a.map_polyline.length > 4)
   const emoji = isSwimA ? '🏊' : isRide ? '🚴' : '🏃'
+  const insights = buildActivityInsights(a, extra, isRide, isSwimA)
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgb(5,6,8)', paddingTop: 'env(safe-area-inset-top,0px)' }}>
@@ -1661,6 +1772,9 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
               ))}
             </div>
           )}
+
+          {/* AI-style coach analysis (rule-based, no API) */}
+          <AnalysisCard insights={insights} loading={extra === null} />
 
           {/* HR chart */}
           {a.average_heartrate && a.moving_time && (
