@@ -1453,7 +1453,71 @@ function HRChart({ avgHR, maxHR, movingTimeSec }: { avgHR: number; maxHR: number
   )
 }
 
+function SplitsBlock({ splits, isRide }: { splits: any[]; isRide: boolean }) {
+  // average_speed is m/s; runs show pace/km, rides show km/h. Bar length scales
+  // with speed so faster splits read longer.
+  const maxSpeed = Math.max(...splits.map(s => Number(s.average_speed) || 0), 0.0001)
+  return (
+    <div className="p-4 rounded-[18px] flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em] mb-1">Splits</span>
+      {splits.map((s, i) => {
+        const spd = Number(s.average_speed) || 0
+        const val = isRide ? `${(spd * 3.6).toFixed(1)} km/h` : (spd ? `${formatPace(spd)}/km` : '—')
+        const isLast = i === splits.length - 1
+        const partial = isLast && s.distance && Math.abs(s.distance - 1000) > 50
+        const label = partial ? `${(s.distance / 1000).toFixed(2)}` : `${i + 1} km`
+        const hr = s.average_heartrate ? `${Math.round(s.average_heartrate)}` : null
+        return (
+          <div key={i} className="flex items-center gap-2.5">
+            <span className="text-[12px] text-white/35 w-12 shrink-0 tabular-nums">{label}</span>
+            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+              <div className="h-full rounded-full" style={{ width: `${Math.max(6, (spd / maxSpeed) * 100)}%`, background: '#5eead4' }} />
+            </div>
+            <span className="text-[12px] font-semibold text-white w-16 text-right tabular-nums">{val}</span>
+            {hr && <span className="text-[11px] text-red-300/70 w-9 text-right tabular-nums">{hr}</span>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+type ActivityExtra = {
+  calories: number | null
+  average_temp: number | null
+  gear_name: string | null
+  splits: any[] | null
+  segments: any[] | null
+  bests: any[] | null
+  hrZonesReal: { z1: number; z2: number; z3: number; z4: number; z5: number } | null
+}
+
 function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBack: () => void }) {
+  // Lazily pull the enriched Strava data (detail call + streams) for this one
+  // activity. Kept out of the bulk training query so the list stays lean.
+  const [extra, setExtra] = useState<ActivityExtra | null>(null)
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const supabase = createClient()
+      const [{ data: act }, { data: st }] = await Promise.all([
+        supabase.from('strava_activities').select('calories,average_temp,gear_name,splits_metric,segment_efforts,best_efforts').eq('id', a.id).maybeSingle(),
+        supabase.from('strava_activity_streams').select('hr_zones').eq('activity_id', a.id).maybeSingle(),
+      ])
+      if (!active) return
+      setExtra({
+        calories: (act as any)?.calories ?? null,
+        average_temp: (act as any)?.average_temp ?? null,
+        gear_name: (act as any)?.gear_name ?? null,
+        splits: (act as any)?.splits_metric ?? null,
+        segments: (act as any)?.segment_efforts ?? null,
+        bests: (act as any)?.best_efforts ?? null,
+        hrZonesReal: (st as any)?.hr_zones ?? null,
+      })
+    })()
+    return () => { active = false }
+  }, [a.id])
+
   const t = (a.sport_type ?? '').toLowerCase()
   const isRide = t.includes('ride') || t.includes('cycl')
   const isSwimA = t.includes('swim')
@@ -1502,7 +1566,23 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
     isRide && maxSpeed && { label: 'Max speed', value: maxSpeed, color: '#67e8f9' },
     !isRide && !isSwimA && maxPace && { label: 'Best pace', value: `${maxPace}/km`, color: '#5eead4' },
     suffer   && { label: 'Suffer',    value: suffer,           color: '#fb923c' },
+    extra?.calories      ? { label: 'Calories', value: `${Math.round(extra.calories)} kcal`, color: '#fbbf24' } : null,
+    extra?.average_temp != null ? { label: 'Temp', value: `${Math.round(extra.average_temp)}°C`, color: '#67e8f9' } : null,
+    extra?.gear_name     ? { label: 'Gear',     value: extra.gear_name,  color: 'rgba(255,255,255,0.6)' } : null,
   ].filter(Boolean) as { label: string; value: string; color: string }[]
+
+  // Real HR zones from the activity's heart-rate stream (seconds per zone),
+  // falling back to the Gaussian estimate when no stream is available.
+  const realHrZones = (() => {
+    const z = extra?.hrZonesReal
+    if (!z) return null
+    const secs = [z.z1, z.z2, z.z3, z.z4, z.z5]
+    const total = secs.reduce((s, v) => s + v, 0)
+    if (total <= 0) return null
+    const labels = ['Z1 Recovery', 'Z2 Aerobic', 'Z3 Tempo', 'Z4 Threshold', 'Z5 Max']
+    const colors = ['#60a5fa', '#4ade80', '#facc15', '#fb923c', '#f87171']
+    return secs.map((s, i) => ({ label: labels[i], color: colors[i], minutes: Math.round(s / 60), pct: Math.round((s / total) * 100) })).filter(z => z.pct > 0)
+  })()
 
   // HR zone breakdown using Gaussian model (σ=12 bpm around average HR)
   const hrZones = (() => {
@@ -1587,24 +1667,24 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
             <HRChart avgHR={a.average_heartrate} maxHR={a.max_heartrate ?? null} movingTimeSec={a.moving_time} />
           )}
 
-          {/* HR zones */}
-          {hrZones && (
+          {/* HR zones — real (from stream) when available, else estimated */}
+          {(realHrZones ?? hrZones) && (
             <div className="p-4 rounded-[18px] flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Heart Rate Zones</span>
-                <span className="text-[11px] text-white/25">estimated</span>
+                <span className="text-[11px] text-white/25">{realHrZones ? 'measured' : 'estimated'}</span>
               </div>
 
               {/* Stacked zone bar */}
               <div className="h-3 rounded-full flex overflow-hidden gap-[2px]">
-                {hrZones.map(z => (
+                {(realHrZones ?? hrZones)!.map(z => (
                   <div key={z.label} className="h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${z.pct}%`, background: z.color }} />
                 ))}
               </div>
 
               {/* Zone rows */}
               <div className="flex flex-col gap-2">
-                {hrZones.map(z => (
+                {(realHrZones ?? hrZones)!.map(z => (
                   <div key={z.label} className="flex items-center gap-2.5">
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ background: z.color }} />
                     <span className="text-[13px] text-white/60 flex-1">{z.label}</span>
@@ -1620,6 +1700,40 @@ function CardioDetailScreen({ activity: a, onBack }: { activity: Activity; onBac
                   <span>Max {maxHr}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Per-km splits */}
+          {extra?.splits && extra.splits.length > 1 && (
+            <SplitsBlock splits={extra.splits} isRide={isRide} />
+          )}
+
+          {/* Best efforts (fastest 1k / 5k / 10k …) */}
+          {extra?.bests && extra.bests.length > 0 && (
+            <div className="p-4 rounded-[18px] flex flex-col gap-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Best Efforts</span>
+              {extra.bests.map((b: any, i: number) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <span className="text-[13px] text-white/60 flex-1">{b.name}</span>
+                  {b.pr_rank === 1 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(252,176,69,0.18)', color: '#fbb045' }}>PR</span>}
+                  <span className="text-[13px] font-semibold text-white tabular-nums">{formatDuration(b.moving_time ?? b.elapsed_time)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Segment efforts with PR / KOM badges */}
+          {extra?.segments && extra.segments.length > 0 && (
+            <div className="p-4 rounded-[18px] flex flex-col gap-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[12px] font-semibold text-white/40 uppercase tracking-[0.08em]">Segments</span>
+              {extra.segments.slice(0, 12).map((s: any, i: number) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <span className="text-[13px] text-white/60 flex-1 truncate">{s.segment?.name ?? s.name}</span>
+                  {s.kom_rank && s.kom_rank <= 10 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.2)', color: '#fcd34d' }}>KOM {s.kom_rank}</span>}
+                  {s.pr_rank === 1 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(252,176,69,0.18)', color: '#fbb045' }}>PR</span>}
+                  <span className="text-[13px] font-semibold text-white tabular-nums">{formatDuration(s.moving_time ?? s.elapsed_time)}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
