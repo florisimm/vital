@@ -1,20 +1,25 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Background } from '@/components/Background';
 
-// Root layout. Mirrors the web app's app/layout.tsx role: global providers
-// live here. Tab navigation (Today / Coach / Training / Health / Food) will be
-// added under app/(tabs)/ when screens are ported — see MIGRATION.md.
+// Root layout. The gradient Background sits behind every screen (web parity:
+// the fixed full-screen background div in the web root layout). Screens render
+// transparently on top.
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#050608' },
-        }}
-      />
+      <View style={{ flex: 1 }}>
+        <Background />
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
+      </View>
     </SafeAreaProvider>
   );
 }
